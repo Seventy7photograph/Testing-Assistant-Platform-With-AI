@@ -1,0 +1,464 @@
+/* ============================================================
+   Element Plus 覆盖：让组件库说冰川刻度的语言
+   ============================================================ */
+:root {
+  --el-color-primary: var(--glacier);
+  /* light-N 一律由主色与冰面混合得出：换主题时自动跟着翻转 */
+  --el-color-primary-light-3: color-mix(in srgb, var(--glacier) 70%, var(--ice-0));
+  --el-color-primary-light-5: color-mix(in srgb, var(--glacier) 50%, var(--ice-0));
+  --el-color-primary-light-7: color-mix(in srgb, var(--glacier) 30%, var(--ice-0));
+  --el-color-primary-light-8: color-mix(in srgb, var(--glacier) 20%, var(--ice-0));
+  --el-color-primary-light-9: color-mix(in srgb, var(--glacier) 12%, var(--ice-0));
+  --el-color-primary-dark-2: var(--glacier-hover);
+
+  --el-color-success: var(--pass);
+  --el-color-warning: var(--warn);
+  --el-color-danger: var(--fail);
+  --el-color-error: var(--fail);
+  --el-color-info: var(--ink-3);
+  --el-color-success-light-3: color-mix(in srgb, var(--pass) 70%, var(--ice-0));
+  --el-color-success-light-5: color-mix(in srgb, var(--pass) 50%, var(--ice-0));
+  --el-color-success-light-7: color-mix(in srgb, var(--pass) 30%, var(--ice-0));
+  --el-color-success-light-8: color-mix(in srgb, var(--pass) 20%, var(--ice-0));
+  --el-color-success-light-9: color-mix(in srgb, var(--pass) 12%, var(--ice-0));
+  --el-color-success-dark-2: color-mix(in srgb, var(--pass) 80%, #000);
+  --el-color-warning-light-3: color-mix(in srgb, var(--warn) 70%, var(--ice-0));
+  --el-color-warning-light-5: color-mix(in srgb, var(--warn) 50%, var(--ice-0));
+  --el-color-warning-light-7: color-mix(in srgb, var(--warn) 30%, var(--ice-0));
+  --el-color-warning-light-8: color-mix(in srgb, var(--warn) 20%, var(--ice-0));
+  --el-color-warning-light-9: color-mix(in srgb, var(--warn) 12%, var(--ice-0));
+  --el-color-warning-dark-2: color-mix(in srgb, var(--warn) 80%, #000);
+  --el-color-danger-light-3: color-mix(in srgb, var(--fail) 70%, var(--ice-0));
+  --el-color-danger-light-5: color-mix(in srgb, var(--fail) 50%, var(--ice-0));
+  --el-color-danger-light-7: color-mix(in srgb, var(--fail) 30%, var(--ice-0));
+  --el-color-danger-light-8: color-mix(in srgb, var(--fail) 20%, var(--ice-0));
+  --el-color-danger-light-9: color-mix(in srgb, var(--fail) 12%, var(--ice-0));
+  --el-color-danger-dark-2: color-mix(in srgb, var(--fail) 80%, #000);
+  --el-color-error-light-9: color-mix(in srgb, var(--fail) 12%, var(--ice-0));
+
+  --el-text-color-primary: var(--ink-1);
+  --el-text-color-regular: var(--ink-2);
+  --el-text-color-secondary: var(--ink-3);
+  --el-text-color-placeholder: var(--ink-placeholder);
+  --el-text-color-disabled: var(--ink-placeholder);
+
+  --el-border-color: var(--ice-4);
+  --el-border-color-light: var(--ice-3);
+  --el-border-color-lighter: var(--ice-3);
+  --el-border-color-extra-light: var(--ice-2);
+
+  --el-fill-color: var(--ice-2);
+  --el-fill-color-light: var(--ice-2);
+  --el-fill-color-lighter: var(--ice-1);
+  --el-fill-color-blank: var(--ice-0);
+
+  --el-bg-color: var(--ice-0);
+  --el-bg-color-page: var(--ice-1);
+  --el-bg-color-overlay: var(--ice-0);
+  --el-mask-color: var(--mask-page);
+  --el-mask-color-extra-light: color-mix(in srgb, var(--mask-page) 40%, transparent);
+  --el-overlay-color-lighter: var(--scrim);
+
+  --el-border-radius-base: var(--radius);
+  --el-border-radius-small: var(--radius-sm);
+  --el-font-size-base: var(--fs-base);
+
+  --el-box-shadow-light: var(--shadow-lift);
+  --el-box-shadow: var(--shadow-overlay);
+
+  --el-font-family: var(--font-ui);
+}
+
+/* 深色下主/危险按钮改为深字：亮底 + 深字，才是夜里的高对比组合。
+   plain / text / link 变体的底色是半透明浅色，必须排除在外。 */
+html[data-theme="dark"] .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-text-color: #06202c;
+  --el-button-hover-text-color: #06202c;
+  --el-button-active-text-color: #06202c;
+  --el-button-disabled-text-color: color-mix(in srgb, #06202c 60%, transparent);
+}
+
+html[data-theme="dark"] .el-button--danger:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-text-color: #2a0c09;
+  --el-button-hover-text-color: #2a0c09;
+  --el-button-active-text-color: #2a0c09;
+}
+
+html[data-theme="dark"] .el-button--success:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-text-color: #04231a;
+  --el-button-hover-text-color: #04231a;
+  --el-button-active-text-color: #04231a;
+}
+
+html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-text-color: #2a1a04;
+  --el-button-hover-text-color: #2a1a04;
+  --el-button-active-text-color: #2a1a04;
+}
+
+.el-button {
+  --el-button-font-weight: 500;
+  border-radius: var(--radius);
+  transition: background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.el-button:not(.is-disabled):active {
+  transform: translateY(1px);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--glacier);
+  --el-button-border-color: var(--glacier);
+  --el-button-hover-bg-color: var(--glacier-hover);
+  --el-button-hover-border-color: var(--glacier-hover);
+  --el-button-active-bg-color: var(--glacier-press);
+  --el-button-active-border-color: var(--glacier-press);
+}
+
+.el-button--default {
+  --el-button-bg-color: var(--ice-0);
+  --el-button-border-color: var(--ice-4);
+  --el-button-text-color: var(--ink-1);
+  --el-button-hover-bg-color: var(--glacier-wash);
+  --el-button-hover-border-color: var(--glacier-tint);
+  --el-button-hover-text-color: var(--glacier-deep);
+}
+
+.el-button.is-plain {
+  --el-button-bg-color: var(--ice-0);
+  --el-button-hover-bg-color: var(--glacier-wash);
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--ice-4) inset;
+  background: var(--ice-0);
+  transition: box-shadow var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--ice-5) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--glacier) inset,
+    0 0 0 4px var(--glacier-focus);
+}
+
+.el-input.is-disabled .el-input__wrapper {
+  background: var(--ice-2);
+}
+
+.el-input-number,
+.el-select {
+  width: 100%;
+}
+
+.el-form-item__label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.el-form-item__error {
+  font-size: var(--fs-xs);
+  padding-top: 3px;
+}
+
+/* --- 表格：刻度化 ------------------------------------------- */
+.el-table {
+  --el-table-border-color: var(--ice-3);
+  --el-table-header-bg-color: var(--ice-1);
+  --el-table-header-text-color: var(--ink-2);
+  --el-table-row-hover-bg-color: var(--glacier-wash);
+  --el-table-text-color: var(--ink-1);
+  --el-table-current-row-bg-color: var(--glacier-wash);
+  font-size: var(--fs-table);
+  background: transparent;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--ice-4) !important;
+}
+
+.el-table td.el-table__cell {
+  border-bottom: 1px solid var(--ice-3);
+}
+
+.el-table__inner-wrapper::before {
+  display: none;
+}
+
+.el-table--border .el-table__cell {
+  border-right: 1px solid var(--ice-3);
+}
+
+.el-table .cell {
+  line-height: 1.55;
+}
+
+/* --- 浮层 --------------------------------------------------- */
+.el-dialog {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--ice-3);
+  box-shadow: var(--shadow-overlay);
+  padding: 0;
+  overflow: hidden;
+}
+
+.el-dialog__header {
+  padding: var(--s4) var(--s5);
+  margin: 0;
+  border-bottom: 1px solid var(--ice-3);
+  background: var(--ice-1);
+}
+
+.el-dialog__title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.el-dialog__body {
+  padding: var(--s5);
+}
+
+.el-dialog__footer {
+  padding: var(--s3) var(--s5) var(--s5);
+}
+
+.el-drawer {
+  --el-drawer-padding-primary: var(--s5);
+}
+
+.el-drawer__header {
+  margin-bottom: var(--s4);
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--ice-3);
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
+.el-popper.is-light {
+  border: 1px solid var(--ice-4);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+  background: var(--ice-0);
+}
+
+.el-popper.is-dark {
+  background: var(--fjord);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  max-width: 320px;
+}
+
+.el-popper.is-dark .el-popper__arrow::before {
+  background: var(--fjord);
+}
+
+.el-message,
+.el-notification {
+  border-radius: var(--radius);
+  border: 1px solid var(--ice-3);
+  box-shadow: var(--shadow-overlay);
+}
+
+.el-message {
+  background: var(--ice-0);
+}
+
+.el-notification__title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+
+.el-tag {
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+  border-color: transparent;
+}
+
+.el-pagination {
+  --el-pagination-button-bg-color: transparent;
+  --el-pagination-hover-color: var(--glacier-deep);
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+}
+
+.el-pagination button,
+.el-pager li {
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.el-pager li.is-active {
+  background: var(--glacier-wash);
+  color: var(--glacier-deep);
+  font-weight: 600;
+}
+
+.el-tabs__item {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.el-tabs__item.is-active {
+  color: var(--glacier-deep);
+}
+
+.el-tabs__active-bar {
+  background: var(--glacier);
+  height: 2px;
+  border-radius: 2px;
+}
+
+.el-tabs__nav-wrap::after {
+  background: var(--ice-3);
+  height: 1px;
+}
+
+.el-checkbox,
+.el-radio {
+  --el-checkbox-checked-text-color: var(--ink-1);
+  --el-radio-checked-text-color: var(--ink-1);
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-radio__input.is-checked .el-radio__inner {
+  background: var(--glacier);
+  border-color: var(--glacier);
+}
+
+.el-switch.is-checked .el-switch__core {
+  background: var(--glacier);
+  border-color: var(--glacier);
+}
+
+.el-slider__bar {
+  background: var(--glacier);
+}
+
+.el-slider__button {
+  border-color: var(--glacier);
+}
+
+.el-descriptions__label {
+  color: var(--ink-3);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+}
+
+.el-empty__description p {
+  color: var(--ink-3);
+}
+
+.el-skeleton__item {
+  background: linear-gradient(
+    90deg,
+    var(--ice-2) 25%,
+    var(--ice-3) 37%,
+    var(--ice-2) 63%
+  );
+}
+
+.el-progress-bar__outer {
+  background: var(--ice-2);
+}
+
+.el-progress-bar__inner {
+  background: var(--glacier);
+}
+
+.el-timeline-item__node {
+  background: var(--glacier);
+}
+
+.el-timeline-item__tail {
+  border-left-color: var(--ice-3);
+}
+
+.el-alert {
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  padding: var(--s3) var(--s4);
+}
+
+.el-alert--info.is-light {
+  background: var(--info-wash);
+  color: var(--info);
+  border-color: var(--glacier-tint);
+}
+
+.el-alert--warning.is-light {
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
+.el-alert--error.is-light {
+  background: var(--fail-wash);
+  color: var(--fail);
+}
+
+.el-alert--success.is-light {
+  background: var(--pass-wash);
+  color: var(--pass);
+}
+
+.el-alert__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.el-alert__description {
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+
+.el-select-dropdown__item.is-selected {
+  color: var(--glacier-deep);
+  font-weight: 600;
+}
+
+.el-scrollbar__bar .el-scrollbar__thumb {
+  background: var(--ice-4);
+}
+
+.el-loading-mask {
+  background-color: var(--mask-page);
+}
+
+.el-loading-spinner .path {
+  stroke: var(--glacier);
+}
+
+.el-divider {
+  border-color: var(--ice-3);
+}
+
+.el-divider__text {
+  background: var(--ice-0);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
+
+.el-tooltip__trigger:focus-visible {
+  outline: 2px solid var(--glacier);
+  outline-offset: 2px;
+}

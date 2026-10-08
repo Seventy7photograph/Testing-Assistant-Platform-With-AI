@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 使用文档与 FAQ
+    url: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/blob/main/README.md
+    about: 提问前请先查阅 README 的「常见问题」与「快速开始」。
+  - name: 🔐 报告安全漏洞
+    url: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/security/advisories/new
+    about: 请勿公开披露安全问题，使用私密渠道上报。

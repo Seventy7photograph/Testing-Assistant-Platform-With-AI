@@ -1,0 +1,74 @@
+# ============================================================
+#  测试工程师助手平台（Testing-Assistant-Platform With AI）.gitignore
+#  原则：源码进仓库，环境/密钥/产物/依赖一律不进仓库。
+# ============================================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+build/
+dist/
+MANIFEST
+
+# ---------- 测试与覆盖率 ----------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# ---------- 环境变量与密钥（严禁提交真实密钥）----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------- 运行时数据（上传/解析/导出产物，含业务数据）----------
+storage/
+output/
+logs/
+*.log
+
+# ---------- 前端 ----------
+node_modules/
+frontend/dist/
+frontend/.vite/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 编辑器 / 操作系统 ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 打包与临时产物 ----------
+*.zip
+*.tmp
+
+# ---------- 本地走查 / 临时脚本（不入库） ----------
+docs/review/
+.impeccable/
+.impeccable-*
+.capture*.mjs
+.probe*.mjs
+迭代计划排期（本地·不提交）.md

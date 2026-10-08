@@ -1,0 +1,69 @@
+name: 🐛 Bug 报告
+description: 报告一个可复现的缺陷
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请先搜索是否已有相同 Issue。
+        **安全漏洞请勿在此公开**，请走 [SECURITY.md](../../SECURITY.md) 的私密渠道。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 发生了什么？期望的结果是什么？
+      placeholder: 我调用 /api/v1/pipeline/generate 时……
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 尽可能给出最小复现步骤、请求体或示例文档
+      placeholder: |
+        1. 启动 `python run.py`
+        2. 上传……
+        3. 看到……
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 项目版本
+      placeholder: v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: llm
+    attributes:
+      label: LLM 配置
+      options:
+        - 未配置 LLM_API_KEY（纯规则引擎）
+        - 已配置 DeepSeek
+        - 已配置其他 OpenAI 兼容端点
+        - 使用 fake 离线 Provider
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 操作系统、Python 版本、是否经过反向代理
+      placeholder: Windows 11 / Python 3.11.2 / 无代理
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志或报错
+      description: 粘贴服务端日志、浏览器控制台输出（请先移除密钥等敏感信息）
+      render: shell
+    validations:
+      required: false

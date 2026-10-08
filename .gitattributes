@@ -1,0 +1,29 @@
+# 统一换行符：仓库内一律 LF，Windows 脚本保留 CRLF，避免跨平台 diff 噪声。
+* text=auto eol=lf
+
+# Windows 专用脚本保持 CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# 二进制文件不做换行转换与文本 diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   text
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.xlsx  binary
+*.docx  binary
+*.pdf   binary
+*.zip   binary
+
+# 构建产物标记为「生成文件」：GitHub 上折叠展示，评审时聚焦源码
+app/static/**           linguist-generated=true
+frontend/package-lock.json linguist-generated=true
+
+# 发布归档不参与源码分发
+dist/** export-ignore

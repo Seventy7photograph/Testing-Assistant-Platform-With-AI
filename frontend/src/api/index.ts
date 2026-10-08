@@ -1,0 +1,244 @@
+import { del, downloadFile, get, post, put, upload } from "./client";
+
+import type {
+  AnalyzeRequest,
+  AnalyzeResponse,
+  BatchDeleteResult,
+  DocumentSummary,
+  ExportFormatInfo,
+  GenerateResult,
+  HealthInfo,
+  IntegrationInfo,
+  LLMConfigInfo,
+  LLMConfigPayload,
+  LLMModelList,
+  LLMTestResult,
+  MethodInfo,
+  MetricsResult,
+  PlatformOverview,
+  ReportDetail,
+  ReportListResponse,
+  ReportLLMTestResult,
+  ReportMetrics,
+  ReportStatus,
+  RequirementDoc,
+  SampleDataset,
+  TestCaseSuite,
+  TestCaseSuiteSummary,
+  ThresholdView,
+  TrendPoint,
+} from "./types";
+
+export interface GeneratePayload {
+  doc_id?: string | null;
+  text?: string | null;
+  title?: string;
+  methods: string[];
+  use_llm: boolean;
+  use_llm_in_design: boolean;
+  max_items: number;
+}
+
+export interface ReportListQuery {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  verdict?: string;
+}
+
+export const api = {
+  /* ---------- 平台 ---------- */
+  health: () => get<HealthInfo>("/health"),
+  overview: () => get<PlatformOverview>("/overview"),
+  integrations: () => get<IntegrationInfo[]>("/integrations"),
+
+  /* ---------- 大模型（两条链路共用） ---------- */
+  llmConfig: () => get<LLMConfigInfo>("/llm/config"),
+  saveLlmConfig: (payload: LLMConfigPayload) =>
+    put<LLMConfigInfo>("/llm/config", payload),
+  resetLlmConfig: () => del<LLMConfigInfo>("/llm/config"),
+  testLlmConfig: (payload: LLMConfigPayload) =>
+    post<LLMTestResult>("/llm/config/test", payload),
+  llmModels: (provider?: string, baseUrl?: string) =>
+    get<LLMModelList>("/llm/models", {
+      ...(provider ? { provider } : {}),
+      ...(baseUrl ? { base_url: baseUrl } : {}),
+    }),
+
+  /* ---------- 用例生成域 ---------- */
+  methods: () => get<MethodInfo[]>("/testcases/methods"),
+  exportFormats: () => get<ExportFormatInfo[]>("/export/formats"),
+
+  documents: (limit = 20) => get<DocumentSummary[]>("/documents", { limit }),
+  document: (docId: string) => get<DocumentSummary>(`/documents/${docId}`),
+  uploadDocument: (file: File) => upload<DocumentSummary>("/documents/upload", file),
+  downloadDocument: (docId: string) =>
+    downloadFile(`/documents/${encodeURIComponent(docId)}/download`),
+  deleteDocument: (docId: string) =>
+    del<{ deleted: boolean; doc_id: string }>(`/documents/${encodeURIComponent(docId)}`),
+  batchDeleteDocuments: (ids: string[]) =>
+    post<BatchDeleteResult>("/documents/batch-delete", { ids }),
+
+  requirement: (docId: string) => get<RequirementDoc>(`/requirements/${docId}`),
+  parseRequirement: (payload: {
+    doc_id?: string | null;
+    text?: string | null;
+    title: string;
+    use_llm: boolean;
+    max_items: number;
+  }) => post<RequirementDoc>("/requirements/parse", payload),
+  deleteRequirement: (docId: string) =>
+    del<{ deleted: boolean }>(`/requirements/${encodeURIComponent(docId)}`),
+  generateFromRequirement: (
+    docId: string,
+    methods: string[],
+    useLlmInDesign: boolean,
+  ) =>
+    post<TestCaseSuite>(`/requirements/${docId}/testcases`, undefined, {
+      methods: methods.join(","),
+      use_llm_in_design: useLlmInDesign,
+    }),
+
+  suites: (limit = 20, docId?: string) =>
+    get<TestCaseSuiteSummary[]>("/testcases/suites", {
+      limit,
+      ...(docId ? { doc_id: docId } : {}),
+    }),
+  suite: (suiteId: string) => get<TestCaseSuite>(`/testcases/${suiteId}`),
+  deleteSuite: (suiteId: string) =>
+    del<{ deleted: boolean }>(`/testcases/${encodeURIComponent(suiteId)}`),
+  batchDeleteSuites: (ids: string[]) =>
+    post<BatchDeleteResult>("/testcases/batch-delete", { ids }),
+
+  generate: (payload: GeneratePayload) =>
+    post<GenerateResult>("/pipeline/generate", payload),
+
+  exportSuite: (suiteId: string, format: string) =>
+    downloadFile(`/export/${encodeURIComponent(suiteId)}/${format}`),
+
+  /* ---------- 测试报告域 ---------- */
+  reportStatus: () => get<ReportStatus>("/report/status"),
+  reportMetrics: (testData: string) =>
+    post<MetricsResult>("/report/metrics", { test_data: testData }),
+  reportSamples: () => get<SampleDataset[]>("/report/samples"),
+  analyzeReport: (payload: AnalyzeRequest) =>
+    post<AnalyzeResponse>("/report/analyze", payload),
+  probeReport: () => post<ReportLLMTestResult>("/report/probe"),
+
+  reports: (query: ReportListQuery = {}) =>
+    get<ReportListResponse>("/report/reports", query as Record<string, unknown>),
+  report: (id: string) => get<ReportDetail>(`/report/reports/${encodeURIComponent(id)}`),
+  deleteReport: (id: string) =>
+    del<{ deleted: boolean }>(`/report/reports/${encodeURIComponent(id)}`),
+  batchDeleteReports: (ids: string[]) =>
+    post<BatchDeleteResult>("/report/reports/batch-delete", { ids }),
+  trends: (limit = 12) => get<TrendPoint[]>("/report/trends", { limit }),
+  exportReport: (id: string, format: string) =>
+    downloadFile(`/report/reports/${encodeURIComponent(id)}/export?format=${format}`),
+
+  thresholds: () => get<ThresholdView>("/report/thresholds"),
+  saveThresholds: (payload: Record<string, number | boolean>) =>
+    put<ThresholdView>("/report/thresholds", payload),
+  resetThresholds: () => del<ThresholdView>("/report/thresholds"),
+};
+
+export { ApiError, saveBlob } from "./client";
+export { http } from "./client";
+export type * from "./types";
+
+/* ============================================================
+   SSE：报告流式生成
+   事件顺序 meta → metrics → delta* → done | error
+   ============================================================ */
+export interface StreamHandlers {
+  onMeta?: (payload: Record<string, unknown>) => void;
+  onMetrics?: (payload: ReportMetrics) => void;
+  onDelta?: (text: string) => void;
+  onDone?: (payload: Record<string, unknown>) => void;
+  onError?: (detail: string, status?: number) => void;
+}
+
+export async function streamAnalyze(
+  payload: AnalyzeRequest,
+  handlers: StreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/report/analyze/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") return;
+    handlers.onError?.("无法连接服务端，请确认后端已启动（python run.py）。");
+    return;
+  }
+
+  if (!response.ok || !response.body) {
+    let detail = `请求失败（HTTP ${response.status}）。`;
+    try {
+      const body = await response.json();
+      detail = body?.message || body?.detail || detail;
+    } catch {
+      /* 保持默认文案 */
+    }
+    handlers.onError?.(detail, response.status);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let event = "";
+  let finished = false;
+
+  const dispatch = (name: string, raw: string) => {
+    if (!raw) return;
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (name === "meta") handlers.onMeta?.(data as Record<string, unknown>);
+    else if (name === "metrics") handlers.onMetrics?.(data as ReportMetrics);
+    else if (name === "delta") {
+      handlers.onDelta?.((data as { text?: string }).text ?? "");
+    } else if (name === "done") {
+      finished = true;
+      handlers.onDone?.(data as Record<string, unknown>);
+    } else if (name === "error") {
+      finished = true;
+      const payloadError = data as { detail?: string; status?: number };
+      handlers.onError?.(payloadError.detail || "生成失败。", payloadError.status);
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let index = buffer.indexOf("\n");
+      while (index !== -1) {
+        const line = buffer.slice(0, index).replace(/\r$/, "");
+        buffer = buffer.slice(index + 1);
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) dispatch(event, line.slice(5).trim());
+        index = buffer.indexOf("\n");
+      }
+    }
+  } catch (err) {
+    if ((err as Error)?.name !== "AbortError") {
+      handlers.onError?.("流式响应中断，请重试。");
+    }
+    return;
+  }
+
+  if (!finished && !signal?.aborted) {
+    handlers.onError?.("连接提前结束，未收到完成信号，请重试。");
+  }
+}

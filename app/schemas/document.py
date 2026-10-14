@@ -3,8 +3,73 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.core.utils import now_iso
+from app.core.utils import now_iso, truncate
 from app.schemas.requirement import ParseMeta
+
+
+class DocumentAsset(BaseModel):
+    """文档里的一张图片及其识别情况（V2.0 多模态 OCR）。
+
+    状态字段是刻意保留的：图片识别一定会有「跳过 / 无文字 / 通道不可用」这些
+    非成功结局，把它们如实记下来，界面才能解释清楚每张图到底怎么了。
+    """
+
+    index: int = 0
+    filename: str = ""
+    mime: str = ""
+    size_bytes: int = 0
+    source: str = Field(default="", description="docx / pdf / pdf-page / upload")
+    anchor: str = Field(default="", description="位置说明：邻近段落或页码")
+    placeholder: str = Field(default="", description="正文里的占位标记")
+    width: int = 0
+    height: int = 0
+    checksum: str = ""
+    stored: bool = Field(default=False, description="图片是否已成功落盘（落盘失败仍可识别）")
+    status: str = Field(
+        default="pending",
+        description="pending / recognized / empty / skipped / unavailable",
+    )
+    extractor: str = Field(default="", description="实际使用的识别通道，如 vlm:qwen-vl-max")
+    kind: str = Field(default="", description="text / description / mixed / none")
+    confidence: float | None = None
+    reused_from: int = Field(default=0, description="内容重复时复用第几张图片的识别结果")
+    text: str = Field(default="", description="识别出的文本/描述")
+    message: str = Field(default="", description="状态说明：为什么跳过、失败原因、需注意什么")
+
+    def brief(self, limit: int = 200) -> "DocumentAssetBrief":
+        return DocumentAssetBrief(
+            index=self.index,
+            filename=self.filename,
+            mime=self.mime,
+            size_bytes=self.size_bytes,
+            source=self.source,
+            anchor=self.anchor,
+            status=self.status,
+            extractor=self.extractor,
+            kind=self.kind,
+            confidence=self.confidence,
+            reused_from=self.reused_from,
+            text_preview=truncate(self.text, limit),
+            message=self.message,
+        )
+
+
+class DocumentAssetBrief(BaseModel):
+    """图片的列表项视图：带预览、不带全文，避免列表响应随图片数膨胀。"""
+
+    index: int = 0
+    filename: str = ""
+    mime: str = ""
+    size_bytes: int = 0
+    source: str = ""
+    anchor: str = ""
+    status: str = "pending"
+    extractor: str = ""
+    kind: str = ""
+    confidence: float | None = None
+    reused_from: int = 0
+    text_preview: str = ""
+    message: str = ""
 
 
 class DocumentRecord(BaseModel):
@@ -13,6 +78,9 @@ class DocumentRecord(BaseModel):
     extension: str
     size_bytes: int
     text: str = ""
+    #: 解析器产出的原文（图片识别结果回填**之前**）。重跑图片识别时从这里重建，
+    #: 否则重复识别会把上次的结果再叠一遍，正文里出现两份一样的文字。
+    text_base: str = ""
     char_count: int = 0
     line_count: int = 0
     encoding: str = "utf-8"
@@ -21,6 +89,12 @@ class DocumentRecord(BaseModel):
     page_count: int | None = None
     table_count: int = 0
     warnings: list[str] = Field(default_factory=list)
+    #: 解析阶段的告警快照。重跑图片识别时用它重建 warnings，
+    #: 否则重复识别会把上次的图片告警一遍遍叠加。
+    parser_warnings: list[str] = Field(default_factory=list)
+    assets: list[DocumentAsset] = Field(
+        default_factory=list, description="文档内的图片及识别情况（V2.0）"
+    )
     created_at: str = Field(default_factory=now_iso)
 
     def preview(self, limit: int = 500) -> str:
@@ -43,6 +117,10 @@ class DocumentSummary(BaseModel):
     page_count: int | None = None
     table_count: int = 0
     warnings: list[str] = Field(default_factory=list)
+    #: 图片识别概况：共发现多少张、成功识别多少张。
+    image_count: int = 0
+    image_recognized: int = 0
+    images: list[DocumentAssetBrief] = Field(default_factory=list)
     created_at: str = ""
     preview: str = ""
     #: 是否已经解析过结构化需求；列表页据此把「解析需求」换成「查看需求」。
@@ -74,6 +152,9 @@ class DocumentSummary(BaseModel):
             page_count=record.page_count,
             table_count=record.table_count,
             warnings=record.warnings,
+            image_count=len(record.assets),
+            image_recognized=sum(1 for asset in record.assets if asset.status == "recognized"),
+            images=[asset.brief() for asset in record.assets],
             created_at=record.created_at,
             preview=record.preview(),
             has_requirement=has_requirement,

@@ -50,6 +50,23 @@ class GenerateRequest(BaseModel):
     use_llm: bool = Field(default=True, description="是否用大模型增强（失败自动降级）")
     max_items: int = Field(default=8, ge=1, le=50)
     use_llm_in_design: bool = Field(default=False, description="场景法是否调用 LLM 补充用例")
+    llm_design_mode: str = Field(
+        default="scenario",
+        description=(
+            "生成阶段大模型的参与方式（仅在 use_llm_in_design=true 时生效）："
+            "scenario=只让场景法补充用例；review=六种方法都覆盖，模型复核规则产出并给出意见；"
+            "enhance=review + 允许补充用例。review/enhance 按「每条需求一次调用」计费。"
+        ),
+    )
+    max_cases_per_requirement: int | None = Field(
+        default=None,
+        ge=10,
+        le=2000,
+        description=(
+            "单条需求最多生成多少条用例（跨全部设计方法）。省略则用服务端默认值"
+            "（MAX_CASES_PER_REQUIREMENT）；超过时按方法轮转保留，避免先执行的方法吃光额度。"
+        ),
+    )
 
 
 class ExportRequest(BaseModel):
@@ -84,6 +101,13 @@ class HealthInfo(BaseModel):
     methods: list[MethodInfo] = Field(default_factory=list)
     export_formats: list[ExportFormatInfo] = Field(default_factory=list)
     supported_extensions: list[str] = Field(default_factory=list)
+    vision: dict[str, Any] = Field(
+        default_factory=dict, description="图片识别通道状态（V2.0 多模态 OCR）"
+    )
+    limits: dict[str, int] = Field(
+        default_factory=dict,
+        description="服务端生效的设计引擎上限（界面据此显示默认值，如 max_cases_per_requirement）",
+    )
 
 class GenerateResult(BaseModel):
     """一键生成的完整产物：结构化需求 + 用例集 + 告警。"""

@@ -1,15 +1,24 @@
-"""文档服务：上传校验 + 解析 + 落盘。"""
+"""文档服务：上传校验 + 解析 + 图片识别 + 落盘。"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
-from app.core.exceptions import DocumentParseError, PayloadTooLargeError, UnsupportedFormatError
+from app.core.exceptions import (
+    DocumentParseError,
+    NotFoundError,
+    PayloadTooLargeError,
+    UnsupportedFormatError,
+    VisionUnavailableError,
+)
 from app.core.logging import get_logger
 from app.core.utils import new_id
+from app.parsers.base import ParsedAsset
 from app.parsers.registry import get_extension, get_parser_for, supported_extensions
 from app.repository import Repository, get_repository
 from app.schemas.document import DocumentRecord
+from app.services.image_enrichment_service import ImageEnrichmentService
+from app.vision.registry import build_vision_extractor
 
 logger = get_logger(__name__)
 
@@ -20,13 +29,17 @@ class DocumentService:
         self.repository = repository or get_repository()
 
     # ------------------------------------------------------------------ #
-    def save_and_parse(self, *, filename: str, data: bytes) -> DocumentRecord:
-        """校验 -> 解析 -> 保存原文与解析结果。
+    async def save_and_parse(self, *, filename: str, data: bytes) -> DocumentRecord:
+        """校验 -> 解析 -> 图片识别 -> 保存原文与解析结果。
 
         异常路径（均有明确提示）：
           - 文件过大            -> PayloadTooLargeError (413)
           - 扩展名不支持/缺失    -> UnsupportedFormatError (415)
           - 解析失败/空文档      -> DocumentParseError (422)
+
+        图片识别**不会**让解析失败：识别通道不可用或某张图识别不出，都只是
+        ``warnings`` 与资产状态里的一条记录 —— 一份文档里夹了张图，不该让整份
+        需求解析报错。
         """
         if not filename:
             raise UnsupportedFormatError("上传文件缺少文件名，无法识别格式。")
@@ -57,26 +70,116 @@ class DocumentService:
         doc_id = new_id("DOC-")
         stored_path = self._store_raw(doc_id, extension, data)
 
+        outcome = await ImageEnrichmentService(self.settings).enrich(doc_id=doc_id, parsed=parsed)
+        parser_warnings = list(parsed.warnings)
+        warnings = [*parser_warnings, *outcome.warnings]
         record = DocumentRecord(
             doc_id=doc_id,
             filename=filename,
             extension=extension,
             size_bytes=size,
-            text=parsed.text,
-            char_count=len(parsed.text),
-            line_count=parsed.text.count("\n") + 1,
+            text=outcome.text,
+            text_base=parsed.text,
+            char_count=len(outcome.text),
+            line_count=outcome.text.count("\n") + 1,
             encoding=str(parsed.metadata.get("encoding", "utf-8")),
             stored_path=str(stored_path),
             parser=parsed.parser,
             page_count=parsed.page_count,
             table_count=parsed.table_count,
-            warnings=parsed.warnings,
+            warnings=warnings,
+            parser_warnings=parser_warnings,
+            assets=outcome.assets,
         )
         self.repository.documents.save(record)
         logger.info(
-            "文档已入库：%s（%s，%d 字符，解析器=%s）", doc_id, filename, record.char_count, parsed.parser
+            "文档已入库：%s（%s，%d 字符，解析器=%s，图片 %d 张/识别 %d 张）",
+            doc_id,
+            filename,
+            record.char_count,
+            parsed.parser,
+            outcome.image_count,
+            outcome.recognized,
         )
         return record
+
+    # ------------------------------------------------------------------ #
+    async def recognize_images(self, doc_id: str) -> DocumentRecord:
+        """对已入库文档**重新识别**全部图片（换了识别通道、或首次因超限被跳过时用）。
+
+        重建口径是 ``text_base``（解析器原文）而不是上次的结果：否则重复识别会把
+        上一次的文字再叠一次，正文里出现两份一样的段落。
+        """
+        record = self.repository.documents.get(doc_id)
+        if not record.assets:
+            raise NotFoundError(
+                f"「{record.filename}」里没有图片，无需识别。",
+                detail={"doc_id": doc_id},
+            )
+        extractor = build_vision_extractor(self.settings)
+        if not extractor.available:
+            raise VisionUnavailableError(
+                "当前没有可用的图片识别通道，无法重新识别。"
+                + (extractor.degraded_reason or ""),
+                detail={"doc_id": doc_id, "vision_provider": self.settings.vision_provider},
+            )
+
+        reloaded = self._reload_assets(record)
+        if not reloaded:
+            raise NotFoundError(
+                f"「{record.filename}」的图片文件已不在存储中，无法重新识别。请重新上传该文档。",
+                detail={"doc_id": doc_id},
+            )
+
+        from app.parsers.base import ParsedDocument
+
+        parsed = ParsedDocument(
+            text=record.text_base or "",
+            parser=record.parser,
+            extension=record.extension,
+            page_count=record.page_count,
+            table_count=record.table_count,
+            warnings=list(record.parser_warnings),
+            assets=reloaded,
+        )
+        outcome = await ImageEnrichmentService(self.settings, extractor).enrich(
+            doc_id=doc_id, parsed=parsed
+        )
+        record.text = outcome.text
+        record.char_count = len(outcome.text)
+        record.line_count = outcome.text.count("\n") + 1
+        record.assets = outcome.assets
+        record.warnings = [*record.parser_warnings, *outcome.warnings]
+        self.repository.documents.save(record)
+        logger.info(
+            "图片已重新识别：%s（识别 %d/%d 张）", doc_id, outcome.recognized, outcome.image_count
+        )
+        return record
+
+    def _reload_assets(self, record: DocumentRecord) -> list[ParsedAsset]:
+        assets: list[ParsedAsset] = []
+        directory = self.settings.asset_dir / record.doc_id
+        for asset in record.assets:
+            path = directory / asset.filename
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            assets.append(
+                ParsedAsset(
+                    index=asset.index,
+                    data=data,
+                    mime=asset.mime,
+                    extension=asset.filename.rsplit(".", 1)[-1],
+                    source=asset.source,
+                    placeholder=asset.placeholder,
+                    anchor=asset.anchor,
+                    width=asset.width,
+                    height=asset.height,
+                    checksum=asset.checksum,
+                )
+            )
+        return assets
 
     def get(self, doc_id: str) -> DocumentRecord:
         return self.repository.documents.get(doc_id)

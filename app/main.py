@@ -31,6 +31,7 @@ from app.api.routes import (
     report as report_routes,
     requirements,
     testcases,
+    vision,
 )
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AppError
@@ -157,6 +158,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         export,
         pipeline,
         report_routes,
+        vision,
     ):
         app.include_router(module.router, prefix=settings.api_prefix)
 

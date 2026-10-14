@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import mimetypes
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, Query, Response, UploadFile
@@ -12,6 +13,7 @@ from app.core.exceptions import NotFoundError
 from app.repository import Repository
 from app.schemas.api import ApiResponse, BatchDeleteRequest, BatchDeleteResult, ok
 from app.schemas.document import DocumentRecord, DocumentSummary
+from app.vision.registry import vision_capabilities
 
 router = APIRouter(tags=["文档"])
 
@@ -40,7 +42,7 @@ async def upload_document(
     service: DocumentServiceDep, repository: RepositoryDep, file: UploadFile = File(...)
 ) -> dict:
     data = await file.read()
-    record = service.save_and_parse(filename=file.filename or "", data=data)
+    record = await service.save_and_parse(filename=file.filename or "", data=data)
     return ok(_summary(record, repository), message="文档解析成功")
 
 
@@ -82,11 +84,63 @@ async def download_document(
     media_type = mimetypes.guess_type(record.filename)[0] or "application/octet-stream"
     return build_download_response(path.read_bytes(), record.filename, media_type)
 
+
+@router.get("/documents/{doc_id}/images/{filename}", summary="查看文档中的图片")
+async def get_document_image(
+    doc_id: str, filename: str, service: DocumentServiceDep, settings: SettingsDep
+) -> Response:
+    """回显文档里的某张图片（界面据此展示缩略图，便于人工核对识别结果）。"""
+    record = service.get(doc_id)
+    if not any(asset.filename == filename for asset in record.assets):
+        raise NotFoundError(f"文档里没有这张图片：{filename}", detail={"doc_id": doc_id})
+    directory = (settings.asset_dir / doc_id).resolve()
+    path = (directory / filename).resolve()
+    # 文件名来自我们自己的记录，仍然兜一层：不给路径穿越留任何余地。
+    if directory not in path.parents or not path.is_file():
+        raise NotFoundError(f"图片文件已不在存储中：{filename}", detail={"doc_id": doc_id})
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return Response(content=path.read_bytes(), media_type=media_type)
+
+
+@router.post(
+    "/documents/{doc_id}/images/recognize",
+    response_model=ApiResponse[DocumentSummary],
+    summary="重新识别文档中的图片",
+)
+async def recognize_document_images(
+    doc_id: str, service: DocumentServiceDep, repository: RepositoryDep
+) -> dict:
+    """重新跑一遍图片识别。
+
+    使用场景很具体：首次上传时没装本地 OCR、也没配多模态模型（图片被跳过），
+    之后装好了想补识别；或者换了 VISION_MODE 想重新读一遍图片。
+    识别通道仍不可用时返回 501，而不是假装成功。
+    """
+    record = await service.recognize_images(doc_id)
+    return ok(_summary(record, repository), message="图片识别已完成")
+
+
+@router.get(
+    "/documents/vision/capabilities",
+    response_model=ApiResponse[dict],
+    summary="当前图片识别通道的能力与降级原因",
+)
+async def document_vision_capabilities(settings: SettingsDep) -> dict:
+    return ok(vision_capabilities(settings))
+
 def _purge_document(record: DocumentRecord, repository: RepositoryDep) -> None:
-    """删除文档原文、解析结果与文档记录（幂等）。"""
+    """删除文档原文、图片、解析结果与文档记录（幂等）。"""
     if record.stored_path:
         try:
             Path(record.stored_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+    if record.assets:
+        # 图片目录按 doc_id 命名，整个删掉即可（失败不影响主流程）。
+        try:
+            from app.core.config import get_settings
+
+            shutil.rmtree(get_settings().asset_dir / record.doc_id, ignore_errors=True)
         except OSError:
             pass
     repository.requirements.delete(record.doc_id)

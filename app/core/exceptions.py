@@ -101,3 +101,15 @@ class FeatureNotAvailableError(AppError):
     code = "FEATURE_NOT_AVAILABLE"
     http_status = 501
     default_message = "该功能当前版本尚未实现。"
+
+
+class VisionUnavailableError(AppError):
+    """图片识别通道不可用（未配置多模态模型，也未安装任何本地 OCR 引擎）。
+
+    只在「使用者明确要求识别图片」时抛出：自动解析链路里遇到这种情况是**降级 + 告警**，
+    不能因为一份文档里夹了张图就让整份需求解析失败。
+    """
+
+    code = "VISION_UNAVAILABLE"
+    http_status = 501
+    default_message = "当前没有可用的图片识别通道。"

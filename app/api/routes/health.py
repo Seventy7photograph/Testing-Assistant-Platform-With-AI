@@ -9,6 +9,7 @@ from app.integrations.base import available_integrations
 from app.llm.factory import get_effective_settings, get_runtime_config_store
 from app.parsers.registry import supported_extensions
 from app.schemas.api import ApiResponse, HealthInfo, IntegrationInfo, MethodInfo, ok
+from app.vision.registry import vision_capabilities
 
 router = APIRouter(tags=["健康检查"])
 
@@ -32,6 +33,11 @@ async def health(settings: SettingsDep, llm: LLMDep, engine: DesignEngineDep) ->
         methods=[MethodInfo(**item) for item in engine.available_methods()],
         export_formats=available_formats(),
         supported_extensions=supported_extensions(),
+        vision=vision_capabilities(effective),
+        limits={
+            "max_cases_per_requirement": effective.max_cases_per_requirement,
+            "max_upload_size_mb": effective.max_upload_size_mb,
+        },
     )
     return ok(info)
 

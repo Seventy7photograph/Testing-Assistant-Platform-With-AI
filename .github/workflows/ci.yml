@@ -39,8 +39,11 @@ jobs:
       - name: 运行测试
         run: python -m pytest -q
 
-      - name: 离线端到端冒烟（无需任何 API Key）
-        run: python examples/demo_offline.py
+      - name: 离线端到端冒烟（三个脚本，均无需任何 API Key）
+        run: |
+          python examples/demo_offline.py
+          python examples/demo_report_offline.py
+          python examples/acceptance_check.py
 
   frontend:
     name: 前端类型检查与构建

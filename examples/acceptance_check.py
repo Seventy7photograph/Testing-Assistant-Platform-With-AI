@@ -86,12 +86,18 @@ def run_scenario(title: str, env: dict[str, str], *, expect_llm: bool, min_items
             check("健康检查可用", health["status"] == "ok")
             check("LLM 可用状态与预期一致", health["llm_available"] is expect_llm,
                   f"provider={health['llm_provider']} available={health['llm_available']}")
-            check("预留设计方法已登记但未实现",
-                  any(m["name"] == "decision_table" and not m["implemented"] for m in health["methods"]))
-            check("导出格式为 excel/json",
-                  {f["name"] for f in health["export_formats"]} == {"excel", "json"})
-            check("支持 docx/pdf/txt/md",
-                  {"docx", "pdf", "txt", "md"} <= set(health["supported_extensions"]))
+            # V2.0：六种设计方法全部落地，"预留未实现"不再是预期状态。
+            check("六种设计方法均已实现",
+                  {m["name"] for m in health["methods"] if m["implemented"]}
+                  >= {"equivalence", "boundary", "scenario", "decision_table", "cause_effect", "orthogonal"})
+            check("导出格式含 excel/json/csv/xmind/testlink",
+                  {f["name"] for f in health["export_formats"]}
+                  == {"excel", "json", "csv", "xmind", "testlink"})
+            check("支持 docx/pdf/xlsx/txt/md/图片",
+                  {"docx", "pdf", "xlsx", "txt", "md", "png", "jpg"} <= set(health["supported_extensions"]))
+            check("图片识别能力已上报",
+                  "vision" in health and bool(health["vision"].get("extractor")),
+                  f"extractor={health.get('vision', {}).get('extractor')}")
 
             sample = SAMPLE.read_text(encoding="utf-8")
             upload = client.post(f"{api}/documents/upload",
@@ -129,15 +135,37 @@ def run_scenario(title: str, env: dict[str, str], *, expect_llm: bool, min_items
                   exported_json.status_code == 200
                   and json.loads(exported_json.content)["suite_id"] == suite["suite_id"])
 
-            v2 = client.post(f"{api}/testcases/generate", json={"text": "x", "methods": ["decision_table"]})
-            check("未实现方法返回 501",
-                  v2.status_code == 501 and v2.json()["code"] == "FEATURE_NOT_AVAILABLE")
+            # V2.0：三种新方法要能真的产出用例（不再返回 501）。
+            v2_text = (
+                "# 会员注册\n\n## 会员注册\n手机号：11位数字，必填\n年龄：18~120\n"
+                "会员等级：普通/白银/黄金\n注册渠道：小程序/APP/Web\n\n"
+                "业务规则：\n- 若手机号已注册则提示直接登录\n- 不允许使用黑名单渠道注册\n"
+            )
+            v2_ok = True
+            v2_detail: list[str] = []
+            for method in ("decision_table", "cause_effect", "orthogonal"):
+                response = client.post(f"{api}/testcases/generate",
+                                       json={"text": v2_text, "methods": [method], "use_llm": False})
+                cases = response.json().get("data", {}).get("cases", []) if response.status_code == 200 else []
+                if not cases:
+                    v2_ok = False
+                v2_detail.append(f"{method}={len(cases)}")
+            check("V2.0 三种新方法可生成用例", v2_ok, "、".join(v2_detail))
+
+            check("未知方法返回 404",
+                  client.post(f"{api}/testcases/generate",
+                              json={"text": "x", "methods": ["not_a_method"]}).status_code == 404)
 
             missing = client.post(f"{api}/export", json={"suite_id": "SUITE-nope", "format": "excel"})
             check("不存在的用例集返回 404", missing.status_code == 404)
 
+            # V2.0 起 .xlsx 已支持：损坏内容应报「解析失败」而不是「格式不支持」。
+            broken_excel = client.post(f"{api}/documents/upload",
+                                       files={"file": ("a.xlsx", b"x", "application/vnd.ms-excel")})
+            check("损坏的 Excel 返回 422", broken_excel.status_code == 422,
+                  f"HTTP {broken_excel.status_code}")
             unsupported = client.post(f"{api}/documents/upload",
-                                      files={"file": ("a.xlsx", b"x", "application/vnd.ms-excel")})
+                                      files={"file": ("a.zip", b"x", "application/zip")})
             check("不支持的格式返回 415", unsupported.status_code == 415)
 
             bad_body = client.post(f"{api}/testcases/generate", json={"methods": ["boundary"]})

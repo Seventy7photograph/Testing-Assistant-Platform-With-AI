@@ -1,1 +1,0 @@
-import{H as e,h as t,qt as n,t as r,x as i,y as a,z as o}from"./_plugin-vue_export-helper-BVrwY_Zy.js";var s=[`data-tone`],c=r(i({__name:`FieldHint`,props:{text:{},tone:{default:`muted`}},setup(r){return(i,c)=>(o(),t(`p`,{class:`fieldhint`,"data-tone":r.tone},[e(i.$slots,`default`,{},()=>[a(n(r.text),1)],!0)],8,s))}}),[[`__scopeId`,`data-v-44eb8feb`]]);export{c as t};

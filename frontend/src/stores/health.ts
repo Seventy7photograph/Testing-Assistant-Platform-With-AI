@@ -2,7 +2,8 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
 import { api } from "@/api";
-import type { HealthInfo, LLMConfigInfo } from "@/api";
+import type { ExportFormatInfo, HealthInfo, LLMConfigInfo, MethodInfo } from "@/api";
+import { FALLBACK_EXPORT_FORMATS, FALLBACK_METHODS } from "@/utils/labels";
 
 /**
  * 平台运行状态：能力清单 + 大模型配置。
@@ -31,6 +32,23 @@ export const useHealthStore = defineStore("health", () => {
 
   /** 降级原因：界面必须在发生的位置说明，而不是只留一句"未启用"。 */
   const degradedReason = computed(() => info.value?.llm_degraded_reason ?? "");
+
+  /**
+   * 设计方法清单：**以后端上报为准**（`/health` 的 `methods[].implemented`）。
+   *
+   * 界面不再自己维护一份「哪些方法已实现」的副本 —— V2.0 把判定表/因果图/正交实验
+   * 做完之后，正是那份副本让界面继续显示「未实现」。后端没答上来时才退回兜底清单。
+   */
+  const methods = computed<MethodInfo[]>(() =>
+    info.value?.methods?.length ? info.value.methods : FALLBACK_METHODS,
+  );
+
+  /** 其中真正可用的（未实现的仍会在界面上展示，但标明原因）。 */
+  const usableMethods = computed(() => methods.value.filter((item) => item.implemented));
+
+  const exportFormats = computed<ExportFormatInfo[]>(() =>
+    info.value?.export_formats?.length ? info.value.export_formats : FALLBACK_EXPORT_FORMATS,
+  );
 
   const llmSourceLabel = computed(() =>
     llmConfig.value?.source === "runtime" ? "界面覆盖" : ".env 基线",
@@ -67,6 +85,9 @@ export const useHealthStore = defineStore("health", () => {
     llmReady,
     llmLabel,
     degradedReason,
+    methods,
+    usableMethods,
+    exportFormats,
     llmSourceLabel,
     load,
     loadLlmConfig,

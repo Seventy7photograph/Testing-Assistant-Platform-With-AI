@@ -14,7 +14,14 @@ from app.core.exceptions import FeatureNotAvailableError
 from app.llm.base import LLMProvider
 from app.schemas.common import CaseSource, CaseType, DesignMethod, Priority, ValueCharset
 from app.schemas.requirement import FieldConstraint, RequirementItem
-from app.schemas.testcase import TestCase, TestStep
+from app.schemas.testcase import ReviewFinding, TestCase, TestStep
+
+#: 生成阶段大模型的参与方式。
+#:   scenario —— 只让场景法补充用例（V1.0 起的默认行为）
+#:   review   —— 六种方法都覆盖：模型复核规则产出并给出意见（不改写用例）
+#:   enhance  —— review + 允许补充用例（带来源标记与上限）
+LLM_DESIGN_MODES: tuple[str, ...] = ("scenario", "review", "enhance")
+DEFAULT_LLM_DESIGN_MODE = "scenario"
 
 
 @dataclass
@@ -27,14 +34,56 @@ class DesignContext:
     max_cases_per_item: int = 60
     warnings: list[str] = field(default_factory=list)
     llm_call_count: int = 0
+    #: 被「单条需求上限」裁剪过的需求。这里只记录事实，告警文案由引擎在
+    #: **去重之后**统一生成 —— 只有那时才知道这条需求最终留下多少条用例。
+    truncations: list["TruncationRecord"] = field(default_factory=list)
+    #: 生成阶段大模型的参与方式（scenario / review / enhance）。
+    llm_review_mode: str = DEFAULT_LLM_DESIGN_MODE
+    #: 大模型复核产出的意见（只呈现，不自动改写用例）。
+    findings: list[ReviewFinding] = field(default_factory=list)
+    #: 每条需求允许补充的用例数上限。
+    max_llm_cases_per_item: int = 5
+    #: 单次生成允许调用大模型的总次数上限（成本护栏）。
+    max_llm_calls: int = 20
 
     def warn(self, message: str) -> None:
         if message not in self.warnings:
             self.warnings.append(message)
 
+    def note_truncation(self, record: "TruncationRecord") -> None:
+        self.truncations.append(record)
+
     @property
     def llm_ready(self) -> bool:
         return self.use_llm and self.llm.available
+
+    # ------------------------------------------------------------------ #
+    @property
+    def scenario_llm_enabled(self) -> bool:
+        """场景法的 LLM 增强（历史行为，只在 scenario 模式下启用）。"""
+        return self.llm_ready and self.llm_review_mode == "scenario"
+
+    @property
+    def llm_review_enabled(self) -> bool:
+        """统一复核：一次调用覆盖六种方法的产出。"""
+        return self.llm_ready and self.llm_review_mode in ("review", "enhance")
+
+    @property
+    def llm_extra_cases_enabled(self) -> bool:
+        """是否允许模型在复核之外补充用例。"""
+        return self.llm_ready and self.llm_review_mode == "enhance"
+
+
+@dataclass(slots=True)
+class TruncationRecord:
+    """某条需求超过单条上限、被裁剪时的原始记录（用于生成口径准确的告警）。"""
+
+    requirement_id: str
+    requirement_title: str
+    raw_count: int
+    kept_count: int
+    per_method_total: dict[str, int] = field(default_factory=dict)
+    per_method_kept: dict[str, int] = field(default_factory=dict)
 
 
 def bump_priority(priority: Priority, minimum: Priority = Priority.P1) -> Priority:
@@ -105,7 +154,8 @@ class DesignStrategy(abc.ABC):
         if len(cases) <= limit:
             return cases
         self.context.warn(
-            f"「{self.method.label}」生成用例数 {len(cases)} 超过上限 {limit}，已截断，请人工复核遗漏场景。"
+            f"「{self.method.label}」单方法产出 {len(cases)} 条，超过单方法上限 {limit}，已截断保留 {limit} 条；"
+            "跨方法合计后还会再去重合并，最终条数以结果为准，请人工复核遗漏场景。"
         )
         return cases[:limit]
 

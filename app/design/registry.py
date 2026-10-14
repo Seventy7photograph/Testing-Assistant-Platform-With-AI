@@ -4,13 +4,11 @@ from __future__ import annotations
 from app.core.registry import Registry
 from app.design.base import DesignContext, DesignStrategy
 from app.design.boundary import BoundaryStrategy
+from app.design.cause_effect import CauseEffectStrategy
+from app.design.decision_table import DecisionTableStrategy
 from app.design.equivalence import EquivalenceStrategy
+from app.design.orthogonal import OrthogonalStrategy
 from app.design.scenario import ScenarioStrategy
-from app.design.planned_strategies import (
-    CauseEffectStrategy,
-    DecisionTableStrategy,
-    OrthogonalStrategy,
-)
 
 STRATEGY_REGISTRY: Registry[type[DesignStrategy]] = Registry("设计策略")
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import type { TestCase, TestCaseSuite } from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
@@ -15,6 +15,12 @@ const keyword = ref("");
 const methodFilter = ref("");
 const priorityFilter = ref("");
 const expanded = ref<string[]>([]);
+/**
+ * 分页：一次生成几百条用例是常态（示例需求就能到 200+，六种方法全开可到 500+），
+ * 全部铺在一页里既没人读得完、也让页面变得极长。默认每页 50 条。
+ */
+const page = ref(1);
+const pageSize = ref(50);
 
 const methodOptions = computed(() => {
   const set = new Set<string>();
@@ -31,6 +37,18 @@ const rows = computed(() => {
     const haystack = `${item.case_id} ${item.title} ${item.module} ${item.expected_result}`.toLowerCase();
     return haystack.includes(needle);
   });
+});
+
+const pagedRows = computed(() =>
+  pageSize.value > 0
+    ? rows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value)
+    : rows.value,
+);
+
+// 筛选条件一变行集合就变了：停在一个已经不存在的页码上会看到空表。
+watch([rows, pageSize], () => {
+  const maxPage = pageSize.value > 0 ? Math.max(1, Math.ceil(rows.value.length / pageSize.value)) : 1;
+  if (page.value > maxPage) page.value = maxPage;
 });
 
 function toggle(row: TestCase) {
@@ -114,7 +132,7 @@ defineExpose({ filtered: rows });
     </div>
 
     <el-table
-      :data="rows"
+      :data="pagedRows"
       row-key="case_id"
       size="small"
       :default-sort="{ prop: 'case_id', order: 'ascending' }"
@@ -203,10 +221,30 @@ defineExpose({ filtered: rows });
         </template>
       </el-table-column>
     </el-table>
+
+    <div v-if="pageSize > 0 && rows.length > pageSize" class="cases__pager">
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100, 200]"
+        :total="rows.length"
+        size="small"
+        layout="total, sizes, prev, pager, next"
+        background
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.cases__pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--ice-3);
+  overflow-x: auto;
+}
+
 .cases__bar {
   display: flex;
   align-items: center;

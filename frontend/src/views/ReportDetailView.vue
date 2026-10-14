@@ -10,6 +10,7 @@ import ErrorNote from "@/components/ErrorNote.vue";
 import FieldHint from "@/components/FieldHint.vue";
 import MarkdownBody from "@/components/MarkdownBody.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import WarningList from "@/components/WarningList.vue";
 import StatReadout from "@/components/StatReadout.vue";
 import Tip from "@/components/Tip.vue";
 import VerdictSeal from "@/components/VerdictSeal.vue";
@@ -172,11 +173,7 @@ function printReport(): void {
       </SectionCard>
 
       <SectionCard v-if="detail.warnings.length" title="生成时的提示" icon="alert">
-        <ul class="warns">
-          <li v-for="item in detail.warnings" :key="item">
-            <AppIcon name="alert" :size="13" /><span>{{ item }}</span>
-          </li>
-        </ul>
+        <WarningList :items="detail.warnings" />
       </SectionCard>
 
       <SectionCard title="原始执行数据" sub="报告只做归纳，不修改输入" icon="file">
@@ -242,15 +239,6 @@ function printReport(): void {
 }
 
 .reasons,
-.warns {
-  list-style: none;
-  margin: var(--s3) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
 .reasons li,
 .warns li {
   display: flex;

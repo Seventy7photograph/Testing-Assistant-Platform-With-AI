@@ -23,7 +23,9 @@ curl http://127.0.0.1:8000/api/v1/health
 ```
 
 关键字段：`llm_available`（是否真的能用大模型）、`llm_degraded_reason`（降级原因）、
-`methods`（含 `implemented=false` 的 未实现项）、`export_formats`、`supported_extensions`。
+`methods`（六种设计方法，`implemented` 由后端如实上报，**界面可用性以此为准**）、
+`export_formats`（excel / json / csv / xmind / testlink）、`supported_extensions`、
+`vision`（图片识别通道与降级原因）、`limits`（生效的引擎上限，如 `max_cases_per_requirement`）。
 
 ---
 
@@ -217,15 +219,51 @@ curl -X POST http://127.0.0.1:8000/api/v1/export \
 # 方式二：浏览器/下载器直接 GET
 curl -OJ http://127.0.0.1:8000/api/v1/export/SUITE-9f8e7d6c/excel
 curl -OJ http://127.0.0.1:8000/api/v1/export/SUITE-9f8e7d6c/json
+curl -OJ http://127.0.0.1:8000/api/v1/export/SUITE-9f8e7d6c/csv
+curl -OJ http://127.0.0.1:8000/api/v1/export/SUITE-9f8e7d6c/xmind
+curl -OJ http://127.0.0.1:8000/api/v1/export/SUITE-9f8e7d6c/testlink
 
 # 可用格式
 curl http://127.0.0.1:8000/api/v1/export/formats
 ```
 
+> 格式名以注册表为准：Excel 是 **`excel`**（不是文件后缀 `xlsx`），拼错会返回 404。
+
 PowerShell 下载：
 
 ```powershell
 curl.exe -OJ "http://127.0.0.1:8000/api/v1/export/SUITE-9f8e7d6c/excel"
+```
+
+---
+
+## 5.1 V2.0 新增接口速查
+
+```bash
+# 覆盖率分析（字段 / 边界 / 规则三维 + 缺口清单）
+curl http://127.0.0.1:8000/api/v1/testcases/SUITE-9f8e7d6c/coverage
+
+# 需求变更差异（doc_id 为新版，against 为旧版，两者都需已解析）
+curl "http://127.0.0.1:8000/api/v1/requirements/DOC-new/diff?against=DOC-old"
+
+# 需求-用例双向追溯矩阵
+curl http://127.0.0.1:8000/api/v1/requirements/DOC-xxx/traceability
+
+# 图片识别通道配置（读写与探针；清图片配置不影响大模型配置）
+curl http://127.0.0.1:8000/api/v1/vision/config
+curl -X POST http://127.0.0.1:8000/api/v1/vision/config/test
+
+# 文档里的图片：查看某一张 / 重新识别全部
+curl -OJ http://127.0.0.1:8000/api/v1/documents/DOC-xxx/images/img-001.png
+curl -X POST http://127.0.0.1:8000/api/v1/documents/DOC-xxx/images/recognize
+```
+
+按次覆盖单条需求用例上限（省略则用服务端 `MAX_CASES_PER_REQUIREMENT`）：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/testcases/generate \
+  -H "Content-Type: application/json" \
+  -d '{"text": "## 登录\n- 密码：8-20位，必填", "methods": ["equivalence", "orthogonal"], "use_llm": false, "max_cases_per_requirement": 120}'
 ```
 
 ---

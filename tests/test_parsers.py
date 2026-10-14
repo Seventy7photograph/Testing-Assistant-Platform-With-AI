@@ -65,8 +65,16 @@ def test_parse_pdf_text() -> None:
 
 def test_unsupported_extension() -> None:
     with pytest.raises(UnsupportedFormatError) as excinfo:
-        parse_document(b"data", "req.xlsx")
-    assert "xlsx" in str(excinfo.value.message)
+        parse_document(b"data", "req.zip")
+    assert "zip" in str(excinfo.value.message)
+    assert excinfo.value.http_status == 415
+
+
+def test_legacy_xls_hint() -> None:
+    """旧版 .xls 不支持，但必须给出「另存为 .xlsx」这种可执行的下一步。"""
+    with pytest.raises(UnsupportedFormatError) as excinfo:
+        parse_document(b"data", "需求.xls")
+    assert "另存为" in str(excinfo.value.message)
     assert excinfo.value.http_status == 415
 
 

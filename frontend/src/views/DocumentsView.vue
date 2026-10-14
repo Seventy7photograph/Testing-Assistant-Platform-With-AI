@@ -26,6 +26,7 @@ const error = ref("");
 const uploading = ref(false);
 const parsing = ref("");
 const downloading = ref("");
+const recognizing = ref("");
 const keyword = ref("");
 const preview = ref<DocumentSummary | null>(null);
 
@@ -124,6 +125,45 @@ async function download(row: DocumentSummary): Promise<void> {
 
 function openRequirement(row: DocumentSummary): void {
   void router.push(`/documents/${row.doc_id}/requirement`);
+}
+
+/** 图片识别状态的中文口径与色调：每一种状态都要能一眼看出「成没成、为什么」。 */
+const IMAGE_STATUS: Record<string, { label: string; tone: string }> = {
+  recognized: { label: "已识别", tone: "chip--pass" },
+  empty: { label: "无文字", tone: "chip--warn" },
+  skipped: { label: "已跳过", tone: "chip--ghost" },
+  unavailable: { label: "未识别", tone: "chip--warn" },
+  pending: { label: "待识别", tone: "chip--ghost" },
+};
+
+function imageStatus(status: string): { label: string; tone: string } {
+  return IMAGE_STATUS[status] ?? { label: status || "未知", tone: "chip--ghost" };
+}
+
+function imageUrl(docId: string, filename: string): string {
+  return api.documentImageUrl(docId, filename);
+}
+
+async function recognizeImages(row: DocumentSummary): Promise<void> {
+  recognizing.value = row.doc_id;
+  try {
+    const updated = await api.recognizeDocumentImages(row.doc_id);
+    const failed = updated.image_count - updated.image_recognized;
+    if (updated.image_recognized) {
+      notice.success(
+        `已识别 ${updated.image_recognized}/${updated.image_count} 张图片`,
+        failed ? `其余 ${failed} 张见文档预览里的原因。` : undefined,
+      );
+    } else {
+      notice.info("没有识别出内容", "打开文档预览查看每张图片的具体原因。");
+    }
+    if (preview.value?.doc_id === row.doc_id) preview.value = updated;
+    await load();
+  } catch (err) {
+    notice.error("图片识别失败", (err as Error).message);
+  } finally {
+    recognizing.value = "";
+  }
 }
 
 function downloadPreview(): void {
@@ -252,8 +292,8 @@ async function removeSelected(): Promise<void> {
 
           <label class="setting">
             <span class="setting__label">
-              单条需求字段上限
-              <Tip text="限制每条需求抽取的字段数量，避免超长文档把字段表撑爆。取值范围 1–50。" />
+              解析需求条目上限
+              <Tip text="这篇文档最多解析出多少条需求条目（按章节切分后取前 N 条）。它决定「能抽出几条需求」，与每条需求生成多少用例无关。" />
             </span>
             <el-input-number v-model="maxItems" :min="1" :max="50" controls-position="right" />
             <FieldHint>1–50，默认 8。只影响抽取，不影响用例条数。</FieldHint>
@@ -350,6 +390,21 @@ async function removeSelected(): Promise<void> {
             </p>
           </template>
         </el-table-column>
+        <el-table-column label="图片" width="112">
+          <template #default="{ row }">
+            <button
+              v-if="row.image_count"
+              type="button"
+              class="name"
+              :title="`共 ${row.image_count} 张图片，已识别 ${row.image_recognized} 张；点击查看详情`"
+              @click="preview = row"
+            >
+              <AppIcon name="image" :size="15" />
+              <span class="name__text mono">{{ row.image_recognized }}/{{ row.image_count }}</span>
+            </button>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="上传时间" width="110">
           <template #default="{ row }"><span class="muted">{{ formatRelative(row.created_at) }}</span></template>
         </el-table-column>
@@ -410,6 +465,15 @@ async function removeSelected(): Promise<void> {
       </template>
       <template #footer>
         <div class="pfoot">
+          <el-button
+            v-if="preview?.image_count"
+            size="small"
+            :loading="recognizing === preview?.doc_id"
+            title="按当前图片识别通道重新识别本文档里的全部图片"
+            @click="preview && recognizeImages(preview)"
+          >
+            <AppIcon name="refresh" :size="15" /> 重新识别图片
+          </el-button>
           <el-button size="small" :loading="downloading === preview?.doc_id" @click="downloadPreview">
             <AppIcon name="download" :size="15" /> 下载原文
           </el-button>
@@ -432,6 +496,31 @@ async function removeSelected(): Promise<void> {
           <div v-if="preview.page_count"><p class="preview__k">页数</p><p class="preview__v mono">{{ preview.page_count }}</p></div>
           <div v-if="preview.table_count"><p class="preview__k">表格</p><p class="preview__v mono">{{ preview.table_count }}</p></div>
         </div>
+        <hr class="rule" />
+        <template v-if="preview.image_count">
+          <p class="label">
+            图片（识别 {{ preview.image_recognized }}/{{ preview.image_count }} 张）
+          </p>
+          <div class="shots">
+            <figure v-for="shot in preview.images" :key="shot.filename" class="shot">
+              <img
+                class="shot__img"
+                :src="imageUrl(preview.doc_id, shot.filename)"
+                :alt="`第 ${shot.index} 张图片`"
+                loading="lazy"
+              />
+              <figcaption class="shot__cap">
+                <span class="chip" :class="imageStatus(shot.status).tone">
+                  #{{ shot.index }} {{ imageStatus(shot.status).label }}
+                </span>
+                <span v-if="shot.anchor" class="shot__anchor">{{ shot.anchor }}</span>
+              </figcaption>
+              <p v-if="shot.extractor" class="shot__meta mono">{{ shot.extractor }}</p>
+              <p v-if="shot.text_preview" class="shot__text">{{ shot.text_preview }}</p>
+              <p v-else-if="shot.message" class="shot__note">{{ shot.message }}</p>
+            </figure>
+          </div>
+        </template>
         <hr class="rule" />
         <p class="label">原文预览</p>
         <pre class="preview__body pre">{{ preview.preview || "（没有可预览的文本）" }}</pre>
@@ -577,6 +666,12 @@ async function removeSelected(): Promise<void> {
   margin-top: 2px;
   font-size: 10.5px;
   color: var(--warn);
+  /* 告警里可能夹着正则或长填充串，这里限一行并截断，避免把整行撑高、撑宽。 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .phead {
@@ -632,6 +727,65 @@ async function removeSelected(): Promise<void> {
   font-size: var(--fs-xs);
   line-height: 1.7;
   color: var(--ink-2);
+}
+
+.shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s3);
+}
+
+.shot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+}
+
+.shot__img {
+  width: 100%;
+  height: 96px;
+  object-fit: contain;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.shot__cap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.shot__anchor {
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shot__meta {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.shot__text,
+.shot__note {
+  font-size: var(--fs-2xs);
+  line-height: 1.6;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shot__note {
+  color: var(--ink-3);
 }
 </style>
 

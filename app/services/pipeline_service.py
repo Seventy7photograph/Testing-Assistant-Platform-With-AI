@@ -54,6 +54,8 @@ class PipelineService:
         use_llm: bool = True,
         use_llm_in_design: bool = False,
         max_items: int = 8,
+        max_cases_per_requirement: int | None = None,
+        llm_design_mode: str | None = None,
     ) -> PipelineResult:
         """一键生成：输入文档 ID 或原始文本，输出用例集（已落盘）。"""
         if not doc_id and not (text or "").strip():
@@ -83,7 +85,11 @@ class PipelineService:
             max_items=max_items,
         )
         suite = await self.generate_from_requirement(
-            requirement_doc, methods=methods, use_llm_in_design=use_llm_in_design
+            requirement_doc,
+            methods=methods,
+            use_llm_in_design=use_llm_in_design,
+            max_cases_per_requirement=max_cases_per_requirement,
+            llm_design_mode=llm_design_mode,
         )
         return PipelineResult(
             requirement_doc=requirement_doc,
@@ -97,6 +103,8 @@ class PipelineService:
         *,
         methods: list[str] | None = None,
         use_llm_in_design: bool = False,
+        max_cases_per_requirement: int | None = None,
+        llm_design_mode: str | None = None,
     ) -> TestCaseSuite:
         """基于已解析的需求模型生成用例（供"需求已解析后再生成"场景复用）。"""
         suite = await self.engine.generate(
@@ -104,9 +112,14 @@ class PipelineService:
             methods,
             llm=self.llm,
             use_llm=use_llm_in_design,
+            max_cases_per_item=max_cases_per_requirement,
+            llm_design_mode=llm_design_mode,
         )
         # 把解析阶段口径快照进用例集，供导出层如实展示「解析/生成」两阶段是否用了 LLM。
         suite.parse_meta = requirement_doc.parse_meta
-        self.repository.suites.save(suite)
-        logger.info("用例集已入库：%s（%d 条）", suite.suite_id, suite.stats.total)
+        # 走 save_suite 而不是裸 save：它负责分配「同一条需求下的第几版」。
+        self.repository.save_suite(suite)
+        logger.info(
+            "用例集已入库：%s（第 %d 版，%d 条）", suite.suite_id, suite.revision, suite.stats.total
+        )
         return suite

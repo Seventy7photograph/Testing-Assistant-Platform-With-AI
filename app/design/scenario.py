@@ -17,6 +17,7 @@ from app.core.utils import dump_json, truncate
 from app.design.base import (
     DesignStrategy,
     fill_value,
+    format_number,
     make_single_step,
     pattern_is_digit_only,
     pattern_sample,
@@ -120,7 +121,10 @@ class ScenarioStrategy(DesignStrategy):
 
     async def generate(self, item: RequirementItem) -> list[TestCase]:
         cases = self._rule_cases(item)
-        if self.context.llm_ready:
+        # 只有 scenario 模式下才走"场景法补充用例"这条路；
+        # review / enhance 模式下六种方法统一由 app/design/enrichment.py 复核一次，
+        # 两条路同时开会把同一件事做两遍、也把成本翻倍。
+        if self.context.scenario_llm_enabled:
             cases.extend(await self._llm_cases(item, cases))
         return self.too_many(cases)
 
@@ -314,7 +318,10 @@ def _evaluate(field: FieldConstraint, name: str, value: str) -> tuple[str | None
     """检查单个字段值，返回 (问题描述, 修正后的合法值)。
 
     无问题时返回 ``(None, None)``。修正策略：先按正则取内置样例或按字符集填充，
-    再按 min_length 补足、max_length 截断，保证修正值重新满足字段自身约束。
+    再按数值区间夹取、min_length 补足、max_length 截断，保证修正值重新满足字段自身约束。
+
+    数值区间这一条不能省：只查长度与格式，"正常用例里写 age=999（上限 120）"这种数据会一路进到
+    结果与 Excel 里 —— 它看起来权威，实际上是"断言成功、系统必然拒绝"的假用例。
     """
     issue: str | None = None
     fixed = value
@@ -329,6 +336,18 @@ def _evaluate(field: FieldConstraint, name: str, value: str) -> tuple[str | None
             fixed = sample if sample is not None else fill_value(
                 _clamp_length(field, len(value)), _charset_for(field)
             )
+    if field.has_numeric_range:
+        try:
+            number: float | None = float(str(value).strip())
+        except (TypeError, ValueError):
+            number = None
+        if number is not None:
+            if field.min_value is not None and number < field.min_value:
+                issue = issue or f"{name}=「{truncate(value, 16)}」小于最小值 {format_number(field.min_value)}"
+                fixed = format_number(field.min_value)
+            elif field.max_value is not None and number > field.max_value:
+                issue = issue or f"{name}=「{truncate(value, 16)}」大于最大值 {format_number(field.max_value)}"
+                fixed = format_number(field.max_value)
     if field.min_length is not None and len(fixed) < field.min_length:
         issue = issue or f"{name}=「{truncate(value, 16)}」长度小于最小长度 {field.min_length}"
         fixed = fixed + fill_value(field.min_length - len(fixed), _charset_for(field))

@@ -137,9 +137,14 @@ class TestExporterRegistry:
         names = {item["name"] for item in available_formats()}
         assert {"excel", "json"} <= names
 
+    def test_v2_formats_registered(self) -> None:
+        """V2.0 S3：新格式注册后，/export/formats 与前端下拉框自动出现。"""
+        names = {item["name"] for item in available_formats()}
+        assert {"csv", "xmind", "testlink"} <= names
+
     def test_unknown_format_raises(self) -> None:
         with pytest.raises(NotFoundError):
-            get_exporter("xmind")
+            get_exporter("docx")
 
     def test_media_type_for_excel(self) -> None:
         assert get_exporter("excel").extension == "xlsx"

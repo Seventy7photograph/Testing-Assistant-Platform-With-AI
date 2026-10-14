@@ -34,7 +34,7 @@ const topics: Record<string, Topic> = {
       { label: "单条需求上限", text: "上限 60 条，用来抑制边界值爆炸；超出会被截断并给出告警。" },
       { label: "去重", text: "两层去重：精确指纹 + 跨方法语义重叠。被合并的用例会在「覆盖方法」列留下痕迹。" },
     ],
-    steps: ["上传或粘贴需求", "选择设计方法", "生成", "在用例集里导出 Excel"],
+    steps: ["上传或粘贴需求", "选择设计方法", "生成", "在用例集里导出（Excel / CSV / XMind / TestLink XML / JSON）"],
   },
   documents: {
     title: "文档与需求",

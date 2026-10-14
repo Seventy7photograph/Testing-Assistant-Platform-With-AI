@@ -121,7 +121,9 @@ async def test_boundary_truncates_when_limit_exceeded(settings) -> None:
     ctx = DesignContext(settings=settings, llm=NullProvider(settings), max_cases_per_item=5)
     cases = await BoundaryStrategy(ctx).generate(item)
     assert len(cases) == 5
-    assert any("超过上限" in warning for warning in ctx.warnings)
+    # 措辞要能区分「单方法上限」与「单条需求用例上限」——两者同值但口径不同，
+    # 早期只说「超过上限 5」会让人误以为是自己设的那条上限生效了。
+    assert any("单方法产出" in warning and "单方法上限" in warning for warning in ctx.warnings), ctx.warnings
 
 
 # --------------------------------------------------------------------------- #
@@ -258,11 +260,15 @@ async def test_engine_generates_suite(settings, sample_item) -> None:
     assert any("未启用大模型" in warning for warning in suite.generation_meta.warnings)
 
 
-async def test_engine_rejects_v2_methods(settings) -> None:
+async def test_engine_accepts_v2_methods(settings) -> None:
+    """V2.0 起判定表 / 因果图 / 正交实验都是已实现方法，不再抛 501。"""
     engine = DesignEngine(settings)
-    with pytest.raises(FeatureNotAvailableError) as excinfo:
-        engine.resolve_methods(["decision_table"])
-    assert excinfo.value.http_status == 501
+    resolved = engine.resolve_methods(["decision_table", "cause_effect", "orthogonal"])
+    assert [method.value for method in resolved] == [
+        "decision_table",
+        "cause_effect",
+        "orthogonal",
+    ]
 
 
 def test_engine_rejects_unknown_method(settings) -> None:
@@ -271,12 +277,13 @@ def test_engine_rejects_unknown_method(settings) -> None:
         engine.resolve_methods(["not_a_method"])
 
 
-def test_engine_lists_all_methods_including_planned(settings) -> None:
+def test_engine_lists_all_methods_as_implemented(settings) -> None:
     engine = DesignEngine(settings)
     methods = {item["name"]: item["implemented"] for item in engine.available_methods()}
     assert methods["equivalence"] is True
-    assert methods["decision_table"] is False
-    assert methods["cause_effect"] is False
+    assert methods["decision_table"] is True
+    assert methods["cause_effect"] is True
+    assert methods["orthogonal"] is True
 
 
 # --------------------------------------------------------------------------- #

@@ -43,22 +43,30 @@ PROBE_MAX_TOKENS = 512
 
 @dataclass(slots=True)
 class LLMMessage:
-    role: str
-    content: str
+    """一条对话消息。
 
-    def to_dict(self) -> dict[str, str]:
+    ``content`` 允许是**多模态内容数组**（OpenAI 兼容协议的 content parts），
+    如 ``[{"type": "text", ...}, {"type": "image_url", ...}]``：
+    纯文本调用方继续传字符串即可，``to_dict()`` 原样透传，因此这是一次
+    向后兼容的类型放宽，不需要改动任何既有 Provider。
+    """
+
+    role: str
+    content: "str | list[dict[str, Any]]"
+
+    def to_dict(self) -> dict[str, Any]:
         return {"role": self.role, "content": self.content}
 
 
-def system(content: str) -> LLMMessage:
+def system(content: "str | list[dict[str, Any]]") -> LLMMessage:
     return LLMMessage(role="system", content=content)
 
 
-def user(content: str) -> LLMMessage:
+def user(content: "str | list[dict[str, Any]]") -> LLMMessage:
     return LLMMessage(role="user", content=content)
 
 
-def assistant(content: str) -> LLMMessage:
+def assistant(content: "str | list[dict[str, Any]]") -> LLMMessage:
     return LLMMessage(role="assistant", content=content)
 
 

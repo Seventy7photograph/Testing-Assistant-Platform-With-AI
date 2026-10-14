@@ -24,6 +24,25 @@ REQUIREMENT_MD = """# 用户注册需求
 - 短信通道异常
 """
 
+#: V2.0 三种新方法（判定表 / 因果图 / 正交实验）需要「多条件 + 多因子水平」，
+#: 上面那份最小需求只有一个带多水平的字段，正交实验自然产不出用例 ——
+#: 这是正确行为，因此单独准备一份更接近真实 PRD 的需求文本。
+V2_REQUIREMENT_MD = """# 会员注册需求
+
+## 1、会员注册
+手机号：11位数字，必填
+年龄：18~120
+会员等级：普通/白银/黄金
+注册渠道：小程序/APP/Web
+
+业务规则：
+- 若手机号已注册则提示直接登录
+- 不允许使用黑名单渠道注册
+
+异常场景：
+- 短信通道异常
+"""
+
 
 def _upload(client, content: str = REQUIREMENT_MD, filename: str = "需求.md"):
     return client.post(
@@ -48,8 +67,10 @@ def test_health_reports_capabilities(client) -> None:
     assert data["llm_available"] is True
     methods = {item["name"]: item["implemented"] for item in data["methods"]}
     assert methods["equivalence"] and methods["boundary"] and methods["scenario"]
-    assert methods["decision_table"] is False
+    # V2.0 起六种设计方法全部落地：能力清单必须如实反映「已实现」。
+    assert methods["decision_table"] and methods["cause_effect"] and methods["orthogonal"]
     assert "excel" in {item["name"] for item in data["export_formats"]}
+    assert {"csv", "xmind", "testlink"} <= {item["name"] for item in data["export_formats"]}
     assert "docx" in data["supported_extensions"]
 
 
@@ -128,7 +149,7 @@ def test_export_excel_and_json(client) -> None:
     assert download.headers["content-type"].startswith("application/json")
 
     formats = client.get(f"{API}/export/formats").json()["data"]
-    assert {item["name"] for item in formats} == {"excel", "json"}
+    assert {item["name"] for item in formats} == {"excel", "json", "csv", "xmind", "testlink"}
 
 
 def test_export_unknown_suite_returns_404(client) -> None:
@@ -142,14 +163,14 @@ def test_export_unknown_format_returns_404(client) -> None:
     suite = client.post(
         f"{API}/pipeline/generate", json={"text": REQUIREMENT_MD, "methods": ["boundary"], "use_llm": False}
     ).json()["data"]["suite"]
-    response = client.post(f"{API}/export", json={"suite_id": suite["suite_id"], "format": "xmind"})
+    response = client.post(f"{API}/export", json={"suite_id": suite["suite_id"], "format": "docx"})
     assert response.status_code == 404
 
 
 def test_upload_unsupported_format_returns_415(client) -> None:
     response = client.post(
         f"{API}/documents/upload",
-        files={"file": ("需求.xlsx", b"binary", "application/vnd.ms-excel")},
+        files={"file": ("需求.zip", b"binary", "application/zip")},
     )
     assert response.status_code == 415
     assert response.json()["code"] == "UNSUPPORTED_FORMAT"
@@ -161,15 +182,17 @@ def test_upload_empty_file_returns_422(client) -> None:
     assert response.json()["code"] == "DOCUMENT_PARSE_FAILED"
 
 
-def test_v2_design_method_returns_501(client) -> None:
-    response = client.post(
-        f"{API}/testcases/generate",
-        json={"text": REQUIREMENT_MD, "methods": ["decision_table"], "use_llm": False},
-    )
-    assert response.status_code == 501
-    body = response.json()
-    assert body["code"] == "FEATURE_NOT_AVAILABLE"
-    assert body["detail"]["unimplemented"] == ["判定表"]
+def test_v2_design_methods_generate_cases(client) -> None:
+    """V2.0 的三种方法必须能端到端生成用例（不再返回 501）。"""
+    for method in ("decision_table", "cause_effect", "orthogonal"):
+        response = client.post(
+            f"{API}/testcases/generate",
+            json={"text": V2_REQUIREMENT_MD, "methods": [method], "use_llm": False},
+        )
+        assert response.status_code == 200, (method, response.text)
+        suite = response.json()["data"]
+        assert suite["cases"], f"{method} 未产出任何用例"
+        assert {case["design_method"] for case in suite["cases"]} == {method}
 
 
 def test_unknown_method_returns_404(client) -> None:
@@ -181,8 +204,20 @@ def test_unknown_method_returns_404(client) -> None:
 
 
 def test_missing_source_returns_400(client) -> None:
+    """
+    测试缺少源代码时API是否返回400错误状态码
+    该测试验证当请求中缺少必要的源代码参数时，
+    API是否会正确返回400 Bad Request响应。
+    参数:
+        client: 测试HTTP客户端，用于发送API请求
+    返回:
+        None
+    """
+    # 发送POST请求到测试用例生成API端点，仅包含methods参数
     response = client.post(f"{API}/testcases/generate", json={"methods": ["boundary"]})
+    # 验证响应状态码是否为400（Bad Request）
     assert response.status_code == 400
+    # 验证响应JSON中的错误代码是否为"BAD_REQUEST"
     assert response.json()["code"] == "BAD_REQUEST"
 
 
@@ -200,9 +235,17 @@ def test_requirement_not_found(client) -> None:
 
 
 def test_documents_listing(client) -> None:
+    """
+    测试文档列表功能
+    验证能够获取文档列表，并且列表至少包含一个文档
+    """
+    # 上传一个测试文档，内容为Markdown格式，包含标题和描述
     _upload(client, "# 列表需求\n## 功能A\n描述A\n", "list.md")
+    # 发送GET请求获取文档列表，限制返回数量为5
     body = client.get(f"{API}/documents", params={"limit": 5}).json()
+    # 验证请求是否成功
     assert body["success"] is True
+    # 验证返回的文档列表至少包含一个文档
     assert len(body["data"]) >= 1
 
 

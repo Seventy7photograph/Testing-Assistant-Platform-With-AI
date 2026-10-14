@@ -1,5 +1,5 @@
 /** 领域术语到界面语言的映射，以及全局格式化函数。集中在一处，避免各页各写一套。 */
-import type { CaseType, DesignMethod, Priority } from "@/api";
+import type { CaseType, DesignMethod, ExportFormatInfo, MethodInfo, Priority } from "@/api";
 
 /**
  * 生成 / 解析阶段用到的引擎元信息。
@@ -70,17 +70,70 @@ export const METHOD_CODES: Record<string, string> = {
   scenario: "SC",
   decision_table: "DT",
   cause_effect: "CE",
-  orthogonal: "OG",
+  // 必须与后端 app/design/optimizer.py 的 ID_PREFIX 一致，否则界面显示的方法代码
+  // 与用例编号（TC-OR-xxx）对不上。
+  orthogonal: "OR",
 };
 
-/** V1.0 已交付的三种设计方法。 */
-export const V1_METHODS: DesignMethod[] = ["equivalence", "boundary", "scenario"];
+/** 每种设计方法的界面说明（纯展示文案，前端维护）。 */
+export const METHOD_NOTES: Record<string, string> = {
+  equivalence: "在有效类与无效类里各取代表值，覆盖输入域",
+  boundary: "取上下界的 min-1 / min / max / max+1，专抓临界错误",
+  scenario: "按主流程、备选流程、异常流各走一遍，串起业务链路",
+  decision_table: "多条件组合成表，无关项合并后每条规则一条用例",
+  cause_effect: "从业务规则画因与果，异或 / 包含 / 屏蔽约束折算成判定表",
+  orthogonal: "多因子多水平取两两覆盖表，用最少用例覆盖水平组合",
+};
 
-/** 架构中已预留、但当前调用会返回 501 的设计方法。 */
-export const RESERVED_METHODS: DesignMethod[] = [
-  "decision_table",
-  "cause_effect",
-  "orthogonal",
+/**
+ * 不指定方法时的默认集合：与后端 `DEFAULT_METHODS` 保持一致。
+ * 新方法要显式勾选 —— 默认全选会让一次生成的用例数直接翻倍。
+ */
+export const DEFAULT_METHODS: DesignMethod[] = ["equivalence", "boundary", "scenario"];
+
+/**
+ * 能力真相只有一个来源：后端接口（`/health`、`/testcases/methods`、`/export/formats`）。
+ * 下面两份清单**只在后端拉不到时兜底**，不参与"某个能力是否可用"的判断。
+ *
+ * 这里曾经写过一份「已实现 / 未实现」的硬编码副本，结果 V2.0 把判定表、因果图、
+ * 正交实验做完之后，界面还在显示「未实现」并提示「调用会返回 501」——
+ * 同一事实存两处，必然会有一处过期。
+ */
+export const FALLBACK_METHODS: MethodInfo[] = [
+  { name: "equivalence", label: "等价类划分", implemented: true, description: "" },
+  { name: "boundary", label: "边界值分析", implemented: true, description: "" },
+  { name: "scenario", label: "场景法", implemented: true, description: "" },
+  { name: "decision_table", label: "判定表", implemented: true, description: "" },
+  { name: "cause_effect", label: "因果图", implemented: true, description: "" },
+  { name: "orthogonal", label: "正交实验", implemented: true, description: "" },
+];
+
+/** 导出格式的兜底清单（`/export/formats` 拉不到时用）。 */
+export const FALLBACK_EXPORT_FORMATS: ExportFormatInfo[] = [
+  { name: "excel", label: "Excel", media_type: "", extension: "xlsx" },
+  { name: "json", label: "JSON", media_type: "", extension: "json" },
+  { name: "csv", label: "CSV", media_type: "", extension: "csv" },
+  { name: "xmind", label: "XMind", media_type: "", extension: "xmind" },
+  { name: "testlink", label: "TestLink XML", media_type: "", extension: "xml" },
+];
+
+/** 上传控件 accept 的兜底值（`/health` 拉不到时用）。 */
+export const FALLBACK_UPLOAD_EXTENSIONS: string[] = [
+  ".docx",
+  ".pdf",
+  ".xlsx",
+  ".xlsm",
+  ".txt",
+  ".md",
+  ".csv",
+  ".json",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".bmp",
+  ".tif",
+  ".tiff",
 ];
 
 export const PRIORITY_ORDER: Priority[] = ["P0", "P1", "P2", "P3"];

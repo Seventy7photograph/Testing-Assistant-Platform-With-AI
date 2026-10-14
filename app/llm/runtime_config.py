@@ -36,6 +36,21 @@ LLM_OVERRIDE_FIELDS: tuple[str, ...] = (
     "llm_max_retries",
     "llm_temperature",
     "llm_max_tokens",
+    # V2.0：图片识别通道也走同一份覆盖文件。
+    # 放在一起的好处是「一键恢复 .env 基线」对两类配置同时生效，
+    # 不会出现「LLM 恢复了、图片识别的密钥还留着」这种半吊子状态。
+    "vision_provider",
+    "vision_mode",
+    "vision_api_key",
+    "vision_base_url",
+    "vision_model",
+    "vision_cloud_url",
+    "vision_cloud_key",
+    "vision_ocr_backend",
+    "vision_languages",
+    "vision_max_images",
+    "vision_max_side",
+    "vision_min_pixels",
 )
 
 
@@ -53,13 +68,26 @@ class LLMOverride(BaseModel):
     llm_temperature: float | None = Field(default=None, ge=0, le=2)
     llm_max_tokens: int | None = Field(default=None, ge=16, le=131072)
 
+    vision_provider: str | None = None
+    vision_mode: str | None = None
+    vision_api_key: str | None = None
+    vision_base_url: str | None = None
+    vision_model: str | None = None
+    vision_cloud_url: str | None = None
+    vision_cloud_key: str | None = None
+    vision_ocr_backend: str | None = None
+    vision_languages: str | None = None
+    vision_max_images: int | None = Field(default=None, ge=1, le=200)
+    vision_max_side: int | None = Field(default=None, ge=200, le=6000)
+    vision_min_pixels: int | None = Field(default=None, ge=0, le=10_000_000)
+
     def to_overrides(self) -> dict[str, Any]:
         """转成可直接 update 到 Settings 的字典；空值表示未覆盖。"""
         result: dict[str, Any] = {}
         for key, value in self.model_dump().items():
             if value is None:
                 continue
-            if key == "llm_api_key" and not str(value):
+            if key in ("llm_api_key", "vision_api_key", "vision_cloud_key") and not str(value):
                 continue
             result[key] = value
         return result
@@ -126,6 +154,28 @@ class LLMRuntimeConfigStore:
         logger.info("已清除运行时 LLM 配置，恢复 .env 基线。")
         return True
 
+    def replace(self, overrides: dict[str, Any]) -> dict[str, Any]:
+        """用给定的覆盖集合整体替换现有覆盖（用于只清掉某一类配置，如 vision_*）。
+
+        不能复用 :meth:`save`：save 是「打补丁」语义，传空值表示不修改，
+        因此删不掉任何字段。这里要的是"把剩下的写回去"。
+        """
+        cleaned = {
+            key: value
+            for key, value in overrides.items()
+            if key in LLM_OVERRIDE_FIELDS and value is not None
+        }
+        if not cleaned:
+            self.clear()
+            return {}
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self._path.parent / f"{self._path.name}.tmp"
+        tmp_path.write_text(json.dumps(cleaned, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path.replace(self._path)
+        self._invalidate()
+        logger.info("已重写运行时配置：保留字段 %s", sorted(cleaned))
+        return cleaned
+
     def exists(self) -> bool:
         return self._path.exists()
 
@@ -136,8 +186,10 @@ class LLMRuntimeConfigStore:
 def llm_config_fingerprint(settings: Settings) -> str:
     """对生效的 LLM 配置取指纹，用于判断缓存的 Provider 是否已过期。"""
     payload: dict[str, Any] = {key: getattr(settings, key, None) for key in LLM_OVERRIDE_FIELDS}
-    api_key = str(payload.pop("llm_api_key", "") or "")
-    payload["llm_api_key_sha256"] = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    # 所有密钥都以摘要入指纹：指纹是内存里的一串可比较文本，不该带着明文 Key。
+    for key in ("llm_api_key", "vision_api_key", "vision_cloud_key"):
+        secret = str(payload.pop(key, "") or "")
+        payload[f"{key}_sha256"] = hashlib.sha256(secret.encode("utf-8")).hexdigest()[:16]
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
 
 

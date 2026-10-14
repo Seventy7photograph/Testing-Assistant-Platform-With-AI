@@ -23,6 +23,8 @@ async def run_pipeline(payload: GenerateRequest, pipeline: PipelineServiceDep) -
         use_llm=payload.use_llm,
         use_llm_in_design=payload.use_llm_in_design,
         max_items=payload.max_items,
+        max_cases_per_requirement=payload.max_cases_per_requirement,
+        llm_design_mode=payload.llm_design_mode,
     )
     payload_out = GenerateResult(
         requirement_doc=result.requirement_doc,

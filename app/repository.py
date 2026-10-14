@@ -1,16 +1,19 @@
-"""极简持久化层（V1.0 采用 JSON 文件存储，零外部依赖、开箱即跑）。
+"""持久化层：JSON 文件与 SQLAlchemy(SQLite) 双实现，业务层无感知。
 
-为什么不是 SQLAlchemy：
-  V1.0 的目标是"单机可跑通"，引入数据库会增加部署成本；
-  但持久化被收敛在 JsonObjectStore 内部，后续只需新增 SqlObjectStore
-  并替换 build_repository() 的装配，业务层（services/api）无需改动。
+V1.0 用 JSON 文件存储（零外部依赖、开箱即跑）；V2.0 S6 补上
+``SqlObjectStore``（见 app/sql_store.py），两者接口完全一致，由
+``STORAGE_BACKEND`` 在 :func:`build_repository` 里选一个装配。
+
+为什么默认仍是 json：既有用户的数据都在 ``storage/data/*.json``，默认切到
+SQLite 会让升级后"数据凭空消失"。切库是一次显式动作（``STORAGE_BACKEND=sqlite``
++ ``scripts/migrate_json_to_sqlite.py``），并在启动日志里给出提示。
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import lru_cache
 from pathlib import Path
 from typing import Generic, TypeVar
@@ -131,12 +134,45 @@ class JsonObjectStore(Generic[T]):
     def count(self) -> int:
         return len(list(self.directory.glob("*.json")))
 
+    def list_ids(self) -> list[str]:
+        """全部对象 ID（不反序列化内容）。"""
+        return [path.stem for path in self.directory.glob("*.json")]
+
+    def iter_payloads(self) -> Iterator[dict]:
+        """轻量遍历原始 payload：统计口径只需要少数字段，没必要构造完整模型。"""
+        for path in self.directory.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                logger.warning("跳过损坏的存储文件：%s", path.name)
+                continue
+            if isinstance(payload, dict):
+                yield payload
+
 
 class Repository:
-    """业务侧统一门面（依赖倒置：业务只依赖它，不依赖具体存储实现）。"""
+    """业务侧统一门面（依赖倒置：业务只依赖它，不依赖具体存储实现）。
+
+    ``documents`` / ``requirements`` / ``suites`` 三个集合在后端切换时只换类型，
+    方法签名逐个对齐，因此 services 与 api 层一行都不用改。
+    """
+
+    BACKEND_JSON = "json"
+    BACKEND_SQLITE = "sqlite"
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
+        self.backend = normalize_backend(getattr(self.settings, "storage_backend", self.BACKEND_JSON))
+        self.engine = None
+        if self.backend == self.BACKEND_SQLITE:
+            self._build_sql_collections()
+        else:
+            self._build_json_collections()
+
+    # ------------------------------------------------------------------ #
+    # 装配
+    # ------------------------------------------------------------------ #
+    def _build_json_collections(self) -> None:
         base = self.settings.data_dir
         self.documents: JsonObjectStore[DocumentRecord] = JsonObjectStore(
             base / "documents", DocumentRecord, id_attr="doc_id", label="文档"
@@ -148,6 +184,46 @@ class Repository:
             base / "suites", TestCaseSuite, id_attr="suite_id", label="用例集"
         )
 
+    def _build_sql_collections(self) -> None:
+        # 延迟导入：只用 JSON 后端时不必依赖 SQLAlchemy。
+        from app.sql_store import SqlObjectStore, create_db_engine
+
+        self.engine = create_db_engine(self.settings.db_path)
+        self.documents = SqlObjectStore(
+            self.engine, DocumentRecord, kind="documents", id_attr="doc_id", label="文档"
+        )
+        self.requirements = SqlObjectStore(
+            self.engine, RequirementDoc, kind="requirements", id_attr="doc_id", label="需求解析结果"
+        )
+        self.suites = SqlObjectStore(
+            self.engine, TestCaseSuite, kind="suites", id_attr="suite_id", label="用例集"
+        )
+        self._warn_if_json_left_behind()
+
+    def _warn_if_json_left_behind(self) -> None:
+        """切到 SQLite 但库里是空的、而 JSON 里有数据时，明确提示去做迁移。
+
+        不提示的后果很具体：升级后打开界面一片空白，使用者会以为"数据丢了"。
+        """
+        try:
+            if self.documents.count() or self.requirements.count() or self.suites.count():
+                return
+        except Exception:  # noqa: BLE001 - 统计失败不影响主流程
+            return
+        legacy = self.settings.data_dir
+        stale = [
+            folder
+            for folder in ("documents", "requirements", "suites")
+            if any((legacy / folder).glob("*.json"))
+        ]
+        if stale:
+            logger.warning(
+                "已启用 SQLite 存储，但数据库为空，而 %s 下仍有 JSON 数据（%s）。"
+                "如需沿用既有数据，请先执行：python scripts/migrate_json_to_sqlite.py",
+                legacy,
+                "、".join(stale),
+            )
+
     def count_cases(self) -> int:
         """全部用例集的用例总数。
 
@@ -155,12 +231,7 @@ class Repository:
         为首页一个数字把所有用例完整反序列化一遍并不划算。
         """
         total = 0
-        for path in self.suites.directory.glob("*.json"):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                logger.warning("跳过损坏的存储文件：%s", path.name)
-                continue
+        for payload in self.suites.iter_payloads():
             stats = payload.get("stats")
             if not isinstance(stats, dict):
                 continue
@@ -179,19 +250,14 @@ class Repository:
         """
         return sum(
             1
-            for path in self.requirements.directory.glob("*.json")
-            if self.documents.exists(path.stem)
+            for doc_id in self.requirements.list_ids()
+            if self.documents.exists(doc_id)
         )
 
     def referenced_requirement_ids(self) -> set[str]:
         """全部用例集引用到的需求 ID（轻量读取，不反序列化用例明细）。"""
         ids: set[str] = set()
-        for path in self.suites.directory.glob("*.json"):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                logger.warning("跳过损坏的存储文件：%s", path.name)
-                continue
+        for payload in self.suites.iter_payloads():
             doc_id = payload.get("doc_id")
             if isinstance(doc_id, str) and doc_id:
                 ids.add(doc_id)
@@ -206,23 +272,66 @@ class Repository:
         """
         referenced = self.referenced_requirement_ids()
         removed = 0
-        for path in self.requirements.directory.glob("*.json"):
-            doc_id = path.stem
+        for doc_id in self.requirements.list_ids():
             if doc_id in referenced or self.documents.exists(doc_id):
                 continue
-            try:
-                path.unlink()
+            if self.requirements.delete(doc_id):
                 removed += 1
-            except OSError:
-                logger.warning("清理孤立的解析结果失败：%s", path.name)
         if removed:
             logger.info("已清理 %d 份孤立的解析结果", removed)
         return removed
 
+    # ------------------------------------------------------------------ #
+    # 用例版本管理（V2.0 S6）
+    # ------------------------------------------------------------------ #
+    def next_suite_revision(self, doc_id: str) -> int:
+        """同一条需求的上一次生成版本号 + 1。
+
+        以 doc_id 分组而不是全局自增：使用者关心的是「这条需求我生成过几版」，
+        全局序号只会给出「第 37 版」这种没有信息量的读数。
+        """
+        best = 0
+        for payload in self.suites.iter_payloads():
+            if str(payload.get("doc_id") or "") != doc_id:
+                continue
+            try:
+                best = max(best, int(payload.get("revision") or 0))
+            except (TypeError, ValueError):
+                continue
+        return best + 1
+
+    def save_suite(self, suite: TestCaseSuite) -> TestCaseSuite:
+        """保存用例集并补齐版本号（未显式指定时自动递增）。"""
+        if not suite.revision:
+            suite.revision = self.next_suite_revision(suite.doc_id)
+        return self.suites.save(suite)
+
+    def suite_history(self, doc_id: str, *, limit: int = 10) -> list[TestCaseSuite]:
+        """同一需求的历史用例集（按版本号倒序）。"""
+        suites = self.suites.list_recent(max(limit, 1) * 5, predicate=lambda item: item.doc_id == doc_id)
+        suites.sort(key=lambda item: item.revision, reverse=True)
+        return suites[: max(limit, 1)]
+
+
+def normalize_backend(raw: object) -> str:
+    """把配置值规整为受支持的后端名，未知值回落 json 并告警。"""
+    name = str(raw or "").strip().lower()
+    if name in (Repository.BACKEND_SQLITE, "sql", "sqlalchemy", "db"):
+        return Repository.BACKEND_SQLITE
+    if name in ("", Repository.BACKEND_JSON, "file", "files"):
+        return Repository.BACKEND_JSON
+    logger.warning("未知的 STORAGE_BACKEND=%s，已回落为 json。", raw)
+    return Repository.BACKEND_JSON
+
+
+def build_repository(settings: Settings | None = None) -> Repository:
+    """按 STORAGE_BACKEND 装配仓储（业务层不感知具体存储）。"""
+    return Repository(settings)
+
 
 @lru_cache(maxsize=1)
 def get_repository() -> Repository:
-    return Repository(get_settings())
+    return build_repository(get_settings())
 
 
 def reset_repository_cache() -> None:

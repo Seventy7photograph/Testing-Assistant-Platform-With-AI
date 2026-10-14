@@ -1,7 +1,10 @@
 """导出层：把 TestCaseSuite 渲染为目标格式。
 
-扩展点：后续增加 XMind / CSV / TestLink XML 导出时，
-实现 Exporter 子类并 register_exporter() 即可，API 层无需改动。
+已落地：Excel（人看）、JSON（二次加工）、CSV（机器吃）、XMind（评审视图）、
+TestLink XML（导入测试管理工具）。
+
+扩展点：继续增加格式时实现 Exporter 子类并 register_exporter() 即可，
+API 层与前端下拉框无需改动。
 """
 from app.exporters.base import Exporter, ExportResult
 from app.exporters.registry import (

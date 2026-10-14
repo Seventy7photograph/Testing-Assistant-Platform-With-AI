@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from app.core.registry import Registry
 from app.exporters.base import Exporter
+from app.exporters.csv_exporter import CsvExporter
 from app.exporters.excel_exporter import ExcelExporter
 from app.exporters.json_exporter import JsonExporter
+from app.exporters.testlink_exporter import TestLinkXmlExporter
+from app.exporters.xmind_exporter import XMindExporter
 
 EXPORTER_REGISTRY: Registry[Exporter] = Registry("导出器")
-
-# 预留：XMindExporter / CsvExporter / TestLinkXmlExporter
-# 实现 Exporter 子类后调用 register_exporter()，API 与前端会自动感知新格式。
 
 
 def register_exporter(exporter: Exporter, *, override: bool = False) -> Exporter:
@@ -23,6 +23,11 @@ def register_exporter(exporter: Exporter, *, override: bool = False) -> Exporter
 
 register_exporter(ExcelExporter())
 register_exporter(JsonExporter())
+# V2.0 S3：新增三种可被目标工具直接导入的格式。
+# register_exporter() 之后 /export/formats 与前端下拉框会自动出现，无需改接口。
+register_exporter(XMindExporter())
+register_exporter(CsvExporter())
+register_exporter(TestLinkXmlExporter())
 
 
 def available_formats() -> list[dict]:

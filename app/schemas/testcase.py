@@ -77,9 +77,29 @@ class GenerationMeta(BaseModel):
     llm_used: bool = False
     llm_provider: str = "rule"
     llm_model: str = ""
+    #: 本次生成阶段实际调用模型的次数（0 表示纯规则引擎）。
+    llm_calls: int = Field(default=0, description="生成阶段调用大模型的次数，用于费用与耗时追溯")
     fallback_used: bool = False
     warnings: list[str] = Field(default_factory=list)
+    #: 大模型对「规则引擎产出」的复核意见（只提意见，不自动改写用例）。
+    review_findings: list["ReviewFinding"] = Field(default_factory=list)
     elapsed_ms: int = 0
+
+
+class ReviewFinding(BaseModel):
+    """大模型复核规则用例时给出的一条意见。
+
+    刻意**不**让模型直接改写用例：规则用例是确定性的产物，一旦被模型改写，
+    使用者就无法判断哪条是规则结论、哪条是模型判断，整份用例集的可信度都会打折。
+    因此复核结果只作为「意见」单独呈现，改不改由人决定。
+    """
+
+    severity: str = Field(default="info", description="info | warning")
+    requirement_id: str = ""
+    requirement_title: str = ""
+    target: str = Field(default="", description="指向的用例标题 / 字段名 / 需求条目")
+    issue: str = Field(default="", description="发现的问题")
+    suggestion: str = Field(default="", description="建议怎么改")
 
 
 class TestCaseSuite(BaseModel):
@@ -88,6 +108,10 @@ class TestCaseSuite(BaseModel):
     suite_id: str
     doc_id: str
     doc_title: str = ""
+    revision: int = Field(
+        default=0,
+        description="同一条需求下的第几个版本（V2.0 起由 Repository.save_suite 分配，0 表示未分配）",
+    )
     methods: list[DesignMethod] = Field(default_factory=list)
     cases: list[TestCase] = Field(default_factory=list)
     stats: SuiteStats = Field(default_factory=SuiteStats)
@@ -130,6 +154,7 @@ class TestCaseSuite(BaseModel):
             suite_id=self.suite_id,
             doc_id=self.doc_id,
             doc_title=self.doc_title,
+            revision=self.revision,
             methods=self.methods,
             stats=self.stats,
             generation_meta=self.generation_meta,
@@ -149,6 +174,7 @@ class TestCaseSuiteSummary(BaseModel):
     suite_id: str
     doc_id: str
     doc_title: str = ""
+    revision: int = 0
     methods: list[DesignMethod] = Field(default_factory=list)
     stats: SuiteStats = Field(default_factory=SuiteStats)
     generation_meta: GenerationMeta = Field(default_factory=GenerationMeta)

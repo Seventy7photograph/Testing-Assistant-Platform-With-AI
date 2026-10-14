@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
 
@@ -13,10 +13,21 @@ import FieldHint from "@/components/FieldHint.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatReadout from "@/components/StatReadout.vue";
 import Tip from "@/components/Tip.vue";
+import ReviewFindings from "@/components/ReviewFindings.vue";
+import WarningList from "@/components/WarningList.vue";
 import { confirmAction } from "@/composables/useFeedback";
 import { useHealthStore } from "@/stores/health";
 import { useNoticeStore } from "@/stores/notice";
-import { RESERVED_METHODS, V1_METHODS, displayExtensions, engineLabel, engineTitle, formatDuration, methodLabel } from "@/utils/labels";
+import {
+  DEFAULT_METHODS,
+  FALLBACK_UPLOAD_EXTENSIONS,
+  METHOD_NOTES,
+  displayExtensions,
+  engineLabel,
+  engineTitle,
+  formatDuration,
+  methodLabel,
+} from "@/utils/labels";
 
 const router = useRouter();
 const health = useHealthStore();
@@ -29,32 +40,52 @@ const docId = ref<string | null>(null);
 const docInfo = ref<DocumentSummary | null>(null);
 const uploading = ref(false);
 
-const methods = ref<string[]>([...V1_METHODS]);
+const methods = ref<string[]>([...DEFAULT_METHODS]);
 const maxItems = ref(8);
+/**
+ * 单条需求用例上限：防爆护栏，不是"推荐产量"。
+ * 默认值取自服务端（`/health` 的 limits），未配置时按 200 —— 六种方法全开时，
+ * 结构完整的需求自然产出 65~75 条，默认值低于它就会天天截断。
+ */
+const maxCases = ref(200);
+/** 只在首次拿到服务端上限时同步一次，之后用户改过的值不被覆盖。 */
+const initialisedFromServer = ref(false);
 const useLlm = ref(true);
 const useLlmInDesign = ref(false);
+/**
+ * 生成阶段大模型的参与方式。默认 scenario = 与 V1.0 完全一致（只让场景法补充用例）；
+ * review / enhance 是 V2.0 新增：一次调用覆盖六种方法的产出复核。
+ */
+const llmDesignMode = ref("scenario");
+const LLM_DESIGN_MODES = [
+  { value: "scenario", label: "仅场景法补充", hint: "只让场景法补充易漏场景（V1.0 起的行为）。" },
+  { value: "review", label: "复核规则产出", hint: "六种方法都覆盖：模型复核规则引擎的产出并给出意见，不改写用例。每条需求一次调用。" },
+  { value: "enhance", label: "复核 + 补充用例", hint: "在复核之外允许模型补充用例，补充项标为「[LLM补充] · 需复核」，每条需求最多 5 条。" },
+] as const;
 
 const generating = ref(false);
 const result = ref<GenerateResult | null>(null);
 const failure = ref<{ message: string; code: string } | null>(null);
-const formats = ref<ExportFormatInfo[]>([]);
+/** 导出格式与设计方法都以服务端能力清单为准（health 已在 App 启动时加载）。 */
+const formats = computed<ExportFormatInfo[]>(() => health.exportFormats);
 
-const METHOD_NOTES: Record<string, string> = {
-  equivalence: "在有效类与无效类里各取代表值，覆盖输入域",
-  boundary: "取上下界的 min-1 / min / max / max+1，专抓临界错误",
-  scenario: "按主流程、备选流程、异常流各走一遍，串起业务链路",
-};
+/**
+ * 5 个导出按钮平铺会把卡片头撑爆（V2.0 从 2 种格式加到 5 种后，窄屏直接横向溢出）。
+ * 最常用的 Excel 保留为直接按钮，其余收进下拉 —— 既省横向空间，也少几个视觉噪音。
+ */
+const primaryFormat = computed(
+  () => formats.value.find((item) => item.name === "excel") ?? formats.value[0] ?? null,
+);
+const otherFormats = computed(() =>
+  formats.value.filter((item) => item.name !== primaryFormat.value?.name),
+);
 
-const v1List = V1_METHODS.map((name) => ({
-  name,
-  label: methodLabel(name),
-  note: METHOD_NOTES[name] ?? "",
-}));
-
-const reservedList = RESERVED_METHODS.map((name) => ({ name, label: methodLabel(name) }));
+const methodList = computed(() =>
+  health.methods.map((item) => ({ ...item, note: METHOD_NOTES[item.name] ?? "" })),
+);
 
 const acceptAttr = computed(() =>
-  (health.info?.supported_extensions ?? [".docx", ".pdf", ".txt", ".md", ".csv", ".json"])
+  (health.info?.supported_extensions ?? FALLBACK_UPLOAD_EXTENSIONS)
     .map((ext) => ext)
     .join(","),
 );
@@ -88,13 +119,22 @@ const warnings = computed(() => {
   );
 });
 
-onMounted(async () => {
-  try {
-    formats.value = await api.exportFormats();
-  } catch {
-    /* 导出格式取自健康快照，失败不影响生成 */
-  }
+onMounted(() => {
+  // 直接从当前路由进来时 App 的初始化请求可能还没回来，补一次（store 内有 15s 缓存，不会重复打）。
+  if (!health.info) void health.load();
 });
+
+// 上限的默认值以服务端生效值为准：改 .env 或换环境后界面跟着走，不会各说各话。
+watch(
+  () => health.info?.limits?.max_cases_per_requirement,
+  (value: number | undefined) => {
+    if (!initialisedFromServer.value && typeof value === "number" && value > 0) {
+      maxCases.value = value;
+      initialisedFromServer.value = true;
+    }
+  },
+  { immediate: true },
+);
 
 function toggleMethod(name: string) {
   const index = methods.value.indexOf(name);
@@ -126,7 +166,9 @@ function reset() {
 
 async function generate(): Promise<void> {
   if (!canGenerate.value) return;
-  if (useLlm.value) {
+  // 只有大模型真的可用时才拦一次：未配置 Key 时界面别处已经写明「会走规则引擎」，
+  // 这里再弹一个「会消耗额度」的确认框，既与实际行为矛盾，也多一次无意义的点击。
+  if (useLlm.value && health.llmReady) {
     const confirmed = await confirmAction({
       title: "确认使用大模型解析",
       message:
@@ -144,7 +186,9 @@ async function generate(): Promise<void> {
       methods: methods.value,
       use_llm: useLlm.value,
       use_llm_in_design: useLlmInDesign.value,
+      llm_design_mode: llmDesignMode.value,
       max_items: maxItems.value,
+      max_cases_per_requirement: maxCases.value,
     };
     const payload =
       mode.value === "upload"
@@ -261,52 +305,65 @@ async function exportSuite(format: string): Promise<void> {
           <div class="field">
             <span class="field__label">
               设计方法
-              <Tip text="三种方法平行生成，再按指纹去重、按语义合并，跨方法合并会记录 covered_methods。" />
+              <Tip text="勾选的方法平行生成，再按指纹去重、按语义合并，跨方法合并会记录 covered_methods。新增的三种组合类方法（判定表 / 因果图 / 正交实验）各自需要不同的前置条件，不适用时会给出原因。" />
             </span>
             <div class="methods">
-              <button
-                v-for="item in v1List"
-                :key="item.name"
-                type="button"
-                class="method"
-                :class="{ 'method--on': methods.includes(item.name) }"
-                :aria-pressed="methods.includes(item.name)"
-                @click="toggleMethod(item.name)"
-              >
-                <span class="method__box" aria-hidden="true">
-                  <AppIcon v-if="methods.includes(item.name)" name="check" :size="12" />
-                </span>
-                <span class="method__text">
-                  <span class="method__label">{{ item.label }}</span>
-                  <span class="method__note">{{ item.note }}</span>
-                </span>
-              </button>
-
-              <Tip
-                v-for="item in reservedList"
-                :key="item.name"
-              :text="`${item.label}尚未实现：当前调用会返回 501，界面不会假装它可用。`"
-              >
-                <span class="method method--off">
-                  <span class="method__box" aria-hidden="true" />
+              <template v-for="item in methodList" :key="item.name">
+                <button
+                  v-if="item.implemented"
+                  type="button"
+                  class="method"
+                  :class="{ 'method--on': methods.includes(item.name) }"
+                  :aria-pressed="methods.includes(item.name)"
+                  @click="toggleMethod(item.name)"
+                >
+                  <span class="method__box" aria-hidden="true">
+                    <AppIcon v-if="methods.includes(item.name)" name="check" :size="12" />
+                  </span>
                   <span class="method__text">
                     <span class="method__label">{{ item.label }}</span>
-              <span class="method__note">未实现</span>
+                    <span class="method__note">{{ item.note }}</span>
                   </span>
-                </span>
-              </Tip>
+                </button>
+
+                <!-- 未实现的方法仍然展示（为后续版本预留的方法要能看出"为什么点不了"），
+                     但可用性完全由后端上报的 implemented 决定。 -->
+                <Tip v-else :text="`${item.label}尚未实现：当前调用会返回 501，界面不会假装它可用。`">
+                  <span class="method method--off">
+                    <span class="method__box" aria-hidden="true" />
+                    <span class="method__text">
+                      <span class="method__label">{{ item.label }}</span>
+                      <span class="method__note">未实现</span>
+                    </span>
+                  </span>
+                </Tip>
+              </template>
             </div>
           </div>
 
           <div class="grid grid--2">
             <label class="field">
               <span class="field__label">
-                单条需求用例上限
-                <Tip text="边界值方法最容易膨胀，这个上限用于抑制它。取值范围 1–50。" />
+                解析需求条目上限
+                <Tip text="这篇文档最多解析出多少条需求条目（按章节切分后取前 N 条）。它只影响「抽出几条需求」，不影响每条需求生成多少用例。" />
               </span>
               <el-input-number v-model="maxItems" :min="1" :max="50" size="default" controls-position="right" />
-              <FieldHint>1–50，默认 8。</FieldHint>
+              <FieldHint>1–50，默认 8。超长文档建议调大，否则超出部分不会进入解析。</FieldHint>
             </label>
+            <label class="field">
+              <span class="field__label">
+                单条需求用例上限
+                <Tip text="一条需求最多生成多少条用例（跨全部设计方法）。它是一道防爆护栏：六种方法全开时，结构完整的需求自然产出 65~75 条，设小了会真的截掉用例。触及时按「方法轮转」保留，每种方法都会有用例进入结果。" />
+              </span>
+              <el-input-number v-model="maxCases" :min="10" :max="2000" :step="10" size="default" controls-position="right" />
+              <FieldHint>
+                10–2000，服务端默认 {{ health.info?.limits?.max_cases_per_requirement ?? 200 }}。
+                触及时结果里会给出「原始条数 / 保留条数 / 去重后条数」。
+              </FieldHint>
+            </label>
+          </div>
+
+          <div class="grid grid--2">
             <div class="field">
               <span class="field__label">引擎策略</span>
               <div class="switches">
@@ -321,6 +378,31 @@ async function exportSuite(format: string): Promise<void> {
               </div>
               <FieldHint :tone="health.llmReady ? 'muted' : 'warn'">{{ llmNote }}</FieldHint>
             </div>
+          </div>
+
+          <div v-if="useLlmInDesign" class="field">
+            <span class="field__label">
+              生成阶段的参与方式
+              <Tip text="规则引擎先产出确定性用例，模型再做复核/补充。复核只给意见、不改写规则用例；补充用例会标为「[LLM补充] · 需复核」。按每条需求一次调用计费。" />
+            </span>
+            <div class="seg seg--wide" role="tablist" aria-label="生成阶段大模型的参与方式">
+              <button
+                v-for="item in LLM_DESIGN_MODES"
+                :key="item.value"
+                type="button"
+                role="tab"
+                class="seg__item"
+                :class="{ 'seg__item--on': llmDesignMode === item.value }"
+                :aria-selected="llmDesignMode === item.value"
+                @click="llmDesignMode = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+            <FieldHint :tone="health.llmReady ? 'muted' : 'warn'">
+              {{ LLM_DESIGN_MODES.find((m) => m.value === llmDesignMode)?.hint }}
+              <template v-if="!health.llmReady">当前未配置大模型，这里的选择不会生效。</template>
+            </FieldHint>
           </div>
 
           <hr class="rule" />
@@ -411,18 +493,22 @@ async function exportSuite(format: string): Promise<void> {
             >
               生成：{{ engineLabel(result.suite.generation_meta) }}
             </span>
+            <span
+              v-if="result.suite.generation_meta.llm_calls"
+              class="chip chip--ghost mono"
+              :title="`生成阶段调用大模型 ${result.suite.generation_meta.llm_calls} 次（每条需求一次复核）`"
+            >
+              模型调用 {{ result.suite.generation_meta.llm_calls }} 次
+            </span>
             <span v-if="result.requirement_doc.parse_meta.fallback_used" class="chip chip--warn">
               已降级：{{ result.requirement_doc.parse_meta.fallback_reason }}
             </span>
             <span class="chip chip--ghost mono">{{ result.requirement_doc.parse_meta.provider }}</span>
           </div>
 
-          <ul v-if="warnings.length" class="warns">
-            <li v-for="item in warnings" :key="item">
-              <AppIcon name="alert" :size="14" />
-              <span>{{ item }}</span>
-            </li>
-          </ul>
+          <WarningList :items="warnings" />
+
+          <ReviewFindings :findings="result.suite.generation_meta.review_findings" />
 
         </SectionCard>
 
@@ -454,14 +540,26 @@ async function exportSuite(format: string): Promise<void> {
       >
         <template #actions>
           <el-button
-            v-for="fmt in formats"
-            :key="fmt.name"
+            v-if="primaryFormat"
             size="small"
-            @click="exportSuite(fmt.name)"
+            @click="exportSuite(primaryFormat.name)"
           >
             <AppIcon name="download" :size="14" />
-            {{ fmt.label }}
+            {{ primaryFormat.label }}
           </el-button>
+          <el-dropdown v-if="otherFormats.length" trigger="click" @command="exportSuite">
+            <el-button size="small">
+              更多格式
+              <AppIcon name="chevronDown" :size="13" />
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="fmt in otherFormats" :key="fmt.name" :command="fmt.name">
+                  {{ fmt.label }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button size="small" type="primary" plain @click="router.push(`/suites/${result.suite.suite_id}`)">
             用例集详情
             <AppIcon name="chevronRight" :size="14" />
@@ -539,6 +637,11 @@ async function exportSuite(format: string): Promise<void> {
   border: 1px solid var(--ice-3);
   border-radius: var(--radius);
   background: var(--ice-1);
+}
+
+/* 三选一（生成阶段大模型的参与方式）：与两选一同一套外观，只是列数不同。 */
+.seg--wide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .seg__item {
@@ -754,24 +857,6 @@ async function exportSuite(format: string): Promise<void> {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: var(--s3);
-}
-
-.warns {
-  list-style: none;
-  margin: var(--s3) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.warns li {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: var(--fs-xs);
-  line-height: 1.6;
-  color: var(--warn);
 }
 
 .trace__summary {

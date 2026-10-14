@@ -2,7 +2,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { api } from "@/api";
-import type { LLMConfigInfo, LLMModelOption, LLMTestResult, ThresholdView } from "@/api";
+import type {
+  LLMConfigInfo,
+  LLMModelOption,
+  LLMTestResult,
+  ThresholdView,
+  VisionConfigInfo,
+  VisionTestResult,
+} from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
 import ErrorNote from "@/components/ErrorNote.vue";
 import FieldHint from "@/components/FieldHint.vue";
@@ -17,12 +24,35 @@ const health = useHealthStore();
 const notice = useNoticeStore();
 
 const config = ref<LLMConfigInfo | null>(null);
+const vision = ref<VisionConfigInfo | null>(null);
 const thresholds = ref<ThresholdView | null>(null);
 const loading = ref(true);
 const error = ref("");
 const saving = ref(false);
 const testing = ref(false);
 const testResult = ref<LLMTestResult | null>(null);
+
+const visionSaving = ref(false);
+const visionTesting = ref(false);
+const visionResult = ref<VisionTestResult | null>(null);
+const visionProvider = ref("auto");
+const visionMode = ref("text");
+const visionModel = ref("");
+const visionBaseUrl = ref("");
+const visionUpdateKey = ref(false);
+const visionApiKey = ref("");
+const visionKeyConfigured = computed(() => vision.value?.api_key_configured ?? false);
+const visionKeyPlaceholder = computed(() =>
+  vision.value?.api_key_configured ? `已配置：${vision.value.api_key_masked}` : "尚未配置密钥（可复用大模型的 Key）",
+);
+const visionProviders = computed(() => vision.value?.providers ?? []);
+const currentVisionProvider = computed(
+  () => visionProviders.value.find((item) => item.name === visionProvider.value) ?? null,
+);
+/** 只有多模态模型需要 Key / 端点 / 模型名；其它通道填了也没用，直接收起。 */
+const visionNeedsModel = computed(() => Boolean(currentVisionProvider.value?.allow_model));
+const visionNeedsKey = computed(() => Boolean(currentVisionProvider.value?.requires_key));
+const visionModes = computed(() => vision.value?.modes ?? []);
 
 const provider = ref("");
 const model = ref("");
@@ -136,8 +166,13 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const [llmConfig, thresholdView] = await Promise.all([api.llmConfig(), api.thresholds()]);
+    const [llmConfig, thresholdView, visionConfig] = await Promise.all([
+      api.llmConfig(),
+      api.thresholds(),
+      api.visionConfig(),
+    ]);
     applyConfig(llmConfig);
+    applyVision(visionConfig);
     thresholds.value = thresholdView;
     percentFields.value = Object.fromEntries(
       Object.entries(thresholdView.thresholds).map(([key, value]) => [key, Math.round(value * 1000) / 10]),
@@ -163,6 +198,91 @@ function applyConfig(info: LLMConfigInfo): void {
   updateKey.value = false;
   apiKey.value = "";
   testResult.value = null;
+}
+
+function applyVision(info: VisionConfigInfo): void {
+  vision.value = info;
+  visionProvider.value = info.provider;
+  visionMode.value = info.mode;
+  visionModel.value = info.model;
+  visionBaseUrl.value = info.base_url;
+  visionUpdateKey.value = false;
+  visionApiKey.value = "";
+  visionResult.value = null;
+}
+
+function visionPayload() {
+  const limits = vision.value;
+  return {
+    provider: visionProvider.value,
+    mode: visionMode.value,
+    ...(visionNeedsModel.value
+      ? { model: visionModel.value, base_url: visionBaseUrl.value }
+      : {}),
+    ...(visionNeedsKey.value && visionUpdateKey.value && visionApiKey.value
+      ? { api_key: visionApiKey.value }
+      : {}),
+    ...(limits
+      ? {
+          max_images: limits.max_images,
+          max_side: limits.max_side,
+          min_pixels: limits.min_pixels,
+        }
+      : {}),
+  };
+}
+
+async function saveVision(): Promise<void> {
+  visionSaving.value = true;
+  try {
+    applyVision(await api.saveVisionConfig(visionPayload()));
+    await health.load(true);
+    notice.success("图片识别配置已保存", "下次上传文档即按新通道识别。");
+  } catch (err) {
+    notice.error("保存失败", (err as Error).message);
+  } finally {
+    visionSaving.value = false;
+  }
+}
+
+async function resetVision(): Promise<void> {
+  const confirmed = await confirmAction({
+    title: "恢复图片识别基线",
+    message: "将清除图片识别的界面覆盖，回到 .env 基线。大模型那边的界面配置不受影响。",
+    confirmText: "恢复默认",
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    applyVision(await api.resetVisionConfig());
+    await health.load(true);
+    notice.success("已恢复图片识别基线");
+  } catch (err) {
+    notice.error("恢复失败", (err as Error).message);
+  }
+}
+
+async function testVision(): Promise<void> {
+  visionTesting.value = true;
+  visionResult.value = null;
+  try {
+    visionResult.value = await api.testVisionConfig();
+    if (visionResult.value.ok) {
+      notice.success("识别通道可用", "已用探针图片真跑一次识别。");
+    }
+  } catch (err) {
+    visionResult.value = {
+      ok: false,
+      provider: visionProvider.value,
+      extractor: "",
+      mode: visionMode.value,
+      elapsed_ms: 0,
+      message: (err as Error).message,
+      sample: "",
+    };
+  } finally {
+    visionTesting.value = false;
+  }
 }
 
 function payload() {
@@ -426,6 +546,146 @@ const sourceLabel = (key: string): string =>
             </p>
             <p class="test__msg">{{ testResult.message }}</p>
             <p v-if="testResult.reply" class="test__reply mono">模型回复：{{ testResult.reply }}</p>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        v-if="vision"
+        title="图片识别"
+        sub="需求文档里的图片（内嵌图 / 整页扫描 / 直接上传）→ 文字，主模型不必支持图片输入"
+        icon="image"
+      >
+        <template #actions>
+          <span class="chip" :class="vision.source === 'runtime' ? 'chip--glacier' : 'chip--ghost'">
+            来源：{{ vision.source === "runtime" ? "界面覆盖" : ".env 基线" }}
+          </span>
+          <span class="chip" :class="vision.available ? 'chip--pass' : 'chip--warn'">
+            {{ vision.available ? `当前：${vision.label}` : "当前不可用" }}
+          </span>
+        </template>
+
+        <FieldHint v-if="!vision.available" tone="warn">
+          {{ vision.degraded_reason }}
+          <template v-if="vision.local_ocr_hint">安装任一本地 OCR 引擎即可离线识别：{{ vision.local_ocr_hint }}</template>
+        </FieldHint>
+        <FieldHint v-else>
+          当前通道：{{ vision.label }}（{{ vision.extractor }}，产物类型 {{ vision.kind }}）。识别不了或跳过的图片，
+          会在文档预览里逐张写明原因。
+        </FieldHint>
+
+        <hr class="rule" />
+
+        <div class="grid grid--2">
+          <label class="field">
+            <span class="field__label">识别通道</span>
+            <el-select v-model="visionProvider" placeholder="选择识别通道" style="width: 100%">
+              <el-option v-for="item in visionProviders" :key="item.name" :label="item.label" :value="item.name">
+                <div class="opt">
+                  <span>{{ item.label }}</span>
+                  <span class="opt__desc">{{ item.description }}</span>
+                </div>
+              </el-option>
+            </el-select>
+            <FieldHint>{{ currentVisionProvider?.description || "选择识别图片的方式。" }}</FieldHint>
+          </label>
+
+          <label v-if="currentVisionProvider?.allow_mode" class="field">
+            <span class="field__label">识别方式</span>
+            <el-select v-model="visionMode" placeholder="选择识别方式" style="width: 100%">
+              <el-option v-for="item in visionModes" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <FieldHint>
+              {{ visionModes.find((m) => m.value === visionMode)?.description || "" }}
+            </FieldHint>
+          </label>
+
+          <template v-if="visionNeedsModel">
+            <label class="field">
+              <span class="field__label">视觉模型</span>
+              <el-input v-model="visionModel" placeholder="如 qwen-vl-max / glm-4v-plus / gpt-4o" />
+              <FieldHint>必须选支持图片输入的型号；纯文本模型传图片会被端点拒绝。</FieldHint>
+            </label>
+            <label class="field">
+              <span class="field__label">端点地址</span>
+              <el-input v-model="visionBaseUrl" placeholder="留空则复用大模型端点" />
+              <FieldHint>留空即复用「大模型配置」里的端点。</FieldHint>
+            </label>
+          </template>
+
+          <label v-if="visionNeedsKey" class="field">
+            <span class="field__label">API Key</span>
+            <div class="keyrow">
+              <el-input
+                v-model="visionApiKey"
+                type="password"
+                show-password
+                :disabled="!visionUpdateKey"
+                :placeholder="visionKeyPlaceholder"
+              />
+              <el-switch v-model="visionUpdateKey" />
+            </div>
+            <FieldHint :tone="visionKeyConfigured ? 'muted' : 'warn'">
+              留空即复用大模型的 Key；需要单独计费或换厂商时在这里填。
+            </FieldHint>
+          </label>
+
+          <label v-if="!visionNeedsModel" class="field">
+            <span class="field__label">识别语言</span>
+            <el-input :model-value="vision.languages" disabled />
+            <FieldHint>本地 / 云端 OCR 的语言包设置，来自 .env（VISION_LANGUAGES）。</FieldHint>
+          </label>
+        </div>
+
+        <hr class="rule" />
+
+        <div class="grid grid--4">
+          <label class="field">
+            <span class="field__label">单文档图片上限</span>
+            <el-input-number v-model="vision.max_images" :min="1" :max="200" controls-position="right" />
+            <FieldHint>超出后按「已跳过」记录并写明原因。</FieldHint>
+          </label>
+          <label class="field">
+            <span class="field__label">长边上限</span>
+            <el-input-number v-model="vision.max_side" :min="200" :max="6000" :step="100" controls-position="right" />
+            <FieldHint>提交前下采样，控制 token 与费用。</FieldHint>
+          </label>
+          <label class="field">
+            <span class="field__label">最小像素面积</span>
+            <el-input-number v-model="vision.min_pixels" :min="0" :max="1000000" :step="1024" controls-position="right" />
+            <FieldHint>小于该面积的图片（图标、分隔线）不识别。</FieldHint>
+          </label>
+          <label class="field">
+            <span class="field__label">本地 OCR 引擎</span>
+            <el-input :model-value="vision.local_ocr_backend || '未检测到'" disabled />
+            <FieldHint>留空即自动探测（RapidOCR / pytesseract / tesseract）。</FieldHint>
+          </label>
+        </div>
+
+        <div class="actions">
+          <el-button type="primary" :loading="visionSaving" @click="saveVision">保存配置</el-button>
+          <el-button :loading="visionTesting" @click="testVision">
+            <AppIcon name="play" :size="14" /> 测试识别
+          </el-button>
+          <el-button @click="resetVision">恢复基线</el-button>
+          <div class="spacer" />
+          <span v-if="vision.overridden_fields.length" class="chip chip--ghost mono">
+            覆盖项：{{ vision.overridden_fields.length }} 项
+          </span>
+        </div>
+
+        <div v-if="visionResult" class="test" :data-ok="visionResult.ok">
+          <AppIcon :name="visionResult.ok ? 'check' : 'alert'" :size="16" />
+          <div>
+            <p class="test__title">
+              {{ visionResult.ok ? "识别通道可用" : "识别通道不可用" }}
+              <span class="mono test__meta">
+                {{ visionResult.extractor || visionResult.provider }}
+                <template v-if="visionResult.elapsed_ms"> · {{ formatDuration(visionResult.elapsed_ms) }}</template>
+              </span>
+            </p>
+            <p class="test__msg">{{ visionResult.message }}</p>
+            <p v-if="visionResult.sample" class="test__reply mono">识别样例：{{ visionResult.sample }}</p>
           </div>
         </div>
       </SectionCard>

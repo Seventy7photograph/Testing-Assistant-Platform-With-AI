@@ -124,15 +124,31 @@ export interface GenerationMeta {
   llm_used: boolean;
   llm_provider: string;
   llm_model: string;
+  /** 本次生成阶段实际调用模型的次数（0 = 纯规则引擎）。 */
+  llm_calls: number;
   fallback_used: boolean;
   warnings: string[];
+  /** 大模型对规则产出的复核意见（只提意见，不自动改写用例）。 */
+  review_findings: ReviewFinding[];
   elapsed_ms: number;
+}
+
+/** 大模型复核规则用例时给出的一条意见。 */
+export interface ReviewFinding {
+  severity: string;
+  requirement_id: string;
+  requirement_title: string;
+  target: string;
+  issue: string;
+  suggestion: string;
 }
 
 export interface TestCaseSuite {
   suite_id: string;
   doc_id: string;
   doc_title: string;
+  /** 同一条需求下的第几个版本（V2.0 起由后端分配，0 表示未分配）。 */
+  revision: number;
   methods: DesignMethod[];
   cases: TestCase[];
   stats: SuiteStats;
@@ -164,6 +180,143 @@ export interface DocumentSummary {
   requirement_items: number;
   /** 解析阶段的口径快照（哪个 provider / 模型、是否降级）；未解析为 null。 */
   parse_meta: ParseMeta | null;
+  /** 文档里发现的图片张数（V2.0 多模态 OCR）。 */
+  image_count: number;
+  /** 其中成功识别出内容的张数。 */
+  image_recognized: number;
+  images: DocumentAssetBrief[];
+}
+
+/** 文档里的图片（列表视图：带预览、不带全文）。 */
+export interface DocumentAssetBrief {
+  index: number;
+  filename: string;
+  mime: string;
+  size_bytes: number;
+  /** docx / pdf / pdf-page / upload */
+  source: string;
+  anchor: string;
+  /** pending / recognized / empty / skipped / unavailable */
+  status: string;
+  extractor: string;
+  /** text / description / mixed / none */
+  kind: string;
+  confidence: number | null;
+  /** 内容重复时复用第几张图片的识别结果（0 表示无）。 */
+  reused_from: number;
+  text_preview: string;
+  message: string;
+}
+
+export interface VisionCapabilities {
+  provider: string;
+  mode: string;
+  extractor: string;
+  label: string;
+  available: boolean;
+  kind: string;
+  degraded_reason: string;
+  max_images_per_doc: number;
+  local_ocr_backend: string;
+  local_ocr_hint: string;
+  supported: string[];
+}
+
+export interface VisionProviderOption {
+  name: string;
+  label: string;
+  description: string;
+  requires_key: boolean;
+  requires_url: boolean;
+  allow_model: boolean;
+  allow_mode: boolean;
+}
+
+export interface VisionModeOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface VisionConfigInfo {
+  provider: string;
+  mode: string;
+  model: string;
+  base_url: string;
+  api_key_configured: boolean;
+  api_key_masked: string;
+  cloud_url_configured: boolean;
+  ocr_backend: string;
+  languages: string;
+  max_images: number;
+  max_side: number;
+  min_pixels: number;
+  extractor: string;
+  label: string;
+  kind: string;
+  available: boolean;
+  degraded_reason: string;
+  local_ocr_backend: string;
+  local_ocr_hint: string;
+  source: string;
+  overridden_fields: string[];
+  env_defaults: Record<string, unknown>;
+  providers: VisionProviderOption[];
+  modes: VisionModeOption[];
+}
+
+export interface VisionConfigPayload {
+  provider?: string;
+  mode?: string;
+  model?: string;
+  base_url?: string;
+  /** 省略=沿用现有 Key；空字符串=清除已保存的 Key */
+  api_key?: string;
+  cloud_url?: string;
+  cloud_key?: string;
+  ocr_backend?: string;
+  languages?: string;
+  max_images?: number;
+  max_side?: number;
+  min_pixels?: number;
+}
+
+export interface VisionTestResult {
+  ok: boolean;
+  provider: string;
+  extractor: string;
+  mode: string;
+  elapsed_ms: number;
+  message: string;
+  sample: string;
+}
+
+/* ================= 覆盖率分析（V2.0 S4） ================= */
+
+export interface CoverageItem {
+  requirement_id: string;
+  requirement_title: string;
+  target: string;
+  detail: string;
+}
+
+export interface CoverageDimension {
+  key: string;
+  label: string;
+  total: number;
+  covered: number;
+  ratio: number;
+  note: string;
+  gaps: CoverageItem[];
+}
+
+export interface CoverageReport {
+  doc_id: string;
+  doc_title: string;
+  suite_id: string;
+  dimensions: CoverageDimension[];
+  overall_ratio: number;
+  summary: string;
 }
 
 export interface MethodInfo {
@@ -194,6 +347,10 @@ export interface HealthInfo {
   methods: MethodInfo[];
   export_formats: ExportFormatInfo[];
   supported_extensions: string[];
+  /** 图片识别通道状态（V2.0 多模态 OCR）。 */
+  vision: VisionCapabilities;
+  /** 服务端生效的设计引擎上限（界面据此显示默认值）。 */
+  limits: Record<string, number>;
 }
 
 export interface LLMModelOption {

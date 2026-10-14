@@ -3,7 +3,14 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { api, saveBlob } from "@/api";
-import type { ExportFormatInfo, RequirementDoc, TestCase, TestCaseSuite } from "@/api";
+import type {
+  CoverageDimension,
+  CoverageReport,
+  ExportFormatInfo,
+  RequirementDoc,
+  TestCase,
+  TestCaseSuite,
+} from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
 import CaseTable from "@/components/CaseTable.vue";
 import EmptyState from "@/components/EmptyState.vue";
@@ -13,9 +20,20 @@ import MethodTag from "@/components/MethodTag.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatReadout from "@/components/StatReadout.vue";
 import Tip from "@/components/Tip.vue";
+import ReviewFindings from "@/components/ReviewFindings.vue";
+import WarningList from "@/components/WarningList.vue";
 import { confirmAction } from "@/composables/useFeedback";
 import { useNoticeStore } from "@/stores/notice";
-import { engineLabel, engineTitle, formatDuration, formatTime, methodLabel, percent, priorityRank } from "@/utils/labels";
+import {
+  FALLBACK_EXPORT_FORMATS,
+  engineLabel,
+  engineTitle,
+  formatDuration,
+  formatTime,
+  methodLabel,
+  percent,
+  priorityRank,
+} from "@/utils/labels";
 
 interface CoverageRow {
   id: string;
@@ -34,6 +52,19 @@ const suite = ref<TestCaseSuite | null>(null);
 const requirement = ref<RequirementDoc | null>(null);
 const requirementMissing = ref(false);
 const formats = ref<ExportFormatInfo[]>([]);
+
+/** 导出格式同样收敛成「Excel 直出 + 其余进下拉」，避免一排按钮把卡片头撑宽。 */
+const exportFormats = computed(() =>
+  formats.value.length ? formats.value : FALLBACK_EXPORT_FORMATS,
+);
+const primaryFormat = computed(
+  () => exportFormats.value.find((item) => item.name === "excel") ?? exportFormats.value[0],
+);
+const otherFormats = computed(() =>
+  exportFormats.value.filter((item) => item.name !== primaryFormat.value?.name),
+);
+const coverageReport = ref<CoverageReport | null>(null);
+const coverageOpen = ref<CoverageDimension | null>(null);
 const loading = ref(true);
 const error = ref("");
 const exporting = ref("");
@@ -126,6 +157,13 @@ async function load(): Promise<void> {
     } catch {
       /* 导出按钮回退到 Excel / JSON */
     }
+    try {
+      coverageReport.value = await api.suiteCoverage(data.suite_id);
+    } catch {
+      // 源需求被删掉时算不出覆盖率：这里静默回退到卡片不渲染，
+      // 页面顶部已有明确的「需求缺失」提示，不必重复打扰。
+      coverageReport.value = null;
+    }
   } catch (err) {
     error.value = (err as Error).message;
   } finally {
@@ -179,20 +217,32 @@ async function remove(): Promise<void> {
     <template v-if="suite">
       <SectionCard
         :title="suite.doc_title || '未命名用例集'"
-        :sub="`${suite.cases.length} 条 · ${suite.methods.map(methodLabel).join(' / ')} · 生成于 ${formatTime(suite.created_at)}`"
+        :sub="`${suite.revision ? `第 ${suite.revision} 版 · ` : ''}${suite.cases.length} 条 · ${suite.methods.map(methodLabel).join(' / ')} · 生成于 ${formatTime(suite.created_at)}`"
         icon="cases"
       >
         <template #actions>
           <el-button size="small" @click="router.push('/suites')">返回列表</el-button>
           <el-button
-            v-for="fmt in formats.length ? formats : [{ name: 'xlsx', label: 'Excel' }, { name: 'json', label: 'JSON' }]"
-            :key="fmt.name"
+            v-if="primaryFormat"
             size="small"
-            :loading="exporting === fmt.name"
-            @click="exportSuite(fmt.name)"
+            :loading="exporting === primaryFormat.name"
+            @click="exportSuite(primaryFormat.name)"
           >
-            <AppIcon name="download" :size="14" /> {{ fmt.label }}
+            <AppIcon name="download" :size="14" /> {{ primaryFormat.label }}
           </el-button>
+          <el-dropdown v-if="otherFormats.length" trigger="click" @command="exportSuite">
+            <el-button size="small">
+              更多格式
+              <AppIcon name="chevronDown" :size="13" />
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="fmt in otherFormats" :key="fmt.name" :command="fmt.name">
+                  {{ fmt.label }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button size="small" @click="remove"><AppIcon name="trash" :size="17" /> 删除</el-button>
         </template>
 
@@ -241,11 +291,42 @@ async function remove(): Promise<void> {
           </button>
         </div>
 
-        <ul v-if="suite.generation_meta.warnings.length" class="warns">
-          <li v-for="item in suite.generation_meta.warnings" :key="item">
-            <AppIcon name="alert" :size="13" /><span>{{ item }}</span>
-          </li>
-        </ul>
+        <WarningList :items="suite.generation_meta.warnings" />
+
+        <ReviewFindings :findings="suite.generation_meta.review_findings" />
+      </SectionCard>
+
+      <SectionCard
+        v-if="coverageReport"
+        title="覆盖率分析"
+        sub="相对源需求的字段 / 边界 / 规则三维覆盖与缺口清单"
+        icon="target"
+      >
+        <template #actions>
+          <span class="chip" :class="coverageReport.overall_ratio >= 0.8 ? 'chip--pass' : 'chip--warn'">
+            综合 {{ Math.round(coverageReport.overall_ratio * 100) }}%
+          </span>
+        </template>
+
+        <FieldHint>{{ coverageReport.summary }}</FieldHint>
+
+        <div class="grid grid--3 covs">
+          <div v-for="dim in coverageReport.dimensions" :key="dim.key" class="cov">
+            <p class="cov__head">
+              <span class="cov__label">{{ dim.label }}</span>
+              <span class="mono cov__ratio">
+                {{ dim.total ? `${dim.covered}/${dim.total}` : "—" }}
+              </span>
+            </p>
+            <div class="cov__bar" :data-tone="dim.ratio >= 0.8 ? 'pass' : dim.ratio >= 0.5 ? 'warn' : 'fail'">
+              <span class="cov__fill" :style="{ width: `${Math.round((dim.ratio || 0) * 100)}%` }" />
+            </div>
+            <p class="cov__note">{{ dim.note || `缺口 ${dim.gaps.length} 项` }}</p>
+            <el-button v-if="dim.gaps.length" size="small" text @click="coverageOpen = dim">
+              查看缺口（{{ dim.gaps.length }}）
+            </el-button>
+          </div>
+        </div>
       </SectionCard>
 
       <div class="grid grid--2">
@@ -355,6 +436,32 @@ async function remove(): Promise<void> {
         </template>
         <CaseTable :suite="suite" />
       </SectionCard>
+
+      <el-drawer
+        :model-value="Boolean(coverageOpen)"
+        size="520px"
+        direction="rtl"
+        @close="coverageOpen = null"
+      >
+        <template #header>
+          <div class="ghead">
+            <AppIcon name="target" :size="18" />
+            <span>{{ coverageOpen?.label }}缺口（{{ coverageOpen?.gaps.length }} 项）</span>
+          </div>
+        </template>
+        <div class="gaps">
+          <p class="gaps__hint">
+            缺口按「需求条目 + 具体目标」定位；补齐后重新生成用例即可，覆盖率会同步刷新。
+          </p>
+          <ul class="gaps__list">
+            <li v-for="(gap, index) in coverageOpen?.gaps ?? []" :key="`${gap.requirement_id}-${index}`">
+              <p class="gaps__target">{{ gap.target }}</p>
+              <p class="gaps__meta mono">{{ gap.requirement_id }} · {{ gap.requirement_title }}</p>
+              <p v-if="gap.detail" class="gaps__detail">{{ gap.detail }}</p>
+            </li>
+          </ul>
+        </div>
+      </el-drawer>
     </template>
 
     <div v-else-if="loading" class="grid grid--2">
@@ -374,6 +481,108 @@ async function remove(): Promise<void> {
 </template>
 
 <style scoped>
+.covs {
+  margin-top: var(--s3);
+}
+
+.cov {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cov__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.cov__label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.cov__ratio {
+  font-size: var(--fs-xs);
+  color: var(--ink-1);
+}
+
+.cov__bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ice-2);
+  overflow: hidden;
+}
+
+.cov__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--glacier);
+}
+
+.cov__bar[data-tone="warn"] .cov__fill {
+  background: var(--warn);
+}
+
+.cov__bar[data-tone="fail"] .cov__fill {
+  background: var(--fail);
+}
+
+.cov__note {
+  font-size: var(--fs-2xs);
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.ghead {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink-1);
+}
+
+.gaps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.gaps__hint {
+  font-size: var(--fs-2xs);
+  line-height: 1.7;
+  color: var(--ink-3);
+}
+
+.gaps__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gaps__target {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-1);
+}
+
+.gaps__meta {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.gaps__detail {
+  font-size: var(--fs-2xs);
+  color: var(--ink-2);
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;
@@ -397,23 +606,6 @@ async function remove(): Promise<void> {
 
 .sourcelink:hover {
   border-color: var(--glacier);
-}
-
-.warns {
-  list-style: none;
-  margin: var(--s3) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.warns li {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: var(--fs-xs);
-  color: var(--warn);
 }
 
 .dist {

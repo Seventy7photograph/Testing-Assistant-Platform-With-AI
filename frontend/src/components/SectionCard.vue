@@ -56,8 +56,12 @@ withDefaults(
 .card__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--s2);
-  flex: none;
+  /* 关键：允许收缩 + 换行。写死 flex: none 时，一排按钮会直接把卡片顶宽。 */
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .card__body--flush {

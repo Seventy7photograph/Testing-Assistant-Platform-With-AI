@@ -10,17 +10,33 @@ import ErrorNote from "@/components/ErrorNote.vue";
 import MethodTag from "@/components/MethodTag.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import { confirmAction } from "@/composables/useFeedback";
+import { useHealthStore } from "@/stores/health";
 import { useNoticeStore } from "@/stores/notice";
 import { engineLabel, engineTitle, formatRelative, methodLabel } from "@/utils/labels";
 
 const router = useRouter();
 const notice = useNoticeStore();
+const health = useHealthStore();
 
 const suites = ref<TestCaseSuiteSummary[]>([]);
 const loading = ref(true);
 const error = ref("");
 const keyword = ref("");
 const exporting = ref("");
+
+/**
+ * 导出格式名以后端注册表为准（Excel 的 name 是 `excel`，不是文件后缀 `xlsx`）。
+ * 从能力清单里取而不是写死字面量：后端哪天改名，这里跟着走，不会 404。
+ */
+const excelFormat = computed(
+  () =>
+    health.exportFormats.find((item) => item.name === "excel") ?? {
+      name: "excel",
+      label: "Excel",
+      media_type: "",
+      extension: "xlsx",
+    },
+);
 
 const tableRef = ref<{ clearSelection: () => void } | null>(null);
 const checked = ref<TestCaseSuiteSummary[]>([]);
@@ -66,7 +82,8 @@ async function exportSuite(suite: TestCaseSuiteSummary, format: string): Promise
   exporting.value = `${suite.suite_id}:${format}`;
   try {
     const file = await api.exportSuite(suite.suite_id, format);
-    saveBlob(file.blob, file.filename || `用例集.${format}`);
+    const extension = health.exportFormats.find((item) => item.name === format)?.extension || format;
+    saveBlob(file.blob, file.filename || `用例集.${extension}`);
     notice.success("导出完成", file.filename || undefined);
   } catch (err) {
     notice.error("导出失败", (err as Error).message);
@@ -197,6 +214,9 @@ async function removeSelected(): Promise<void> {
             <button type="button" class="title" @click="router.push(`/suites/${row.suite_id}`)">
               {{ row.doc_title || "未命名" }}
             </button>
+            <span v-if="row.revision" class="rev mono" :title="`同一需求下的第 ${row.revision} 版`">
+              第 {{ row.revision }} 版
+            </span>
             <p class="sub mono">{{ row.suite_id.slice(0, 18) }}</p>
           </template>
         </el-table-column>
@@ -245,8 +265,8 @@ async function removeSelected(): Promise<void> {
             <el-button
               size="small"
               text
-              :loading="exporting === `${row.suite_id}:xlsx`"
-              @click="exportSuite(row, 'xlsx')"
+              :loading="exporting === `${row.suite_id}:${excelFormat.name}`"
+              @click="exportSuite(row, excelFormat.name)"
             >
               导出 Excel
             </el-button>
@@ -342,6 +362,16 @@ async function removeSelected(): Promise<void> {
 .sub {
   font-size: 10.5px;
   color: var(--ink-3);
+}
+
+.rev {
+  display: inline-block;
+  margin-bottom: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--ice-3);
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  color: var(--ink-2);
 }
 
 .sourcereq {

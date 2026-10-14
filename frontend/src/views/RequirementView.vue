@@ -13,18 +13,18 @@ import PriorityMark from "@/components/PriorityMark.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatReadout from "@/components/StatReadout.vue";
 import Tip from "@/components/Tip.vue";
+import WarningList from "@/components/WarningList.vue";
 import { confirmAction } from "@/composables/useFeedback";
 import { useHealthStore } from "@/stores/health";
 import { useNoticeStore } from "@/stores/notice";
 import {
-  RESERVED_METHODS,
-  V1_METHODS,
+  DEFAULT_METHODS,
+  METHOD_NOTES,
   dataTypeLabel,
   engineLabel,
   engineTitle,
   formatDuration,
   formatRelative,
-  methodLabel,
   requirementTypeLabel,
 } from "@/utils/labels";
 
@@ -38,7 +38,7 @@ const requirement = ref<RequirementDoc | null>(null);
 const loading = ref(true);
 const error = ref("");
 
-const methods = ref<string[]>([...V1_METHODS]);
+const methods = ref<string[]>([...DEFAULT_METHODS]);
 const useLlmInDesign = ref(false);
 const generating = ref(false);
 const expanded = ref<string[]>([]);
@@ -48,8 +48,10 @@ const expanded = ref<string[]>([]);
 const suites = ref<TestCaseSuiteSummary[]>([]);
 const suitesLoading = ref(false);
 
-const v1List = V1_METHODS.map((name) => ({ name, label: methodLabel(name) }));
-const reservedList = RESERVED_METHODS.map((name) => ({ name, label: methodLabel(name) }));
+/** 方法清单以服务端能力清单为准（store 已缓存 /health）。 */
+const methodList = computed(() =>
+  health.methods.map((item) => ({ ...item, note: METHOD_NOTES[item.name] ?? "" })),
+);
 
 const fieldsOf = computed<FieldConstraint[]>(() =>
   (requirement.value?.items ?? []).flatMap((item) => item.fields),
@@ -128,7 +130,7 @@ function constraintText(field: FieldConstraint): string {
 
 async function generate(): Promise<void> {
   if (!canGenerate.value || !requirement.value) return;
-  if (useLlmInDesign.value) {
+  if (useLlmInDesign.value && health.llmReady) {
     const confirmed = await confirmAction({
       title: "确认在生成阶段使用大模型",
       message:
@@ -200,34 +202,32 @@ async function generate(): Promise<void> {
           </Tip>
         </div>
 
-        <ul v-if="requirement.parse_meta.warnings.length" class="warns">
-          <li v-for="item in requirement.parse_meta.warnings" :key="item">
-            <AppIcon name="alert" :size="13" /><span>{{ item }}</span>
-          </li>
-        </ul>
+        <WarningList :items="requirement.parse_meta.warnings" />
 
         <p v-if="requirement.summary" class="summary">{{ requirement.summary }}</p>
       </SectionCard>
 
       <SectionCard title="生成设置" sub="选择设计方法，再生成这条需求对应的用例集" icon="sliders">
         <div class="methods">
-          <button
-            v-for="item in v1List"
-            :key="item.name"
-            type="button"
-            class="method"
-            :class="{ 'method--on': methods.includes(item.name) }"
-            :aria-pressed="methods.includes(item.name)"
-            @click="toggleMethod(item.name)"
-          >
-            <span class="method__box" aria-hidden="true">
-              <AppIcon v-if="methods.includes(item.name)" name="check" :size="12" />
-            </span>
-            {{ item.label }}
-          </button>
-          <Tip v-for="item in reservedList" :key="item.name" :text="`${item.label}尚未实现：当前调用会返回 501。`">
-            <span class="method method--off">{{ item.label }} · 未实现</span>
-          </Tip>
+          <template v-for="item in methodList" :key="item.name">
+            <button
+              v-if="item.implemented"
+              type="button"
+              class="method"
+              :class="{ 'method--on': methods.includes(item.name) }"
+              :aria-pressed="methods.includes(item.name)"
+              :title="item.note"
+              @click="toggleMethod(item.name)"
+            >
+              <span class="method__box" aria-hidden="true">
+                <AppIcon v-if="methods.includes(item.name)" name="check" :size="12" />
+              </span>
+              {{ item.label }}
+            </button>
+            <Tip v-else :key="item.name" :text="`${item.label}尚未实现：当前调用会返回 501。`">
+              <span class="method method--off">{{ item.label }} · 未实现</span>
+            </Tip>
+          </template>
         </div>
 
         <div class="row row--wrap">
@@ -262,6 +262,7 @@ async function generate(): Promise<void> {
               <button type="button" class="suiteLink" @click="router.push(`/suites/${row.suite_id}`)">
                 {{ row.doc_title || "未命名用例集" }}
               </button>
+              <span v-if="row.revision" class="rev mono">第 {{ row.revision }} 版</span>
               <p class="suiteSub mono">{{ row.suite_id.slice(0, 18) }}</p>
             </template>
           </el-table-column>
@@ -414,23 +415,6 @@ async function generate(): Promise<void> {
   line-height: 1.75;
   color: var(--ink-2);
   max-width: 78ch;
-}
-
-.warns {
-  list-style: none;
-  margin: var(--s3) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.warns li {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: var(--fs-xs);
-  color: var(--warn);
 }
 
 .methods {
@@ -641,6 +625,16 @@ async function generate(): Promise<void> {
 .suiteSub {
   font-size: 10.5px;
   color: var(--ink-3);
+}
+
+.rev {
+  display: inline-block;
+  margin: 0 0 2px 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--ice-3);
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  color: var(--ink-2);
 }
 
 .suiteTags {

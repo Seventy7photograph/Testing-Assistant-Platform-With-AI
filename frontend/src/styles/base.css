@@ -148,6 +148,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* 操作区在窄屏放不下时换行，而不是把卡片（以及整页）撑宽。 */
+  flex-wrap: wrap;
   gap: var(--s3);
   padding: var(--s3) var(--s4) var(--s3) var(--s5);
   border-bottom: 1px solid var(--ice-3);

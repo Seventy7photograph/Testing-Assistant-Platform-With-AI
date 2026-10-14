@@ -4,6 +4,7 @@ import type {
   AnalyzeRequest,
   AnalyzeResponse,
   BatchDeleteResult,
+  CoverageReport,
   DocumentSummary,
   ExportFormatInfo,
   GenerateResult,
@@ -27,6 +28,9 @@ import type {
   TestCaseSuiteSummary,
   ThresholdView,
   TrendPoint,
+  VisionConfigInfo,
+  VisionConfigPayload,
+  VisionTestResult,
 } from "./types";
 
 export interface GeneratePayload {
@@ -37,6 +41,13 @@ export interface GeneratePayload {
   use_llm: boolean;
   use_llm_in_design: boolean;
   max_items: number;
+  /** 单条需求用例上限；省略则用服务端默认值（/health 的 limits）。 */
+  max_cases_per_requirement?: number;
+  /**
+   * 生成阶段大模型的参与方式（仅在 use_llm_in_design=true 时生效）：
+   * scenario=只让场景法补充；review=六种方法都覆盖，模型复核并给意见；enhance=review + 补充用例。
+   */
+  llm_design_mode?: string;
 }
 
 export interface ReportListQuery {
@@ -65,12 +76,24 @@ export const api = {
       ...(baseUrl ? { base_url: baseUrl } : {}),
     }),
 
+  /* ---------- 图片识别（V2.0 多模态 OCR） ---------- */
+  visionConfig: () => get<VisionConfigInfo>("/vision/config"),
+  saveVisionConfig: (payload: VisionConfigPayload) =>
+    put<VisionConfigInfo>("/vision/config", payload),
+  resetVisionConfig: () => del<VisionConfigInfo>("/vision/config"),
+  testVisionConfig: () => post<VisionTestResult>("/vision/config/test"),
+
   /* ---------- 用例生成域 ---------- */
   methods: () => get<MethodInfo[]>("/testcases/methods"),
   exportFormats: () => get<ExportFormatInfo[]>("/export/formats"),
 
   documents: (limit = 20) => get<DocumentSummary[]>("/documents", { limit }),
   document: (docId: string) => get<DocumentSummary>(`/documents/${docId}`),
+  recognizeDocumentImages: (docId: string) =>
+    post<DocumentSummary>(`/documents/${encodeURIComponent(docId)}/images/recognize`),
+  /** 文档内图片的直链（缩略图用；同名接口直接回二进制，故不能走 JSON 包装）。 */
+  documentImageUrl: (docId: string, filename: string) =>
+    `/api/v1/documents/${encodeURIComponent(docId)}/images/${encodeURIComponent(filename)}`,
   uploadDocument: (file: File) => upload<DocumentSummary>("/documents/upload", file),
   downloadDocument: (docId: string) =>
     downloadFile(`/documents/${encodeURIComponent(docId)}/download`),
@@ -105,6 +128,8 @@ export const api = {
       ...(docId ? { doc_id: docId } : {}),
     }),
   suite: (suiteId: string) => get<TestCaseSuite>(`/testcases/${suiteId}`),
+  suiteCoverage: (suiteId: string) =>
+    get<CoverageReport>(`/testcases/${encodeURIComponent(suiteId)}/coverage`),
   deleteSuite: (suiteId: string) =>
     del<{ deleted: boolean }>(`/testcases/${encodeURIComponent(suiteId)}`),
   batchDeleteSuites: (ids: string[]) =>

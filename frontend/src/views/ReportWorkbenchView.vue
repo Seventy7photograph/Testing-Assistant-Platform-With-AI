@@ -15,6 +15,7 @@ import ErrorNote from "@/components/ErrorNote.vue";
 import FieldHint from "@/components/FieldHint.vue";
 import MarkdownBody from "@/components/MarkdownBody.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import WarningList from "@/components/WarningList.vue";
 import StatReadout from "@/components/StatReadout.vue";
 import Tip from "@/components/Tip.vue";
 import VerdictSeal from "@/components/VerdictSeal.vue";
@@ -503,11 +504,7 @@ const verdictPartial = computed(() => liveMetrics.value);
         sub="这些说明会影响结论的可信度，请先核对"
         icon="alert"
       >
-        <ul class="warns">
-          <li v-for="item in [...warnings, ...liveWarnings]" :key="item">
-            <AppIcon name="alert" :size="13" /><span>{{ item }}</span>
-          </li>
-        </ul>
+        <WarningList :items="[...warnings, ...liveWarnings]" />
       </SectionCard>
 
       <SectionCard
@@ -744,24 +741,6 @@ const verdictPartial = computed(() => liveMetrics.value);
 .mini b {
   font-weight: 600;
   color: var(--ink-1);
-}
-
-.warns {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.warns li {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: var(--fs-xs);
-  line-height: 1.6;
-  color: var(--warn);
 }
 
 .crit {

@@ -12,7 +12,11 @@ from typing import Any
 from app.core.config import Settings
 from app.core.utils import Timer
 from app.llm.base import LLMMessage, LLMProvider, LLMResponse
-from app.llm.prompts import TASK_REQUIREMENT_EXTRACTION, TASK_SCENARIO_ENRICHMENT
+from app.llm.prompts import (
+    TASK_GENERATION_REVIEW,
+    TASK_REQUIREMENT_EXTRACTION,
+    TASK_SCENARIO_ENRICHMENT,
+)
 
 _FAKE_REQUIREMENT_DOC: dict[str, Any] = {
     "title": "离线示例需求文档",
@@ -84,6 +88,48 @@ _FAKE_SCENARIO_CASES: dict[str, Any] = {
     ]
 }
 
+#: 生成阶段复核的假响应：既有意见，也有补充用例（供 review / enhance 两种模式复用）。
+_FAKE_REVIEW: dict[str, Any] = {
+    "findings": [
+        {
+            "severity": "warning",
+            "target": "手机号 有效等价类",
+            "issue": "假数据：规则用例未覆盖「手机号已注册」这一分支，而业务规则明确要求提示直接登录。",
+            "suggestion": "补充一条「手机号已注册时提交」的异常用例。",
+        },
+        {
+            "severity": "info",
+            "target": "年龄",
+            "issue": "假数据：年龄字段允许为空，但需求未说明为空时按什么规则处理。",
+            "suggestion": "确认空值语义后再决定是否需要单独的用例。",
+        },
+    ],
+    "cases": [
+        {
+            "title": "手机号已注册时提交注册请求",
+            "method": "cause_effect",
+            "case_type": "异常",
+            "priority": "P1",
+            "preconditions": ["该手机号已存在"],
+            "steps": [{"action": "用已注册手机号提交注册", "expected": "提示直接登录，不创建新用户"}],
+            "expected_result": "不产生重复用户记录",
+            "test_data": {"phone": "13800000000"},
+            "reason": "业务规则「同一手机号不可重复注册」在规则用例里没有对应用例。",
+        },
+        {
+            "title": "并发提交同一手机号",
+            "method": "scenario",
+            "case_type": "异常",
+            "priority": "P1",
+            "preconditions": [],
+            "steps": [{"action": "并发发送两次注册", "expected": "仅一次成功"}],
+            "expected_result": "数据库无重复记录",
+            "test_data": {},
+            "reason": "并发属于规则方法覆盖不到的测试点。",
+        },
+    ],
+}
+
 
 class FakeProvider(LLMProvider):
     """确定性 Provider，按任务标记返回预置 JSON。"""
@@ -96,6 +142,7 @@ class FakeProvider(LLMProvider):
         self.scripted: dict[str, Any] = scripted or {
             TASK_REQUIREMENT_EXTRACTION: _FAKE_REQUIREMENT_DOC,
             TASK_SCENARIO_ENRICHMENT: _FAKE_SCENARIO_CASES,
+            TASK_GENERATION_REVIEW: _FAKE_REVIEW,
         }
         self.calls: list[list[LLMMessage]] = []
 

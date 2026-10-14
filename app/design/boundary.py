@@ -99,92 +99,118 @@ class BoundaryStrategy(DesignStrategy):
         return cases
 
     def _points(self, field: FieldConstraint) -> list[BoundaryPoint]:
-        points: list[BoundaryPoint] = []
-
-        if field.enum_values:
-            points.append(BoundaryPoint(field.enum_values[0], "枚举首个取值", True))
-            if len(field.enum_values) > 1:
-                points.append(BoundaryPoint(field.enum_values[-1], "枚举末个取值", True))
-            if field.required:
-                points.append(BoundaryPoint("", "留空（边界外）", False))
-            points.append(BoundaryPoint("ILLEGAL_ENUM", "枚举外取值（边界外）", False))
-        elif field.has_numeric_range:
-            points.extend(self._numeric_points(field))
-        elif field.has_length_range:
-            points.extend(self._length_points(field))
-
-        if field.required and not any(point.value == "" for point in points):
-            points.append(BoundaryPoint("", "必填边界（留空）", False))
-
-        if not points and not field.required and field.data_type in _SPACE_BOUNDARY_TYPES:
-            points.append(BoundaryPoint(" ", "全空格边界", False))
-
-        points = dedupe_points(points)
-        if len(points) > MAX_POINTS_PER_FIELD:
-            self.context.warn(
-                f"字段「{field.display_name}」边界取点 {len(points)} 个超过上限，已截断为 {MAX_POINTS_PER_FIELD} 个。"
-            )
-            points = points[:MAX_POINTS_PER_FIELD]
+        points, warning = boundary_points(field)
+        if warning:
+            self.context.warn(warning)
         return points
 
     @staticmethod
     def _numeric_points(field: FieldConstraint) -> list[BoundaryPoint]:
-        points: list[BoundaryPoint] = []
-        if field.min_value is not None:
-            points.append(BoundaryPoint(format_number(field.min_value - 1), "最小值-1", False))
-            points.append(BoundaryPoint(format_number(field.min_value), "最小值", True))
-            points.append(BoundaryPoint(format_number(field.min_value + 1), "最小值+1", True))
-        if field.max_value is not None:
-            points.append(BoundaryPoint(format_number(field.max_value - 1), "最大值-1", True))
-            points.append(BoundaryPoint(format_number(field.max_value), "最大值", True))
-            points.append(BoundaryPoint(format_number(field.max_value + 1), "最大值+1", False))
-        return points
+        return numeric_points(field)
 
     @staticmethod
     def _length_points(field: FieldConstraint) -> list[BoundaryPoint]:
-        points: list[BoundaryPoint] = []
-        if field.min_length is not None:
-            if field.min_length - 1 >= 0:
-                points.append(
-                    BoundaryPoint(
-                        length_sample(field, field.min_length - 1),
-                        f"长度{field.min_length - 1}（最小长度-1）",
-                        False,
-                    )
-                )
+        return length_points(field)
+
+
+# --------------------------------------------------------------------------- #
+# 模块级取点函数
+# --------------------------------------------------------------------------- #
+# 抽成模块级函数是为了让「覆盖率分析」复用同一套取点规则：
+# 若覆盖率另写一套边界口径，界面上的「边界缺口」就会和实际生成的边界用例对不上，
+# 这类「看起来有缺口、其实已覆盖」的假告警比没有覆盖率更伤信任。
+
+
+def boundary_points(field: FieldConstraint) -> tuple[list[BoundaryPoint], str | None]:
+    """列出字段的边界取点；返回 (取点列表, 截断告警)。"""
+    points: list[BoundaryPoint] = []
+
+    if field.enum_values:
+        points.append(BoundaryPoint(field.enum_values[0], "枚举首个取值", True))
+        if len(field.enum_values) > 1:
+            points.append(BoundaryPoint(field.enum_values[-1], "枚举末个取值", True))
+        if field.required:
+            points.append(BoundaryPoint("", "留空（边界外）", False))
+        points.append(BoundaryPoint("ILLEGAL_ENUM", "枚举外取值（边界外）", False))
+    elif field.has_numeric_range:
+        points.extend(numeric_points(field))
+    elif field.has_length_range:
+        points.extend(length_points(field))
+
+    if field.required and not any(point.value == "" for point in points):
+        points.append(BoundaryPoint("", "必填边界（留空）", False))
+
+    if not points and not field.required and field.data_type in _SPACE_BOUNDARY_TYPES:
+        points.append(BoundaryPoint(" ", "全空格边界", False))
+
+    points = dedupe_points(points)
+    warning: str | None = None
+    if len(points) > MAX_POINTS_PER_FIELD:
+        warning = (
+            f"字段「{field.display_name}」边界取点 {len(points)} 个超过上限，"
+            f"已截断为 {MAX_POINTS_PER_FIELD} 个。"
+        )
+        points = points[:MAX_POINTS_PER_FIELD]
+    return points, warning
+
+
+def numeric_points(field: FieldConstraint) -> list[BoundaryPoint]:
+    points: list[BoundaryPoint] = []
+    if field.min_value is not None:
+        points.append(BoundaryPoint(format_number(field.min_value - 1), "最小值-1", False))
+        points.append(BoundaryPoint(format_number(field.min_value), "最小值", True))
+        points.append(BoundaryPoint(format_number(field.min_value + 1), "最小值+1", True))
+    if field.max_value is not None:
+        points.append(BoundaryPoint(format_number(field.max_value - 1), "最大值-1", True))
+        points.append(BoundaryPoint(format_number(field.max_value), "最大值", True))
+        points.append(BoundaryPoint(format_number(field.max_value + 1), "最大值+1", False))
+    return points
+
+
+def length_points(field: FieldConstraint) -> list[BoundaryPoint]:
+    points: list[BoundaryPoint] = []
+    if field.min_length is not None:
+        if field.min_length - 1 >= 0:
             points.append(
                 BoundaryPoint(
-                    length_sample(field, field.min_length), f"长度{field.min_length}（最小长度）", True
-                )
-            )
-            points.append(
-                BoundaryPoint(
-                    length_sample(field, field.min_length + 1),
-                    f"长度{field.min_length + 1}（最小长度+1）",
-                    True,
-                )
-            )
-        if field.max_length is not None:
-            points.append(
-                BoundaryPoint(
-                    length_sample(field, field.max_length - 1),
-                    f"长度{field.max_length - 1}（最大长度-1）",
-                    True,
-                )
-            )
-            points.append(
-                BoundaryPoint(
-                    length_sample(field, field.max_length), f"长度{field.max_length}（最大长度）", True
-                )
-            )
-            points.append(
-                BoundaryPoint(
-                    length_sample(field, field.max_length + 1),
-                    f"长度{field.max_length + 1}（最大长度+1）",
+                    length_sample(field, field.min_length - 1),
+                    f"长度{field.min_length - 1}（最小长度-1）",
                     False,
                 )
             )
-        return points
+        points.append(
+            BoundaryPoint(
+                length_sample(field, field.min_length), f"长度{field.min_length}（最小长度）", True
+            )
+        )
+        points.append(
+            BoundaryPoint(
+                length_sample(field, field.min_length + 1),
+                f"长度{field.min_length + 1}（最小长度+1）",
+                True,
+            )
+        )
+    if field.max_length is not None:
+        points.append(
+            BoundaryPoint(
+                length_sample(field, field.max_length - 1),
+                f"长度{field.max_length - 1}（最大长度-1）",
+                True,
+            )
+        )
+        points.append(
+            BoundaryPoint(
+                length_sample(field, field.max_length), f"长度{field.max_length}（最大长度）", True
+            )
+        )
+        points.append(
+            BoundaryPoint(
+                length_sample(field, field.max_length + 1),
+                f"长度{field.max_length + 1}（最大长度+1）",
+                False,
+            )
+        )
+    return points
 
 
 def describe(value: str) -> str:

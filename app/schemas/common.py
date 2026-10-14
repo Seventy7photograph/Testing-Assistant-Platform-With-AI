@@ -5,12 +5,11 @@ from enum import Enum
 
 
 class DesignMethod(str, Enum):
-    """测试设计方法。V1.0 实现前三项，其余为 架构预留。"""
+    """测试设计方法。V1.0 落地前三项，V2.0 起六项全部实现。"""
 
     EQUIVALENCE = "equivalence"
     BOUNDARY = "boundary"
     SCENARIO = "scenario"
-    # ---- 预留（未实现） ----
     DECISION_TABLE = "decision_table"
     CAUSE_EFFECT = "cause_effect"
     ORTHOGONAL = "orthogonal"
@@ -29,10 +28,22 @@ _METHOD_LABELS: dict[str, str] = {
     "orthogonal": "正交实验",
 }
 
-V1_METHODS: tuple[DesignMethod, ...] = (
+#: V1.0 的三种方法：也是「不指定方法」时的默认集合。
+#: 保持默认不变是为了兼容既有调用方 —— 新方法要显式选择，避免一次生成用例数翻倍。
+DEFAULT_METHODS: tuple[DesignMethod, ...] = (
     DesignMethod.EQUIVALENCE,
     DesignMethod.BOUNDARY,
     DesignMethod.SCENARIO,
+)
+
+#: V1.0 的方法集合（保留旧名字，避免破坏既有引用）。
+V1_METHODS: tuple[DesignMethod, ...] = DEFAULT_METHODS
+
+#: V2.0 新增的三种方法。
+V2_METHODS: tuple[DesignMethod, ...] = (
+    DesignMethod.DECISION_TABLE,
+    DesignMethod.CAUSE_EFFECT,
+    DesignMethod.ORTHOGONAL,
 )
 
 

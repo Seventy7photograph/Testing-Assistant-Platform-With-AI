@@ -21,6 +21,7 @@ from collections.abc import Callable
 from app.core.utils import normalize_whitespace, truncate
 from app.schemas.common import DataType, Priority, RequirementType, ValueCharset
 from app.schemas.requirement import FieldConstraint, RequirementItem
+from app.vision.base import IMAGE_DESC_SECTION
 
 # --------------------------------------------------------------------------- #
 # 正则
@@ -131,6 +132,7 @@ def parse_requirements(
     """
     warnings: list[str] = []
     normalized = normalize_whitespace(text)
+    normalized = strip_derived_blocks(normalized)
     if not normalized:
         return doc_title or "空文档", "", [], ["文档内容为空，未能解析出任何需求。"]
 
@@ -161,6 +163,20 @@ def parse_requirements(
 
     summary = build_summary(doc_title, items, normalized)
     return (doc_title or infer_doc_title(sections, normalized), summary, items, warnings)
+
+
+def strip_derived_blocks(text: str) -> str:
+    """丢弃「模型读图产生」的描述段（V2.0 多模态 OCR）。
+
+    为什么必须丢：这些内容是对图片的**推断**，不是原文。一句「金额上限 500」的
+    猜测若被规则引擎当成字段约束，就会直接变成测试数据里的 ``max_value``，
+    产出看起来权威、实则凭空捏造的用例。多模态结构化那一步仍然会读到它
+    （那本来就是"让模型理解图片"的环节），只是不进入确定性解析。
+    """
+    if IMAGE_DESC_SECTION not in text:
+        return text
+    head, _, _ = text.partition(IMAGE_DESC_SECTION)
+    return head.strip()
 
 
 def split_sections(text: str) -> list[Section]:

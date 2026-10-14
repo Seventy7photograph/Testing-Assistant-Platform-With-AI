@@ -26,18 +26,27 @@ from app.schemas.common import CaseSource, DesignMethod
 from app.schemas.testcase import TestCase
 
 # 用例编号前缀（保持人类可读，便于在禅道/Jira 中检索）
+# V2.0 起六种设计方法全部落地，前缀随之补全。
 ID_PREFIX: dict[str, str] = {
     DesignMethod.EQUIVALENCE.value: "EQ",
     DesignMethod.BOUNDARY.value: "BV",
     DesignMethod.SCENARIO.value: "SC",
+    DesignMethod.DECISION_TABLE.value: "DT",
+    DesignMethod.CAUSE_EFFECT.value: "CE",
+    DesignMethod.ORTHOGONAL.value: "OR",
 }
 
 _NORMALIZE_RE = re.compile(r"[\s　,，。.:：;；\-—_/\\|]+")
 
+# 排序权重：字段级方法在前，组合级在后，端到端场景收尾。
+# 场景法排在最后是有意的：它的用例覆盖整条业务流程，放在末尾读起来更顺。
 _METHOD_ORDER = {
     DesignMethod.EQUIVALENCE.value: 0,
     DesignMethod.BOUNDARY.value: 1,
-    DesignMethod.SCENARIO.value: 2,
+    DesignMethod.DECISION_TABLE.value: 2,
+    DesignMethod.CAUSE_EFFECT.value: 3,
+    DesignMethod.ORTHOGONAL.value: 4,
+    DesignMethod.SCENARIO.value: 5,
 }
 
 # 参与「语义重叠」合并的方法：只有字段级设计方法之间才存在"同一个测试点"。

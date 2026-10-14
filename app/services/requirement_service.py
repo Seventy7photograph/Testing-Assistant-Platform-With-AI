@@ -29,7 +29,9 @@ from app.llm.prompts import build_requirement_messages
 from app.repository import Repository, get_repository
 from app.schemas.common import DataType, Priority, RequirementType, ValueCharset
 from app.schemas.requirement import FieldConstraint, ParseMeta, RequirementDoc, RequirementItem
+from app.schemas.traceability import RequirementDiff, TraceabilityMatrix
 from app.services import rule_parser
+from app.services.traceability import build_traceability_matrix, diff_requirements
 
 logger = get_logger(__name__)
 
@@ -326,6 +328,26 @@ class RequirementService:
     def get(self, doc_id: str) -> RequirementDoc:
         return self.repository.requirements.get(doc_id)
 
+    # ------------------------------------------------------------------ #
+    # V2.0 S5：需求变更差异对比 与 需求-用例双向追溯
+    # ------------------------------------------------------------------ #
+    def diff(self, doc_id: str, against: str) -> RequirementDiff:
+        """对比两版需求解析结果。
+
+        ``doc_id`` 是**新版本**，``against`` 是**旧版本** —— 这样调用方读起来与
+        「看这次改了什么」的直觉一致，不需要自己在脑子里对调参数。
+        """
+        older = self.repository.requirements.get(against)
+        newer = self.repository.requirements.get(doc_id)
+        return diff_requirements(older, newer)
+
+    def traceability(self, doc_id: str, *, suite_limit: int = 5) -> TraceabilityMatrix:
+        """构建该需求的「需求 <-> 用例」双向追溯矩阵。"""
+        doc = self.repository.requirements.get(doc_id)
+        suites = self.repository.suites.list_recent(
+            max(suite_limit, 1), predicate=lambda suite: suite.doc_id == doc_id
+        )
+        return build_traceability_matrix(doc, suites)
     # ------------------------------------------------------------------ #
     async def _build_doc(
         self,

@@ -39,6 +39,9 @@ jobs:
       - name: 运行测试
         run: python -m pytest -q
 
+      - name: Prompt 对抗回归与指标输出
+        run: python scripts/evaluate_prompts.py --output output/prompt-eval.json
+
       - name: 离线端到端冒烟（三个脚本，均无需任何 API Key）
         run: |
           python examples/demo_offline.py

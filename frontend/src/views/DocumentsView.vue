@@ -255,7 +255,8 @@ async function removeSelected(): Promise<void> {
           :accept="acceptAttr"
           :on-change="onFileChange"
         >
-          <div class="drop">
+          <div class="drop" :class="{ 'drop--scanning': uploading }">
+            <span v-if="uploading" class="drop__scan" aria-hidden="true" />
             <span class="drop__mark"><AppIcon name="upload" :size="20" /></span>
             <p class="drop__title">
               {{ uploading ? "正在上传并解析文档结构…" : "拖拽文件到此处，或点击选择" }}
@@ -265,6 +266,9 @@ async function removeSelected(): Promise<void> {
             </p>
           </div>
         </el-upload>
+        <p v-if="uploading" class="scan-status" role="status">
+          <span class="dot is-unfrozen" /> 当前任务仍在处理，完成前不会标记为已解析
+        </p>
         <FieldHint>
           单个文件不超过 20MB。Word 表格会被结构化平铺，PDF 按页抽取，兼容 GBK 等中文编码。
         </FieldHint>
@@ -531,11 +535,54 @@ async function removeSelected(): Promise<void> {
 
 <style scoped>
 .drop {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding: var(--s5) var(--s3);
+}
+
+.drop--scanning {
+  overflow: hidden;
+}
+
+.drop__scan {
+  position: absolute;
+  z-index: 2;
+  left: 5%;
+  right: 5%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--glacier), transparent);
+  box-shadow: 0 0 18px 4px color-mix(in srgb, var(--glacier) 28%, transparent);
+  animation: document-scan 1.8s var(--ease) infinite;
+  pointer-events: none;
+}
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--s2);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+@keyframes document-scan {
+  from {
+    top: 8%;
+  }
+  to {
+    top: 92%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop__scan {
+    top: 50%;
+    animation: none;
+    opacity: 0.5;
+  }
 }
 
 .drop__mark {

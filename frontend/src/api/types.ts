@@ -39,7 +39,12 @@ export interface FieldConstraint {
   default: string | null;
   unit: string | null;
   description: string;
+  evidence_quotes: string[];
+  claim_status: ClaimStatus;
+  uncertainty_reason: string;
 }
+
+export type ClaimStatus = "verified" | "inferred" | "rejected";
 
 export interface RequirementItem {
   id: string;
@@ -57,6 +62,9 @@ export interface RequirementItem {
   acceptance_criteria: string[];
   source_ref: string;
   raw_text: string;
+  evidence_quotes: string[];
+  claim_status: ClaimStatus;
+  uncertainty_reason: string;
 }
 
 export interface ParseMeta {
@@ -69,6 +77,12 @@ export interface ParseMeta {
   elapsed_ms: number;
   item_count: number;
   warnings: string[];
+  prompt_id: string;
+  prompt_version: string;
+  prompt_temperature: number | null;
+  prompt_runs: Record<string, unknown>[];
+  validation_failures: string[];
+  injection_warnings: string[];
 }
 
 export interface RequirementDoc {
@@ -106,6 +120,9 @@ export interface TestCase {
   source: string;
   checksum: string;
   covered_methods: DesignMethod[];
+  evidence_quotes: string[];
+  claim_status: ClaimStatus;
+  uncertainty_reason: string;
 }
 
 export interface SuiteStats {
@@ -131,6 +148,10 @@ export interface GenerationMeta {
   /** 大模型对规则产出的复核意见（只提意见，不自动改写用例）。 */
   review_findings: ReviewFinding[];
   elapsed_ms: number;
+  prompt_runs: Record<string, unknown>[];
+  validation_failures: string[];
+  unreviewed_requirements: string[];
+  evidence_counts: Record<string, number>;
 }
 
 /** 大模型复核规则用例时给出的一条意见。 */
@@ -139,8 +160,13 @@ export interface ReviewFinding {
   requirement_id: string;
   requirement_title: string;
   target: string;
+  target_type: string;
+  target_id: string;
   issue: string;
   suggestion: string;
+  evidence_quotes: string[];
+  claim_status: ClaimStatus;
+  uncertainty_reason: string;
 }
 
 export interface TestCaseSuite {
@@ -417,6 +443,16 @@ export interface LLMModelList {
   models: LLMModelOption[];
 }
 
+export interface PromptInfo {
+  prompt_id: string;
+  version: string;
+  task: string;
+  input_boundary: string;
+  temperature: number;
+  model_scope: string;
+  change_log: string[];
+}
+
 export interface IntegrationInfo {
   name: string;
   label: string;
@@ -499,6 +535,9 @@ export interface AnalyzeResponse {
   created_at: string;
   elapsed_ms: number;
   usage: Record<string, unknown> | null;
+  prompt_id: string;
+  prompt_version: string;
+  prompt_temperature: number | null;
 }
 
 export interface ReportSummary {

@@ -7,6 +7,12 @@ import MethodTag from "@/components/MethodTag.vue";
 import PriorityMark from "@/components/PriorityMark.vue";
 import Tip from "@/components/Tip.vue";
 import { useNoticeStore } from "@/stores/notice";
+import {
+  CASE_SOURCE_LABELS,
+  METHOD_ORDER,
+  claimStatusLabel,
+  methodLabel,
+} from "@/utils/labels";
 
 const props = defineProps<{ suite: TestCaseSuite }>();
 
@@ -23,10 +29,61 @@ const page = ref(1);
 const pageSize = ref(50);
 
 const methodOptions = computed(() => {
-  const set = new Set<string>();
-  props.suite.cases.forEach((item) => set.add(item.design_method));
-  return Array.from(set);
+  const counts = new Map<string, number>();
+  props.suite.cases.forEach((item) =>
+    counts.set(item.design_method, (counts.get(item.design_method) ?? 0) + 1),
+  );
+  return METHOD_ORDER.filter((method) => counts.has(method)).map((method) => ({
+    value: method,
+    label: methodLabel(method),
+    count: counts.get(method) ?? 0,
+  }));
 });
+
+const EXPORT_FIELDS = [
+  "用例编号",
+  "所属模块",
+  "用例标题",
+  "设计方法",
+  "用例类型",
+  "优先级",
+  "关联需求",
+  "前置条件",
+  "测试步骤",
+  "预期结果",
+  "测试数据",
+  "标签",
+  "备注",
+  "来源",
+  "覆盖方法",
+] as const;
+
+function exportRecord(row: TestCase): Record<(typeof EXPORT_FIELDS)[number], string> {
+  const covered = (row.covered_methods.length ? row.covered_methods : [row.design_method])
+    .map(methodLabel)
+    .join("、");
+  return {
+    用例编号: row.case_id,
+    所属模块: row.module,
+    用例标题: row.title,
+    设计方法: methodLabel(row.design_method),
+    用例类型: row.case_type,
+    优先级: row.priority,
+    关联需求: row.requirement_ids.join("、"),
+    前置条件: row.preconditions.join("\n"),
+    测试步骤: row.steps
+      .map((step) => `${step.no}. ${step.action}${step.expected ? ` -> ${step.expected}` : ""}`)
+      .join("\n"),
+    预期结果: row.expected_result,
+    测试数据: Object.entries(row.test_data)
+      .map(([key, value]) => `${key} = ${value || "(空)"}`)
+      .join("\n"),
+    标签: row.tags.join("、"),
+    备注: row.remarks,
+    来源: CASE_SOURCE_LABELS[row.source] ?? row.source,
+    覆盖方法: covered,
+  };
+}
 
 const rows = computed(() => {
   const needle = keyword.value.trim().toLowerCase();
@@ -58,41 +115,27 @@ function toggle(row: TestCase) {
 }
 
 async function copyRow(row: TestCase) {
+  const record = exportRecord(row);
   const lines = [
-    `${row.case_id} ${row.title}`,
-    `模块：${row.module} | 类型：${row.case_type} | 优先级：${row.priority} | 方法：${row.design_method}`,
-    row.preconditions.length ? `前置条件：\n- ${row.preconditions.join("\n- ")}` : "",
-    "步骤：",
-    ...row.steps.map((step) => `  ${step.no}. ${step.action}${step.expected ? ` -> ${step.expected}` : ""}`),
-    `预期结果：${row.expected_result}`,
-    Object.keys(row.test_data).length
-      ? `测试数据：\n${Object.entries(row.test_data).map(([k, v]) => `  ${k} = ${v || "(空)"}`).join("\n")}`
-      : "",
-  ].filter(Boolean);
+    ...EXPORT_FIELDS.map((key) => `${key}：${record[key] || "—"}`),
+    `可信状态：${claimStatusLabel(row.claim_status)}`,
+    `证据：${row.evidence_quotes.join("；") || "—"}`,
+    `不确定性：${row.uncertainty_reason || "—"}`,
+  ];
   try {
     await navigator.clipboard.writeText(lines.join("\n"));
-    notice.success("已复制到剪贴板", `${row.case_id} 的完整步骤与数据`);
+    notice.success("已复制到剪贴板", `${row.case_id} 的 15 个导出字段与可信状态`);
   } catch {
     notice.error("复制失败", "浏览器拒绝了剪贴板访问，请手动选中表格内容复制。");
   }
 }
 
 function copyAll() {
-  const header = "用例编号\t标题\t模块\t设计方法\t类型\t优先级\t前置条件\t步骤\t预期结果\t测试数据";
-  const body = rows.value.map((row) =>
-    [
-      row.case_id,
-      row.title,
-      row.module,
-      row.design_method,
-      row.case_type,
-      row.priority,
-      row.preconditions.join("；"),
-      row.steps.map((s) => `${s.no}.${s.action}`).join(" "),
-      row.expected_result,
-      Object.entries(row.test_data).map(([k, v]) => `${k}=${v}`).join("；"),
-    ].join("\t"),
-  );
+  const header = EXPORT_FIELDS.join("\t");
+  const body = rows.value.map((row) => {
+    const record = exportRecord(row);
+    return EXPORT_FIELDS.map((key) => record[key].replaceAll("\n", "；")).join("\t");
+  });
   void navigator.clipboard
     .writeText([header, ...body].join("\n"))
     .then(() => notice.success("已复制当前筛选结果", `共 ${rows.value.length} 条，可直接粘贴进 Excel。`))
@@ -116,7 +159,12 @@ defineExpose({ filtered: rows });
       </div>
 
       <el-select v-model="methodFilter" placeholder="全部方法" size="small" style="width: 148px" clearable>
-        <el-option v-for="item in methodOptions" :key="item" :label="item" :value="item" />
+        <el-option
+          v-for="item in methodOptions"
+          :key="item.value"
+          :label="`${item.label} · ${item.count}`"
+          :value="item.value"
+        />
       </el-select>
 
       <el-select v-model="priorityFilter" placeholder="全部优先级" size="small" style="width: 132px" clearable>
@@ -185,6 +233,28 @@ defineExpose({ filtered: rows });
                   :muted="method !== row.design_method"
                 />
               </div>
+
+              <p class="label detail__gap">标签 / 来源 / 可信状态</p>
+              <div class="detail__tags">
+                <span v-for="tag in row.tags" :key="tag" class="tag mono">{{ tag }}</span>
+                <span v-if="!row.tags.length" class="detail__none">无标签。</span>
+              </div>
+              <p class="detail__meta">
+                来源：{{ CASE_SOURCE_LABELS[row.source] ?? row.source }} ·
+                可信状态：{{ claimStatusLabel(row.claim_status) }}
+              </p>
+              <p v-if="row.uncertainty_reason" class="detail__uncertain">
+                不确定性：{{ row.uncertainty_reason }}
+              </p>
+            </div>
+
+            <div class="detail__full">
+              <p class="label">备注与原文证据</p>
+              <p class="detail__remark">{{ row.remarks || "—" }}</p>
+              <ul v-if="row.evidence_quotes.length" class="detail__list evidence">
+                <li v-for="quote in row.evidence_quotes" :key="quote">“{{ quote }}”</li>
+              </ul>
+              <p v-else class="detail__none">未记录可核验的原文证据；该内容应按可信状态人工复核。</p>
             </div>
           </div>
         </template>
@@ -362,6 +432,46 @@ defineExpose({ filtered: rows });
   flex-wrap: wrap;
   gap: 6px;
   margin-top: var(--s2);
+}
+
+.detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: var(--s2);
+}
+
+.tag {
+  padding: 1px 7px;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius-pill);
+  background: var(--ice-0);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+.detail__meta,
+.detail__uncertain,
+.detail__remark {
+  margin-top: 5px;
+  font-size: var(--fs-xs);
+  line-height: 1.65;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.detail__uncertain {
+  color: var(--warn);
+}
+
+.detail__full {
+  grid-column: 1 / -1;
+  padding-top: var(--s3);
+  border-top: 1px dashed var(--ice-4);
+}
+
+.evidence li {
+  color: var(--ink-2);
 }
 
 @media (max-width: 900px) {

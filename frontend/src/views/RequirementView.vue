@@ -20,6 +20,7 @@ import { useNoticeStore } from "@/stores/notice";
 import {
   DEFAULT_METHODS,
   METHOD_NOTES,
+  claimStatusLabel,
   dataTypeLabel,
   engineLabel,
   engineTitle,
@@ -63,6 +64,15 @@ const counts = computed(() => ({
   rules: (requirement.value?.items ?? []).reduce((sum, item) => sum + item.business_rules.length, 0),
   exceptions: (requirement.value?.items ?? []).reduce((sum, item) => sum + item.exceptions.length, 0),
 }));
+
+const trustCounts = computed(() => {
+  const tally = { verified: 0, inferred: 0, rejected: 0 };
+  for (const item of requirement.value?.items ?? []) {
+    tally[item.claim_status] += 1;
+    for (const field of item.fields) tally[field.claim_status] += 1;
+  }
+  return tally;
+});
 
 const canGenerate = computed(() => generating.value === false && methods.value.length > 0);
 
@@ -194,6 +204,12 @@ async function generate(): Promise<void> {
           <span v-if="requirement.parse_meta.attempts > 1" class="chip chip--ghost mono">
             尝试 {{ requirement.parse_meta.attempts }} 次
           </span>
+          <span v-if="requirement.parse_meta.prompt_id" class="chip chip--ghost mono">
+            {{ requirement.parse_meta.prompt_id }}@{{ requirement.parse_meta.prompt_version }}
+          </span>
+          <span class="chip chip--pass">原文已核验 {{ trustCounts.verified }}</span>
+          <span v-if="trustCounts.inferred" class="chip chip--warn">推断待复核 {{ trustCounts.inferred }}</span>
+          <span v-if="trustCounts.rejected" class="chip chip--fail">已拒绝 {{ trustCounts.rejected }}</span>
           <Tip
             v-if="requirement.parse_meta.fallback_used"
             :text="`降级原因：${requirement.parse_meta.fallback_reason || '未说明'}`"
@@ -316,6 +332,12 @@ async function generate(): Promise<void> {
               <span class="chip chip--ghost">{{ item.module }}</span>
               <span class="chip chip--ghost">{{ requirementTypeLabel(item.requirement_type) }}</span>
               <PriorityMark :priority="item.priority" />
+              <span
+                class="chip"
+                :class="item.claim_status === 'verified' ? 'chip--pass' : item.claim_status === 'inferred' ? 'chip--warn' : 'chip--fail'"
+              >
+                {{ claimStatusLabel(item.claim_status) }}
+              </span>
             </button>
 
             <div v-if="expanded.includes(item.id)" class="req__body">
@@ -340,6 +362,17 @@ async function generate(): Promise<void> {
                     <template #default="{ row }"><span class="mono">{{ constraintText(row) }}</span></template>
                   </el-table-column>
                   <el-table-column prop="description" label="说明" min-width="180" />
+                  <el-table-column label="可信状态" width="132">
+                    <template #default="{ row }">
+                      <span
+                        class="chip"
+                        :class="row.claim_status === 'verified' ? 'chip--pass' : row.claim_status === 'inferred' ? 'chip--warn' : 'chip--fail'"
+                        :title="row.uncertainty_reason"
+                      >
+                        {{ claimStatusLabel(row.claim_status) }}
+                      </span>
+                    </template>
+                  </el-table-column>
                 </el-table>
               </div>
 
@@ -379,6 +412,13 @@ async function generate(): Promise<void> {
               <Tip v-if="item.source_ref" :text="item.source_ref" :marked="false">
                 <span class="req__ref mono">来源：{{ item.source_ref.slice(0, 60) }}</span>
               </Tip>
+              <div v-if="item.evidence_quotes.length || item.uncertainty_reason" class="evidence">
+                <p class="label">原文证据与不确定性</p>
+                <ul v-if="item.evidence_quotes.length" class="bullets">
+                  <li v-for="quote in item.evidence_quotes" :key="quote">“{{ quote }}”</li>
+                </ul>
+                <p v-if="item.uncertainty_reason" class="evidence__uncertain">{{ item.uncertainty_reason }}</p>
+              </div>
             </div>
           </li>
         </ul>
@@ -605,6 +645,21 @@ async function generate(): Promise<void> {
   font-size: 10.5px;
   color: var(--ink-3);
   word-break: break-all;
+}
+
+.evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--s3);
+  border-left: 2px solid var(--glacier);
+  background: var(--glacier-wash);
+}
+
+.evidence__uncertain {
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--warn);
 }
 
 .suiteLink {

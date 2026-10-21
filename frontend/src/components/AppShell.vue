@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 
+import BackToTop from "@/components/BackToTop.vue";
 import CommandPalette from "@/components/CommandPalette.vue";
 import HelpDrawer from "@/components/HelpDrawer.vue";
 import NoticeHost from "@/components/NoticeHost.vue";
@@ -56,9 +57,14 @@ onUnmounted(() => {
     <div class="shell__main">
       <TopBar @open-palette="paletteOpen = true" />
       <main class="shell__content">
-        <RouterView v-slot="{ Component }">
+        <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="route-fade" mode="out-in">
-            <component :is="Component" />
+            <KeepAlive :include="['GenerateView', 'ReportWorkbenchView']" :max="4">
+              <component
+                :is="Component"
+                :key="currentRoute.meta.keepAlive ? String(currentRoute.name) : currentRoute.fullPath"
+              />
+            </KeepAlive>
           </Transition>
         </RouterView>
       </main>
@@ -67,6 +73,7 @@ onUnmounted(() => {
     <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
     <HelpDrawer />
     <NoticeHost />
+    <BackToTop />
   </div>
 </template>
 
@@ -87,7 +94,7 @@ onUnmounted(() => {
 .shell__content {
   position: relative;
   flex: 1 1 auto;
-  padding: var(--s5);
+  padding: var(--s5) var(--s5) calc(var(--s5) + 92px);
   max-width: var(--content-max);
   width: 100%;
 }

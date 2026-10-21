@@ -15,6 +15,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import LLMError, LLMResponseFormatError
 from app.core.logging import get_logger
 from app.core.utils import dump_json, extract_json, truncate
+from app.llm.prompt_registry import PromptSpec
 
 logger = get_logger(__name__)
 
@@ -84,6 +85,9 @@ class LLMResponse:
     #: 厂商返回的结束原因。``length`` 表示被 max_tokens 截断——这是与「模型输出抖动」
     #: 完全不同的一类失败，必须分开重试，否则只是把同一个必然失败的请求重跑一遍。
     finish_reason: str = ""
+    prompt_id: str = ""
+    prompt_version: str = ""
+    temperature: float | None = None
 
 
 class LLMProvider(abc.ABC):
@@ -143,6 +147,7 @@ class LLMProvider(abc.ABC):
         max_tokens: int | None = None,
         retries: int | None = None,
         expect: type | tuple[type, ...] = (dict, list),
+        prompt: PromptSpec | None = None,
     ) -> LLMResponse:
         """调用并解析 JSON；失败时按失败原因分别重试。
 
@@ -162,16 +167,32 @@ class LLMProvider(abc.ABC):
         working = list(messages)
         last_error: Exception | None = None
         last_content = ""
+        effective_temperature = (
+            prompt.temperature if temperature is None and prompt is not None else temperature
+        )
 
         for attempt in range(1, max_retries + 2):
             response = await self.complete(
                 working,
-                temperature=temperature,
+                temperature=effective_temperature,
                 max_tokens=budget,
                 json_mode=True,
             )
             response.attempts = attempt
+            response.prompt_id = prompt.prompt_id if prompt else ""
+            response.prompt_version = prompt.version if prompt else ""
+            response.temperature = effective_temperature
             last_content = response.content
+            if prompt is not None:
+                logger.info(
+                    "Prompt use: id=%s version=%s task=%s model=%s temperature=%s attempt=%s",
+                    prompt.prompt_id,
+                    prompt.version,
+                    prompt.task,
+                    response.model or self.model,
+                    effective_temperature,
+                    attempt,
+                )
 
             if response.finish_reason == "length":
                 last_error = LLMResponseFormatError(

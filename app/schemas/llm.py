@@ -96,3 +96,13 @@ class LLMModelList(BaseModel):
     source: str = Field(default="builtin", description="remote=来自远端 /models；builtin=内置目录")
     message: str = ""
     models: list[LLMModelOption] = Field(default_factory=list)
+
+
+class PromptInfo(BaseModel):
+    prompt_id: str
+    version: str
+    task: str
+    input_boundary: str
+    temperature: float
+    model_scope: str
+    change_log: list[str] = Field(default_factory=list)

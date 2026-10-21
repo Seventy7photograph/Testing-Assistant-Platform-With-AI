@@ -45,6 +45,10 @@ class DesignContext:
     max_llm_cases_per_item: int = 5
     #: 单次生成允许调用大模型的总次数上限（成本护栏）。
     max_llm_calls: int = 20
+    #: Prompt / 校验追溯信息，进入 GenerationMeta。
+    prompt_runs: list[dict] = field(default_factory=list)
+    validation_failures: list[str] = field(default_factory=list)
+    unreviewed_requirements: list[str] = field(default_factory=list)
 
     def warn(self, message: str) -> None:
         if message not in self.warnings:

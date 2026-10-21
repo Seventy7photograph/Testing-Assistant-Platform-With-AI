@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 
 import { api, saveBlob, streamAnalyze } from "@/api";
 import type {
-  Defect,
-  ReportMetrics,
   ReportStatus,
   SampleDataset,
 } from "@/api";
@@ -15,46 +14,55 @@ import ErrorNote from "@/components/ErrorNote.vue";
 import FieldHint from "@/components/FieldHint.vue";
 import MarkdownBody from "@/components/MarkdownBody.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import StickyActionBar from "@/components/StickyActionBar.vue";
 import WarningList from "@/components/WarningList.vue";
 import StatReadout from "@/components/StatReadout.vue";
 import Tip from "@/components/Tip.vue";
 import VerdictSeal from "@/components/VerdictSeal.vue";
 import { useHealthStore } from "@/stores/health";
 import { useNoticeStore } from "@/stores/notice";
+import { useReportSession } from "@/stores/reportSession";
 import { formatDuration, formatPercent } from "@/utils/labels";
+
+defineOptions({ name: "ReportWorkbenchView" });
 
 const router = useRouter();
 const health = useHealthStore();
 const notice = useNoticeStore();
+const session = useReportSession();
 
-const testData = ref("");
-const instruction = ref("重点分析高优先级缺陷、版本风险，并给出回归建议。");
-const model = ref("");
-const useStream = ref(true);
-const archive = ref(true);
+const {
+  testData,
+  instruction,
+  model,
+  useStream,
+  archive,
+  generating,
+  report,
+  reportMeta,
+  reportId,
+  warnings,
+  failure,
+  liveMetrics,
+  liveDefects,
+  liveVersion,
+  liveFormat,
+  liveWarnings,
+  startedAt,
+} = storeToRefs(session);
 
 const samples = ref<SampleDataset[]>([]);
 const status = ref<ReportStatus | null>(null);
 
-const liveMetrics = ref<ReportMetrics | null>(null);
-const liveDefects = ref<Defect[]>([]);
-const liveVersion = ref<string | null>(null);
-const liveFormat = ref<"json" | "text" | "empty">("empty");
-const liveWarnings = ref<string[]>([]);
 const metricsLoading = ref(false);
-
-const report = ref("");
-const reportMeta = ref<{ model: string; provider: string; elapsed: number; createdAt: string } | null>(null);
-const reportId = ref<string | null>(null);
-const generating = ref(false);
-const warnings = ref<string[]>([]);
-const failure = ref<{ message: string; code: string } | null>(null);
 
 const dataRevision = ref(0);
 const metricsRevision = ref(-1);
 let metricsTimer: number | undefined;
 let controller: AbortController | null = null;
 let lastPayload = "";
+const clock = ref(Date.now());
+let clockTimer: number | undefined;
 
 const PRESETS = [
   { label: "发版评估", text: "重点分析高优先级缺陷与本版本风险，给出是否可发版的判断依据。" },
@@ -90,6 +98,16 @@ const llmNote = computed(() =>
 const verdictReasons = computed(() => liveMetrics.value?.verdict_reasons ?? []);
 
 const openP0 = computed(() => liveMetrics.value?.open_p0 ?? 0);
+const elapsedLive = computed(() => {
+  if (!generating.value || !startedAt.value) return 0;
+  return Math.max(clock.value - startedAt.value, 0);
+});
+const stickySummary = computed(
+  () =>
+    `${liveMetrics.value?.total ?? "—"} 条用例 · ` +
+    `${liveMetrics.value ? formatPercent(liveMetrics.value.pass_rate) : "指标待计算"} · ` +
+    `${useStream.value ? "流式输出" : "一次性生成"} · ${archive.value ? "写入存档" : "不归档"}`,
+);
 
 onMounted(async () => {
   try {
@@ -99,10 +117,14 @@ onMounted(async () => {
   } catch (err) {
     notice.error("报告模块状态没有取到", (err as Error).message);
   }
+  clockTimer = window.setInterval(() => {
+    if (generating.value) clock.value = Date.now();
+  }, 500);
 });
 
 onBeforeUnmount(() => {
   window.clearTimeout(metricsTimer);
+  if (clockTimer) window.clearInterval(clockTimer);
   controller?.abort();
 });
 
@@ -168,8 +190,13 @@ function clearAll(): void {
 function stop(): void {
   controller?.abort();
   controller = null;
-  generating.value = false;
+  session.finish();
   notice.warning("已停止生成", "已生成的部分会保留在下方正文里。");
+}
+
+function primaryAction(): void {
+  if (generating.value) stop();
+  else void generate();
 }
 
 async function generate(): Promise<void> {
@@ -182,12 +209,12 @@ async function generate(): Promise<void> {
     return;
   }
 
-  generating.value = true;
+  session.start();
+  clock.value = Date.now();
   report.value = "";
   reportMeta.value = null;
   reportId.value = null;
   warnings.value = [];
-  failure.value = null;
 
   const payload = {
     test_data: testData.value,
@@ -209,11 +236,17 @@ async function generate(): Promise<void> {
         createdAt: result.created_at,
       };
       if (result.metrics) liveMetrics.value = result.metrics;
-      notice.success("报告已生成", result.id ? "已写入本地存档。" : "未归档。");
+      notice.push("success", "报告已生成", result.id ? "已写入本地存档。" : "未归档。", {
+        label: "查看报告",
+        run: () =>
+          result.id
+            ? void router.push(`/report/archive/${result.id}`)
+            : void router.push("/report"),
+      });
     } catch (err) {
       failure.value = { message: (err as Error).message, code: "" };
     } finally {
-      generating.value = false;
+      session.finish();
     }
     return;
   }
@@ -257,7 +290,7 @@ async function generate(): Promise<void> {
     controller.signal,
   );
   controller = null;
-  generating.value = false;
+  session.finish();
 }
 
 async function download(format: string): Promise<void> {
@@ -510,7 +543,7 @@ const verdictPartial = computed(() => liveMetrics.value);
       <SectionCard
         v-if="report || generating"
         :title="reportMeta ? `${reportMeta.model} · ${formatDuration(reportMeta.elapsed)}` : '正在生成报告'"
-        :sub="reportId ? `已归档 · ${reportId.slice(0, 12)}` : generating ? '流式输出中…' : '未归档'"
+        :sub="reportId ? `已归档 · ${reportId.slice(0, 12)}` : generating ? `正在处理 · 已用时 ${formatDuration(elapsedLive)}` : '未归档'"
         icon="doc"
       >
         <template #actions>
@@ -525,6 +558,11 @@ const verdictPartial = computed(() => liveMetrics.value);
             </el-button>
           </template>
         </template>
+        <div v-if="generating" class="report-pipeline" role="status" aria-live="polite">
+          <span class="report-pipeline__rail"><i /></span>
+          <span>{{ useStream ? "模型正在流式输出，切到其他菜单不会中断" : "模型正在生成完整报告" }}</span>
+          <b class="mono">{{ formatDuration(elapsedLive) }}</b>
+        </div>
         <MarkdownBody :source="report" :streaming="generating" />
       </SectionCard>
 
@@ -538,6 +576,15 @@ const verdictPartial = computed(() => liveMetrics.value);
         />
       </SectionCard>
     </div>
+
+    <StickyActionBar
+      :label="generating ? '停止生成' : '生成报告'"
+      :summary="stickySummary"
+      :disabled="!generating && !canGenerate"
+      @primary="primaryAction"
+    >
+      <el-button size="small" :disabled="generating" @click="clearAll">清空</el-button>
+    </StickyActionBar>
   </div>
 </template>
 
@@ -562,6 +609,60 @@ const verdictPartial = computed(() => liveMetrics.value);
   flex-direction: column;
   gap: var(--gap-stack);
   min-width: 0;
+}
+
+.report-pipeline {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+  padding: 8px 10px;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: var(--ice-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.report-pipeline__rail {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 90px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ice-3);
+}
+
+.report-pipeline__rail i {
+  position: absolute;
+  inset-block: 0;
+  width: 34%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--glacier), transparent);
+  animation: report-scan 1.5s linear infinite;
+}
+
+.report-pipeline b {
+  flex: none;
+  color: var(--ink-1);
+}
+
+@keyframes report-scan {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(330%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-pipeline__rail i {
+    width: 100%;
+    animation: none;
+    background: var(--glacier-tint);
+  }
 }
 
 @media (max-width: 1080px) {

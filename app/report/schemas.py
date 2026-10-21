@@ -97,6 +97,9 @@ class AnalyzeResponse(BaseModel):
     created_at: str
     elapsed_ms: int
     usage: dict[str, Any] | None = None
+    prompt_id: str = ""
+    prompt_version: str = ""
+    prompt_temperature: float | None = None
 
 
 class ReportSummary(BaseModel):

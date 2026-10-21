@@ -28,10 +28,17 @@ from app.core.logging import get_logger
 from app.core.utils import truncate
 from app.design.base import DesignContext
 from app.design.scenario import repair_test_data, to_case_type, to_priority
+from app.llm.base import user
+from app.llm.prompt_registry import PROMPT_GENERATION_REVIEW
 from app.llm.prompts import build_review_messages
 from app.schemas.common import CaseSource, CaseType, DesignMethod
-from app.schemas.requirement import RequirementItem
+from app.schemas.requirement import ClaimStatus, RequirementItem
 from app.schemas.testcase import ReviewFinding, TestCase, TestStep
+from app.services.evidence import (
+    quote_in_source,
+    requirement_source_text,
+    validate_review_target,
+)
 
 logger = get_logger(__name__)
 
@@ -51,8 +58,13 @@ class _LLMFinding(BaseModel):
 
     severity: str = "info"
     target: str = ""
+    target_type: str = ""
+    target_id: str = ""
     issue: str = ""
     suggestion: str = ""
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: str = ClaimStatus.INFERRED.value
+    uncertainty_reason: str = ""
 
     @field_validator("severity", mode="before")
     @classmethod
@@ -60,10 +72,19 @@ class _LLMFinding(BaseModel):
         text = str(value or "info").strip().lower()
         return text if text in {"info", "warning"} else "info"
 
-    @field_validator("target", "issue", "suggestion", mode="before")
+    @field_validator("target", "target_type", "target_id", "issue", "suggestion", "uncertainty_reason", mode="before")
     @classmethod
     def _text(cls, value: Any) -> str:
         return "" if value is None else str(value).strip()
+
+    @field_validator("evidence_quotes", mode="before")
+    @classmethod
+    def _quotes(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value.strip()] if value.strip() else []
+        return [str(item).strip() for item in value if str(item).strip()]
 
 
 class _LLMStep(BaseModel):
@@ -92,11 +113,23 @@ class _LLMReviewCase(BaseModel):
     expected_result: str = ""
     test_data: dict[str, str] = Field(default_factory=dict)
     reason: str = ""
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: str = ClaimStatus.INFERRED.value
+    uncertainty_reason: str = ""
 
-    @field_validator("title", "method", "expected_result", "reason", mode="before")
+    @field_validator("title", "method", "expected_result", "reason", "uncertainty_reason", mode="before")
     @classmethod
     def _text(cls, value: Any) -> str:
         return "" if value is None else str(value).strip()
+
+    @field_validator("evidence_quotes", mode="before")
+    @classmethod
+    def _quotes(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value.strip()] if value.strip() else []
+        return [str(item).strip() for item in value if str(item).strip()]
 
     @field_validator("preconditions", mode="before")
     @classmethod
@@ -140,7 +173,7 @@ def build_case_digest(cases: list[TestCase], *, limit: int = MAX_DIGEST_CHARS) -
 
 def known_field_names(item: RequirementItem) -> set[str]:
     names: set[str] = set()
-    for field in item.fields:
+    for field in item.testable_fields:
         names.add(field.name)
         if field.label:
             names.add(field.label)
@@ -202,6 +235,16 @@ def to_test_case(
     ] or [TestStep(no=1, action=f"按用例「{title}」执行", expected="")]
 
     reason = truncate(parsed.reason, 120) or "模型未说明补充理由"
+    source = requirement_source_text(item)
+    verified_quotes = [
+        quote for quote in parsed.evidence_quotes if quote_in_source(quote, source)
+    ]
+    claim_status = ClaimStatus.VERIFIED if verified_quotes else ClaimStatus.INFERRED
+    if not verified_quotes:
+        context.warn(
+            f"大模型补充用例「{truncate(title, 30)}」未找到原文逐字证据，"
+            "已标为模型推断并保留人工复核。"
+        )
     return TestCase(
         title=f"{TITLE_PREFIX} {title}",
         module=item.module,
@@ -216,6 +259,11 @@ def to_test_case(
         tags=[*REVIEW_TAGS, method.label],
         remarks=f"大模型在复核「{item.title}」时补充。理由：{reason}",
         source=CaseSource.LLM,
+        evidence_quotes=verified_quotes[:5],
+        claim_status=claim_status,
+        uncertainty_reason=(
+            "" if verified_quotes else (parsed.uncertainty_reason or "未找到原文逐字证据")
+        ),
     )
 
 
@@ -227,6 +275,7 @@ async def review_item(
     methods: list[DesignMethod],
     allow_cases: bool,
     max_cases: int = MAX_EXTRA_CASES,
+    allow_retry: bool = True,
 ) -> tuple[list[TestCase], list[ReviewFinding]]:
     """对一条需求的规则产出做一次复核；返回 (补充用例, 复核意见)。"""
     payload = item.model_dump(mode="json")
@@ -238,15 +287,50 @@ async def review_item(
         allow_cases=allow_cases,
         max_cases=max_cases,
     )
-    try:
-        context.llm_call_count += 1
-        response = await context.llm.complete_json(messages, expect=dict)
-    except LLMError as exc:
-        context.warn(f"大模型复核失败（{exc.code}），本条需求沿用规则结果：{exc.message}")
-        return [], []
+    response = None
+    body: dict[str, Any] = {}
+    issues: list[str] = []
+    for attempt in range(2 if allow_retry else 1):
+        try:
+            context.llm_call_count += 1
+            response = await context.llm.complete_json(
+                messages,
+                expect=dict,
+                prompt=PROMPT_GENERATION_REVIEW,
+                retries=0,
+            )
+        except LLMError as exc:
+            context.warn(f"大模型复核失败（{exc.code}），本条需求沿用规则结果：{exc.message}")
+            return [], []
 
-    body = response.parsed or {}
-    findings = collect_findings(item, body.get("findings"), context=context)
+        body = response.parsed if isinstance(response.parsed, dict) else {}
+        issues = _review_semantic_issues(item, cases, body, allow_cases=allow_cases)
+        context.prompt_runs.append(
+            {
+                "prompt_id": response.prompt_id or PROMPT_GENERATION_REVIEW.prompt_id,
+                "prompt_version": response.prompt_version or PROMPT_GENERATION_REVIEW.version,
+                "model": response.model or context.llm.model,
+                "temperature": response.temperature,
+                "requirement_id": item.id,
+                "attempt": attempt + 1,
+                "validation_failures": issues,
+            }
+        )
+        if not issues:
+            break
+        context.validation_failures.extend(f"需求 {item.id}：{issue}" for issue in issues)
+        if attempt == 0:
+            messages = [
+                *messages,
+                user(
+                    "上一次复核输出未通过确定性校验，请只修复以下问题后重新输出完整 JSON：\n- "
+                    + "\n- ".join(issues[:20])
+                ),
+            ]
+            if context.llm_call_count >= context.max_llm_calls:
+                break
+
+    findings = collect_findings(item, body.get("findings"), context=context, cases=cases)
     if not allow_cases:
         return [], findings
 
@@ -276,11 +360,60 @@ async def review_item(
     return extra, findings
 
 
+def _review_semantic_issues(
+    item: RequirementItem,
+    cases: list[TestCase],
+    body: dict[str, Any],
+    *,
+    allow_cases: bool,
+) -> list[str]:
+    issues: list[str] = []
+    raw_findings = body.get("findings")
+    if raw_findings is not None and not isinstance(raw_findings, list):
+        issues.append("findings 必须是数组")
+        raw_findings = []
+    for index, entry in enumerate(raw_findings or [], start=1):
+        try:
+            parsed = _LLMFinding.model_validate(entry)
+        except ValidationError:
+            issues.append(f"findings[{index}] 结构不合法")
+            continue
+        ok, _ = validate_review_target(
+            item,
+            cases,
+            target=parsed.target,
+            target_type=parsed.target_type,
+            target_id=parsed.target_id,
+        )
+        if not ok:
+            issues.append(f"findings[{index}] target 未指向真实需求、字段或用例")
+
+    raw_cases = body.get("cases")
+    if raw_cases is not None and not isinstance(raw_cases, list):
+        issues.append("cases 必须是数组")
+        raw_cases = []
+    if allow_cases:
+        known = known_field_names(item)
+        for index, entry in enumerate(raw_cases or [], start=1):
+            try:
+                parsed_case = _LLMReviewCase.model_validate(entry)
+            except ValidationError:
+                issues.append(f"cases[{index}] 结构不合法")
+                continue
+            if not parsed_case.title:
+                issues.append(f"cases[{index}] 缺少 title")
+            unknown = sorted(set(parsed_case.test_data) - known)
+            if unknown:
+                issues.append(f"cases[{index}] 引用了不存在的字段：{'、'.join(unknown)}")
+    return issues
+
+
 def collect_findings(
     item: RequirementItem,
     raw: Any,
     *,
     context: DesignContext,
+    cases: list[TestCase] | None = None,
     limit: int = 6,
 ) -> list[ReviewFinding]:
     if not isinstance(raw, list):
@@ -293,14 +426,42 @@ def collect_findings(
             continue
         if not parsed.issue:
             continue
+        ok, target_type = validate_review_target(
+            item,
+            cases or [],
+            target=parsed.target,
+            target_type=parsed.target_type,
+            target_id=parsed.target_id,
+        )
+        if not ok:
+            context.validation_failures.append(
+                f"需求 {item.id} 的复核意见已拒绝：{parsed.target or '缺少 target'}"
+            )
+            context.warn(
+                f"大模型复核意见指向不存在的目标「{parsed.target or '空'}」，已拒绝。"
+            )
+            continue
+        source = requirement_source_text(item)
+        verified_quotes = [
+            quote for quote in parsed.evidence_quotes if quote_in_source(quote, source)
+        ]
         findings.append(
             ReviewFinding(
                 severity=parsed.severity,
                 requirement_id=item.id,
                 requirement_title=item.title,
                 target=parsed.target,
+                target_type=target_type,
+                target_id=parsed.target_id or parsed.target,
                 issue=parsed.issue,
                 suggestion=parsed.suggestion,
+                evidence_quotes=verified_quotes[:5],
+                claim_status=ClaimStatus.VERIFIED if verified_quotes else ClaimStatus.INFERRED,
+                uncertainty_reason=(
+                    ""
+                    if verified_quotes
+                    else (parsed.uncertainty_reason or "该意见为模型判断，需人工核对")
+                ),
             )
         )
     return findings

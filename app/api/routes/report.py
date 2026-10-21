@@ -25,6 +25,8 @@ from app.report.config import (
 from app.report.llm import complete, llm_settings, probe, stream as llm_stream
 from app.report.metrics import compute_metrics
 from app.report.prompts import build_user_prompt
+from app.report.prompts import PROMPT_SPEC as REPORT_PROMPT_SPEC
+from app.services.evidence import detect_prompt_injection
 from app.report.samples import SAMPLES
 from app.schemas.api import ApiResponse, BatchDeleteRequest, BatchDeleteResult, ok
 from app.report.schemas import (
@@ -159,6 +161,8 @@ async def analyze(payload: AnalyzeRequest) -> dict:
 
     created_at = store.utc_now_iso()
     warnings = list(result.warnings)
+    warnings.extend(detect_prompt_injection(normalized))
+    warnings.extend(detect_prompt_injection(payload.instruction or ""))
     report_id: str | None = None
     if payload.save:
         try:
@@ -188,6 +192,9 @@ async def analyze(payload: AnalyzeRequest) -> dict:
         created_at=created_at,
         elapsed_ms=elapsed_ms,
         usage=usage,
+        prompt_id=REPORT_PROMPT_SPEC.prompt_id,
+        prompt_version=REPORT_PROMPT_SPEC.version,
+        prompt_temperature=settings.temperature,
     )
     return ok(response, message="报告已生成")
 
@@ -204,6 +211,10 @@ async def analyze_stream(payload: AnalyzeRequest) -> StreamingResponse:
     settings = llm_settings(model=payload.model, temperature=payload.temperature)
     user_prompt = build_user_prompt(result, normalized, payload.instruction)
     created_at = store.utc_now_iso()
+    prompt_warnings = [
+        *detect_prompt_injection(normalized),
+        *detect_prompt_injection(payload.instruction or ""),
+    ]
 
     async def event_stream() -> AsyncIterator[str]:
         yield _sse(
@@ -213,7 +224,10 @@ async def analyze_stream(payload: AnalyzeRequest) -> StreamingResponse:
                 "provider": settings.provider,
                 "created_at": created_at,
                 "version": result.version,
-                "warnings": result.warnings,
+                "warnings": [*result.warnings, *prompt_warnings],
+                "prompt_id": REPORT_PROMPT_SPEC.prompt_id,
+                "prompt_version": REPORT_PROMPT_SPEC.version,
+                "prompt_temperature": settings.temperature,
             },
         )
         if result.metrics:
@@ -243,7 +257,7 @@ async def analyze_stream(payload: AnalyzeRequest) -> StreamingResponse:
 
         report = "".join(chunks)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        warnings = list(result.warnings)
+        warnings = [*result.warnings, *prompt_warnings]
         report_id: str | None = None
         if payload.save and report.strip():
             try:
@@ -269,6 +283,8 @@ async def analyze_stream(payload: AnalyzeRequest) -> StreamingResponse:
                 "elapsed_ms": elapsed_ms,
                 "warnings": warnings,
                 "saved": bool(report_id),
+                "prompt_id": REPORT_PROMPT_SPEC.prompt_id,
+                "prompt_version": REPORT_PROMPT_SPEC.version,
             },
         )
 

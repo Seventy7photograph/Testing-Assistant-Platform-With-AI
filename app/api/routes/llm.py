@@ -26,6 +26,7 @@ from app.llm.factory import (
     get_runtime_config_store,
     reset_llm_provider_cache,
 )
+from app.llm.prompt_registry import ALL_PROMPTS
 from app.llm.runtime_config import mask_api_key
 from app.schemas.api import ApiResponse, ok
 from app.schemas.llm import (
@@ -36,6 +37,7 @@ from app.schemas.llm import (
     LLMProviderOption,
     LLMTestRequest,
     LLMTestResult,
+    PromptInfo,
 )
 
 router = APIRouter(tags=["大模型配置"])
@@ -78,6 +80,24 @@ def _to_info(settings: Settings, provider: Any) -> LLMConfigInfo:
 @router.get("/llm/config", response_model=ApiResponse[LLMConfigInfo], summary="读取大模型配置")
 async def get_llm_config(settings: SettingsDep) -> dict:
     return ok(_to_info(get_effective_settings(), get_llm_provider()))
+
+
+@router.get("/llm/prompts", response_model=ApiResponse[list[PromptInfo]], summary="Prompt 工程注册表")
+async def list_prompts() -> dict:
+    return ok(
+        [
+            PromptInfo(
+                prompt_id=spec.prompt_id,
+                version=spec.version,
+                task=spec.task,
+                input_boundary=spec.input_boundary,
+                temperature=spec.temperature,
+                model_scope=spec.model_scope,
+                change_log=list(spec.change_log),
+            )
+            for spec in ALL_PROMPTS
+        ]
+    )
 
 
 @router.put("/llm/config", response_model=ApiResponse[LLMConfigInfo], summary="保存大模型配置")

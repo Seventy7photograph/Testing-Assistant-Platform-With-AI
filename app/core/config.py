@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     #: 单次补全的输出上限。不要低于 8192：推理型模型（如 deepseek-flash）会先花掉上千个
     #: reasoning token，预算太小会让结构化 JSON 直接被截断。
     llm_max_tokens: int = 8192
+    #: 报告归纳温度独立于用例解析 / 复核。后两者由 PromptSpec 固定为低温度。
+    report_temperature: float = 0.3
 
     # ---------- 设计引擎 ----------
     #: 生成阶段大模型的参与方式（基线；界面可按次覆盖）。

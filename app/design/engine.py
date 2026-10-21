@@ -252,6 +252,12 @@ class DesignEngine:
                 warnings=context.warnings,
                 review_findings=context.findings,
                 elapsed_ms=timer.elapsed_ms,
+                prompt_runs=context.prompt_runs,
+                validation_failures=context.validation_failures,
+                unreviewed_requirements=context.unreviewed_requirements,
+                evidence_counts=dict(
+                    collections.Counter(case.claim_status.value for case in unique_cases)
+                ),
             ),
         )
         suite.stats.duplicate_removed = duplicates
@@ -279,11 +285,25 @@ class DesignEngine:
         一份 5 条需求的文档要发 30 次请求，成本与耗时都不成立。
         """
         budget = max(int(context.max_llm_calls or 0), 0)
-        targets = per_item[:budget]
-        if len(per_item) > len(targets):
+        ranked = sorted(
+            enumerate(per_item),
+            key=lambda pair: (pair[1][0].priority.rank, pair[0]),
+        )
+        selected_indexes = {index for index, _ in ranked[:budget]}
+        targets = [
+            pair
+            for index, pair in enumerate(per_item)
+            if index in selected_indexes
+        ]
+        context.unreviewed_requirements = [
+            f"{item.id} {item.title}（{item.priority.value}）"
+            for index, (item, _) in enumerate(per_item)
+            if index not in selected_indexes
+        ]
+        if context.unreviewed_requirements:
             context.warn(
-                f"大模型复核按调用上限（{budget} 次）只覆盖了前 {len(targets)} 条需求，"
-                f"其余 {len(per_item) - len(targets)} 条沿用规则结果。"
+                f"大模型复核按调用上限（{budget} 次）优先覆盖 P0/P1，"
+                f"未复核清单：{'；'.join(context.unreviewed_requirements)}。"
             )
         if not targets:
             context.warn("本次未执行大模型复核：生成阶段的大模型调用预算为 0。")
@@ -301,6 +321,7 @@ class DesignEngine:
                     methods=methods,
                     allow_cases=allow_cases,
                     max_cases=context.max_llm_cases_per_item,
+                    allow_retry=budget > len(targets),
                 )
 
         results = await asyncio.gather(*(run(item, cases) for item, cases in targets))

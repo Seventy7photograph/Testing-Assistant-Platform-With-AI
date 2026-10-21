@@ -54,7 +54,9 @@ def start_server(port: int, extra_env: dict[str, str]) -> subprocess.Popen:
     # 每个场景用独立的临时 storage：既隔离界面上保存的运行时覆盖配置，
     # 也避免验收数据写进用户真实的文档 / 用例集库。
     env["STORAGE_DIR"] = tempfile.mkdtemp(prefix="tap-accept-")
-    kwargs: dict = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "env": env, "cwd": str(ROOT)}
+    # 验收脚本只关心 HTTP 结果。服务日志若写进无人读取的 PIPE，Prompt 追溯日志
+    # 增多后会填满管道并让服务端阻塞，表现为某个请求莫名超时。
+    kwargs: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.STDOUT, "env": env, "cwd": str(ROOT)}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     proc = subprocess.Popen(

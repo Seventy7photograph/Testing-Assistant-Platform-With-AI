@@ -64,6 +64,31 @@ export const METHOD_SHORT: Record<string, string> = {
   orthogonal: "正交实验",
 };
 
+export const METHOD_ORDER: DesignMethod[] = [
+  "equivalence",
+  "boundary",
+  "scenario",
+  "decision_table",
+  "cause_effect",
+  "orthogonal",
+];
+
+export const CLAIM_STATUS_LABELS: Record<string, string> = {
+  verified: "原文证据已核验",
+  inferred: "模型推断待复核",
+  rejected: "已拒绝",
+};
+
+export const CASE_SOURCE_LABELS: Record<string, string> = {
+  rule: "规则引擎",
+  llm: "LLM",
+  hybrid: "混合",
+};
+
+export function claimStatusLabel(value?: string): string {
+  return CLAIM_STATUS_LABELS[value ?? ""] ?? value ?? "未标注";
+}
+
 export const METHOD_CODES: Record<string, string> = {
   equivalence: "EQ",
   boundary: "BV",

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import AppIcon from "@/components/AppIcon.vue";
 import { useHealthStore } from "@/stores/health";
@@ -9,6 +9,7 @@ import { useUiStore, type Density } from "@/stores/ui";
 const emit = defineEmits<{ (e: "open-palette"): void }>();
 
 const route = useRoute();
+const router = useRouter();
 const ui = useUiStore();
 const health = useHealthStore();
 
@@ -22,6 +23,8 @@ const domainLabel = computed(() => {
   };
   return map[String(route.meta.domain ?? "platform")] ?? "平台";
 });
+const parentPath = computed(() => String(route.meta.parentPath ?? ""));
+const parentTitle = computed(() => String(route.meta.parentTitle ?? ""));
 
 const densityMenuOpen = ref(false);
 const densityOptions: { value: Density; label: string; hint: string }[] = [
@@ -57,7 +60,13 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
     </button>
 
     <div class="bar__id">
-      <p class="bar__crumb mono">{{ domainLabel }}</p>
+      <nav class="bar__crumbs mono" aria-label="面包屑">
+        <button v-if="parentPath" type="button" class="bar__parent" @click="router.push(parentPath)">
+          {{ parentTitle }}
+        </button>
+        <AppIcon v-if="parentPath" name="chevronRight" :size="10" class="bar__crumb-sep" />
+        <span class="bar__crumb-current">{{ parentPath ? title : domainLabel }}</span>
+      </nav>
       <h1 class="bar__title" :title="hint">
         {{ title }}
         <span v-if="hint" class="bar__hint">{{ hint }}</span>
@@ -199,14 +208,56 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
   min-width: 0;
 }
 
-.bar__crumb {
+.bar__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: min(42vw, 520px);
   font-size: 9.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-3);
 }
 
+.bar__parent {
+  max-width: 150px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.bar__parent:hover,
+.bar__parent:focus-visible {
+  color: var(--glacier-deep);
+  text-decoration: underline;
+  outline: none;
+}
+
+.bar__crumb-current {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar__crumb-sep {
+  flex: none;
+}
+
 .bar__title {
+  min-width: 0;
+  max-width: min(48vw, 720px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -392,6 +443,19 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
 
   .engine {
     padding: 0 10px;
+  }
+
+  .bar__crumbs {
+    max-width: 34vw;
+  }
+
+  .bar__parent,
+  .bar__crumb-sep {
+    display: none;
+  }
+
+  .bar__title {
+    max-width: 38vw;
   }
 }
 </style>

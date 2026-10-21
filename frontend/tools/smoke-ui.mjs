@@ -178,6 +178,15 @@ async function main() {
     console.log("\n=== 生成页：方法清单与后端一致性 ===");
     await page.goto(`${base}/generate`, { waitUntil: "networkidle" });
     await page.waitForSelector(".methods");
+    check("生成页首屏显示吸底送检栏", await page.locator(".sticky-actions").isVisible());
+
+    // SPA 内切换菜单：Pinia 会话必须保留输入，KeepAlive 也必须保住组件状态。
+    await page.fill("textarea", "状态缓存验证：手机号：11位数字，必填");
+    await page.locator('a[href="/"]').first().click();
+    await page.locator('a[href="/generate"]').first().click();
+    const cachedInput = await page.locator("textarea").inputValue();
+    check("菜单切换后生成输入仍在", cachedInput.includes("状态缓存验证"), cachedInput.slice(0, 24));
+    await page.fill("textarea", "");
     const uiMethods = await page.$$eval(".methods .method", (nodes) =>
       nodes.map((node) => ({
         label: node.querySelector(".method__label")?.textContent?.trim() ?? node.textContent.trim(),
@@ -206,6 +215,19 @@ async function main() {
       check(`点击「${label}」可切换选中状态`, after !== before, `${before} -> ${after}`);
       await page.click(selector);
     }
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.waitForTimeout(150);
+    const compactViewport = await page.evaluate(() => ({
+      sticky: Boolean(document.querySelector(".sticky-actions")),
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    check(
+      "1366×768 首屏吸底操作可见且无横向溢出",
+      compactViewport.sticky && compactViewport.scroll <= compactViewport.client + 1,
+      `scrollWidth=${compactViewport.scroll} clientWidth=${compactViewport.client}`,
+    );
+    await page.setViewportSize({ width: 1440, height: 980 });
     await page.screenshot({ path: path.join(OUT, "generate.png"), fullPage: true });
 
     console.log("\n=== 需求页：方法清单与后端一致性 ===");
@@ -236,11 +258,30 @@ async function main() {
     );
     await page.screenshot({ path: path.join(OUT, "suites.png"), fullPage: true });
 
+    console.log("\n=== 详情页：面包屑与返回上一级 ===");
+    await page.locator("table tbody tr").first().getByText("查看", { exact: true }).click();
+    await page.waitForSelector(".bar__parent");
+    const crumbText = await page.locator(".bar__parent").textContent();
+    check("用例集详情显示父级面包屑", crumbText?.trim() === "用例集", crumbText ?? "");
+    await page.locator(".bar__parent").click();
+    await page.waitForURL("**/suites");
+    check("点击面包屑返回用例集列表", page.url().endsWith("/suites"), page.url());
+
     console.log("\n=== 文档库：图片状态 ===");
     await page.goto(`${base}/documents`, { waitUntil: "networkidle" });
     await page.waitForSelector("table");
     await page.screenshot({ path: path.join(OUT, "documents.png"), fullPage: true });
     check("文档库没有 console error", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
+
+    console.log("\n=== 报告工作台：会话状态与吸底操作 ===");
+    await page.goto(`${base}/report`, { waitUntil: "networkidle" });
+    await page.locator("textarea").first().fill('{"total_cases": 10, "passed": 9, "failed": 1}');
+    await page.locator('a[href="/"]').first().click();
+    await page.locator('a[href="/report"]').first().click();
+    await page.waitForTimeout(200);
+    const reportCached = await page.locator("textarea").first().inputValue();
+    check("报告输入在菜单切换后保留", reportCached.includes("total_cases"), reportCached);
+    check("报告工作台首屏显示吸底送检栏", await page.locator(".sticky-actions").isVisible());
 
     console.log("\n=== 生成页：提示是否刷屏 / 长文本是否撑宽页面 ===");
     await page.goto(`${base}/generate`, { waitUntil: "networkidle" });
@@ -255,7 +296,7 @@ async function main() {
       const on = await page.$eval(selector, (node) => node.classList.contains("method--on"));
       if (!on) await page.click(selector);
     }
-    await page.getByRole("button", { name: "生成用例集" }).click();
+    await page.locator(".sticky-actions .el-button--primary").click();
     // 大模型可用时会先弹一次确认；不可用时直接开始。两种情况下都要能继续。
     const confirmButton = page.getByRole("button", { name: "开始生成" });
     if (await confirmButton.isVisible({ timeout: 1500 }).catch(() => false)) {
@@ -312,6 +353,46 @@ async function main() {
     await page.waitForTimeout(300);
     const expandedCount = await page.$$eval(".wl__list li", (nodes) => nodes.length);
     check("展开后能看到全部提示", expandedCount > collapsedWidth, `${collapsedWidth} -> ${expandedCount}`);
+
+    // 第一版：生成状态、历史结果在菜单切换后不丢；返回顶部按钮真实可用。
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(250);
+    const backTopVisible = await page.getByRole("button", { name: "返回顶部" }).isVisible();
+    check("长页面显示返回顶部按钮", backTopVisible);
+    if (backTopVisible) {
+      await page.getByRole("button", { name: "返回顶部" }).click();
+      await page.waitForFunction(() => window.scrollY < 20, undefined, { timeout: 5000 }).catch(() => {});
+      const top = await page.evaluate(() => window.scrollY);
+      check("返回顶部按钮滚动到页面顶部", top < 20, `scrollY=${top}`);
+    }
+
+    const methodSelect = page.locator(".cases__bar .el-select").first();
+    await methodSelect.click();
+    const methodOptionText = await page.locator(".el-select-dropdown__item").allTextContents();
+    check(
+      "方法筛选展示中文标签与数量",
+      methodOptionText.some((item) => /等价类/.test(item) && /\d+/.test(item)),
+      methodOptionText.join(" / "),
+    );
+    check(
+      "方法筛选不直接展示英文枚举",
+      methodOptionText.every((item) => !/^(equivalence|boundary|scenario|decision_table|cause_effect|orthogonal)/.test(item.trim())),
+      methodOptionText.join(" / "),
+    );
+    await page.keyboard.press("Escape");
+
+    await page.locator(".el-table__expand-icon").first().click();
+    await page.waitForTimeout(150);
+    const detailText = await page.locator(".detail").first().textContent();
+    check(
+      "展开区覆盖标签 / 备注 / 来源与证据",
+      /标签/.test(detailText ?? "") &&
+        /备注/.test(detailText ?? "") &&
+        /来源/.test(detailText ?? "") &&
+        /原文证据/.test(detailText ?? ""),
+      (detailText ?? "").slice(0, 120),
+    );
+    await page.locator(".el-table__expand-icon").first().click();
     const clampOk = await page.$$eval(".wl__text", (nodes) =>
       nodes.every((node) => node.scrollHeight <= node.clientHeight + 4),
     );
@@ -331,7 +412,7 @@ async function main() {
     // 以及"截断不再饿死后执行的方法"——这两种情况只在小上限下才会暴露。
     await page.locator('.field:has-text("单条需求用例上限") input').fill("12");
     await page.locator('.field:has-text("单条需求用例上限") input').press("Enter");
-    await page.getByRole("button", { name: "生成用例集" }).click();
+    await page.locator(".sticky-actions .el-button--primary").click();
     const confirmAgain = page.getByRole("button", { name: "开始生成" });
     if (await confirmAgain.isVisible({ timeout: 1500 }).catch(() => false)) {
       await confirmAgain.click();
@@ -407,7 +488,7 @@ async function main() {
     // 打开「生成用大模型」，参与方式选「复核规则产出」。
     await page.locator('.switch:has-text("生成用大模型") .el-switch').click();
     await page.getByRole("tab", { name: "复核规则产出" }).click();
-    await page.getByRole("button", { name: "生成用例集" }).click();
+    await page.locator(".sticky-actions .el-button--primary").click();
     const confirmThird = page.getByRole("button", { name: "开始生成" });
     if (await confirmThird.isVisible({ timeout: 1500 }).catch(() => false)) {
       await confirmThird.click();
@@ -425,7 +506,7 @@ async function main() {
     await page.screenshot({ path: path.join(OUT, "generate-review-findings.png"), fullPage: false });
 
     await page.getByRole("tab", { name: "复核 + 补充用例" }).click();
-    await page.getByRole("button", { name: "生成用例集" }).click();
+    await page.locator(".sticky-actions .el-button--primary").click();
     const confirmFourth = page.getByRole("button", { name: "开始生成" });
     if (await confirmFourth.isVisible({ timeout: 1500 }).catch(() => false)) {
       await confirmFourth.click();

@@ -8,6 +8,9 @@ declare module "vue-router" {
     title: string;
     domain: Domain;
     hint?: string;
+    parentPath?: string;
+    parentTitle?: string;
+    keepAlive?: boolean;
   }
 }
 
@@ -25,7 +28,13 @@ export const router = createRouter({
       path: "/generate",
       name: "generate",
       component: () => import("@/views/GenerateView.vue"),
-      meta: { nav: "generate", title: "用例生成", domain: "case", hint: "需求文档 → 结构化需求 → 用例集" },
+      meta: {
+        nav: "generate",
+        title: "用例生成",
+        domain: "case",
+        hint: "需求文档 → 结构化需求 → 用例集",
+        keepAlive: true,
+      },
     },
     {
       path: "/documents",
@@ -37,7 +46,13 @@ export const router = createRouter({
       path: "/documents/:docId/requirement",
       name: "requirement",
       component: () => import("@/views/RequirementView.vue"),
-      meta: { nav: "documents", title: "结构化需求", domain: "case" },
+      meta: {
+        nav: "documents",
+        title: "结构化需求",
+        domain: "case",
+        parentPath: "/documents",
+        parentTitle: "文档与需求",
+      },
     },
     {
       path: "/suites",
@@ -49,13 +64,25 @@ export const router = createRouter({
       path: "/suites/:suiteId",
       name: "suite-detail",
       component: () => import("@/views/SuiteDetailView.vue"),
-      meta: { nav: "suites", title: "用例集详情", domain: "case" },
+      meta: {
+        nav: "suites",
+        title: "用例集详情",
+        domain: "case",
+        parentPath: "/suites",
+        parentTitle: "用例集",
+      },
     },
     {
       path: "/report",
       name: "report",
       component: () => import("@/views/ReportWorkbenchView.vue"),
-      meta: { nav: "report", title: "报告工作台", domain: "report", hint: "执行数据 → 指标 → AI 报告" },
+      meta: {
+        nav: "report",
+        title: "报告工作台",
+        domain: "report",
+        hint: "执行数据 → 指标 → AI 报告",
+        keepAlive: true,
+      },
     },
     {
       path: "/report/archive",
@@ -67,7 +94,13 @@ export const router = createRouter({
       path: "/report/archive/:reportId",
       name: "report-detail",
       component: () => import("@/views/ReportDetailView.vue"),
-      meta: { nav: "archive", title: "报告详情", domain: "report" },
+      meta: {
+        nav: "archive",
+        title: "报告详情",
+        domain: "report",
+        parentPath: "/report/archive",
+        parentTitle: "报告存档",
+      },
     },
     {
       path: "/settings",

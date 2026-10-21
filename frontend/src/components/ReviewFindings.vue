@@ -10,6 +10,7 @@ import { computed, ref } from "vue";
 
 import type { ReviewFinding } from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
+import { claimStatusLabel } from "@/utils/labels";
 
 const props = defineProps<{ findings: ReviewFinding[] }>();
 
@@ -36,6 +37,19 @@ const visible = computed(() => (expanded.value ? props.findings : props.findings
           </p>
           <p v-if="item.suggestion" class="rf__suggestion">建议：{{ item.suggestion }}</p>
           <p class="rf__meta mono">{{ item.requirement_id }} · {{ item.requirement_title }}</p>
+          <details class="rf__evidence">
+            <summary>
+              证据与目标 · {{ claimStatusLabel(item.claim_status) }}
+              <span v-if="item.evidence_quotes.length">· {{ item.evidence_quotes.length }} 条</span>
+            </summary>
+            <p class="rf__target-detail mono">
+              {{ item.target_type || "target" }} / {{ item.target_id || item.target || "—" }}
+            </p>
+            <ul v-if="item.evidence_quotes.length" class="rf__quotes">
+              <li v-for="quote in item.evidence_quotes" :key="quote">“{{ quote }}”</li>
+            </ul>
+            <p v-else class="rf__uncertain">{{ item.uncertainty_reason || "该意见为模型判断，需人工核对。" }}</p>
+          </details>
         </div>
       </li>
     </ul>
@@ -125,6 +139,35 @@ const visible = computed(() => (expanded.value ? props.findings : props.findings
 .rf__meta {
   font-size: 10.5px;
   color: var(--ink-3);
+}
+
+.rf__evidence {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.rf__evidence summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.rf__target-detail,
+.rf__uncertain,
+.rf__quotes {
+  margin-top: 4px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.rf__quotes {
+  margin-bottom: 0;
+  padding-left: 1.2em;
+  color: var(--ink-2);
+}
+
+.rf__uncertain {
+  color: var(--warn);
 }
 
 .rf__toggle {

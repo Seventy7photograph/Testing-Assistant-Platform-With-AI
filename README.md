@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883.svg)](https://vuejs.org/)
-[![Version](https://img.shields.io/badge/version-v2.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v2.1.0-blue.svg)](CHANGELOG.md)
 
 > 面向测试工程师的**一体化本地 / 内网工作台**：把「需求文档 → 测试用例」与「测试执行数据 → 测试报告」
 > 两条日常高频链路，收进同一个控制台、同一套配置、同一份存储。
@@ -15,6 +15,7 @@
 > 全站带操作提示与动效。
 > **未配置大模型 API Key 时自动降级为纯规则引擎，链路依然端到端可用。**
 >
+> V2.1：Prompt 具备版本、输入边界、证据校验与固定对抗回归；模型事实与推断在界面分开展示。
 > V2.0：六种测试设计方法齐备（含判定表 / 因果图 / 正交实验），
 > 需求文档里的**图片**（内嵌图 / 扫描件整页 / 截图）可经独立识别通道转成文字，
 > 用例可导出 Excel / JSON / CSV / XMind / TestLink XML，并提供覆盖率、需求变更差异与持久化后端切换。
@@ -37,6 +38,7 @@
 | 文档上传与解析 | `.docx` / `.pdf` / `.xlsx` / `.txt` / `.md` / `.csv` / `.json` / 图片（`.png` `.jpg` `.webp` `.bmp` `.tif`），兼容 GBK 等中文编码，Word 表格结构化平铺，Excel 字段表与需求清单分形态解析 |
 | 图片识别（多模态 OCR） | 文档内嵌图 / 扫描件整页 / 直接上传的截图 → 文字。**主模型不必支持图片**：识别走独立通道（多模态模型 → 本地 OCR → 云端 OCR 依次降级），识别结果回填到正文的图片位置，模型推断部分单独成段、不参与字段约束抽取 |
 | 需求结构化 | LLM 结构化抽取 + 规则引擎解析双路，LLM 缺失 / 失败自动降级并显式告警 |
+| Prompt 可信工程 | 四个任务独立 Prompt ID / 版本 / 输入边界；证据归一化校验、失败关闭、单次修复、注入告警与 20 个离线对抗样本 |
 | 测试设计 | 六种方法：等价类划分、边界值分析（min-1/min/min+1/max-1/max/max+1）、场景法、**判定表**（条件桩 → 动作桩 → 无关项合并）、**因果图**（因/果/异或·包含·屏蔽约束 → 判定表）、**正交实验**（因子水平 → 两两覆盖表） |
 | 生成阶段大模型参与 | 三档可调：**仅场景法补充**（默认）/ **复核规则产出**（六种方法都覆盖，只给意见、不改写用例）/ **复核 + 补充用例**（补充项标「[LLM补充] · 需复核」）。按需求条数计费，受调用次数上限约束 |
 | 用例优化 | 两层去重（精确指纹 + 跨方法语义重叠，合并关联需求并记录覆盖方法）、优先级排序、按方法自动编号（TC-EQ / BV / DT / CE / OR / SC） |
@@ -66,6 +68,7 @@
 | 批量操作 | 文档库、用例集、报告存档均支持多选与**批量删除**（服务端一次最多 200 条，自动去重） |
 | 产出可追溯 | 用例集列表直出「来源需求 + 生成引擎（模型名）」，点来源需求直达结构化需求；需求页反向列出已生成的用例集；文档库标出解析引擎 |
 | 全站提示系统 | 五种提示形态统一落地（见 [六、设计系统](#六设计系统与提示系统)） |
+| 长期工作流 | 面包屑与返回上一级、返回顶部、生成状态缓存、吸底送检栏；菜单切换不中断生成与报告流式请求 |
 | 过程提示不刷屏 | 生成过程提示按「需要复核 / 过程信息」分组，默认只露要动手的条目，其余折叠为一行计数摘要；长文本强制换行限高 |
 | 统一异常出口 | 所有错误返回 `{success, code, message, detail}`，前端统一渲染为可读错误卡片 |
 
@@ -106,12 +109,12 @@ Testing-Assistant-Platform With AI/
 │   │       └── report.py             #   测试报告：状态/指标/样例/生成/流式/存档/趋势/阈值/导出
 │   ├── core/                         # 配置 / 异常 / 日志 / 注册表 / 工具
 │   ├── schemas/                      # 领域枚举与请求响应契约（pydantic）
-│   ├── services/                     # 应用服务：文档 / 需求 / 流水线 / 导出 / 规则解析 / 图片识别 / 差异与追溯
+│   ├── services/                     # 应用服务：文档 / 需求 / 证据闸门 / 流水线 / 导出 / 规则解析 / 图片识别 / 差异与追溯
 │   ├── parsers/                      # 文档解析器（docx / pdf / excel / image / text + 注册表，含内嵌图提取）
 │   ├── vision/                       # 图片识别通道（多模态模型 / 本地 OCR / 云端 OCR / 假实现 + 注册表）
 │   ├── design/                       # 测试设计引擎（六种方法 / 优化器 / 覆盖率分析）
 │   ├── exporters/                    # 用例导出器（excel / json / csv / xmind / testlink + 注册表）
-│   ├── llm/                          # LLM Provider（deepseek / openai 兼容 / fake / null + 工厂 + 目录）
+│   ├── llm/                          # LLM Provider + Prompt 注册表（版本 / 边界 / 温度 / 变更记录）
 │   ├── report/                       # 测试报告模块（config/metrics/prompts/llm/store/exporters/samples/schemas）
 │   ├── integrations/                 # 外部集成抽象（禅道 / Jira 占位，未实现）
 │   └── static/                       # 前端构建产物（由 frontend 构建生成，勿手改）
@@ -222,6 +225,7 @@ node tools/smoke-ui.mjs   # 自动起后端 + Playwright：校验方法清单一
 | GET | `/integrations` | 外部集成清单（禅道 / Jira 占位，未实现） |
 | GET | `/overview` | 平台总览（首页仪表盘数据） |
 | GET / PUT / DELETE | `/llm/config` | 读取 / 保存 / 恢复大模型配置（基线为 `.env`） |
+| GET | `/llm/prompts` | Prompt 工程注册表：ID、版本、输入边界、温度与变更记录 |
 | POST | `/llm/config/test` | 大模型连通性测试 |
 | GET | `/llm/models` | 候选模型列表 |
 | GET / PUT / DELETE | `/vision/config` | 读取 / 保存 / 恢复图片识别配置（清图片配置不影响大模型配置） |
@@ -318,6 +322,34 @@ HTTP 路由 (app/api/routes)
 
 - 报告链路额外维护「发版判定阈值」，存于 `storage/data/report_config.json`，同样支持界面改、界面恢复。
 - 版本号以代码 `app/__init__.py` 为唯一来源，`.env` 中的 `APP_VERSION` 不会覆盖它。
+
+### 5.4 Prompt 可信工程（V2.1）
+
+四个模型任务分别使用独立 Prompt，不允许抽取、复核、补缺、报告归纳混用同一套指令：
+
+| Prompt ID | 任务 | 输入边界 | 温度 |
+| --- | --- | --- | --- |
+| `requirement.extract` | 需求抽取 | 当前需求原文（截断 12000 字）与标题，原文只作为测试素材 | 0.1 |
+| `design.scenario_enrichment` | 场景补缺 | 单条结构化需求与已有用例标题 | 0.2 |
+| `design.generation_review` | 生成复核 | 单条需求与规则用例摘要（最多 4000 字） | 0.1 |
+| `report.summarize` | 报告归纳 | 确定性指标与原始执行数据，原始数据视为不可信文本 | `REPORT_TEMPERATURE`（默认 0.3） |
+
+证据闸门会先做 NFKC、空白、标点和 OCR 换行归一化，再判断 `evidence_quotes` 是否真实出现在原文；
+字段名还必须能在证据或结构化需求中定位。校验结果按 `verified / inferred / rejected` 记录：
+
+- `verified` 才允许进入确定性规则引擎；
+- `inferred` 只作为待复核模型判断展示，不伪装成原文事实；
+- `rejected` 不进入需求模型、用例或权威指标。
+
+抽取与复核在语义校验失败时携带错误清单重试一次；仍失败则保留规则结果并写入 `validation_failures`。
+预算不足时复核优先覆盖 P0/P1，未复核条目写入 `unreviewed_requirements`。
+
+离线门禁：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_prompt_quality.py -q
+.\.venv\Scripts\python.exe scripts\evaluate_prompts.py
+```
 
 ---
 

@@ -17,6 +17,7 @@ import type {
   MethodInfo,
   MetricsResult,
   PlatformOverview,
+  PromptInfo,
   ReportDetail,
   ReportListResponse,
   ReportLLMTestResult,
@@ -75,6 +76,7 @@ export const api = {
       ...(provider ? { provider } : {}),
       ...(baseUrl ? { base_url: baseUrl } : {}),
     }),
+  prompts: () => get<PromptInfo[]>("/llm/prompts"),
 
   /* ---------- 图片识别（V2.0 多模态 OCR） ---------- */
   visionConfig: () => get<VisionConfigInfo>("/vision/config"),

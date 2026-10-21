@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.utils import now_iso
 from app.schemas.common import CaseSource, CaseType, DesignMethod, Priority
-from app.schemas.requirement import ParseMeta
+from app.schemas.requirement import ClaimStatus, ParseMeta
 
 
 class TestStep(BaseModel):
@@ -40,6 +40,9 @@ class TestCase(BaseModel):
         default_factory=list,
         description="覆盖该用例的全部设计方法（去重合并后记录，说明该用例来源不唯一）",
     )
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: ClaimStatus = ClaimStatus.VERIFIED
+    uncertainty_reason: str = ""
 
     def step_text(self) -> str:
         """把步骤压平成一行文本（Excel/CSV 单元格友好）。"""
@@ -84,6 +87,10 @@ class GenerationMeta(BaseModel):
     #: 大模型对「规则引擎产出」的复核意见（只提意见，不自动改写用例）。
     review_findings: list["ReviewFinding"] = Field(default_factory=list)
     elapsed_ms: int = 0
+    prompt_runs: list[dict[str, Any]] = Field(default_factory=list)
+    validation_failures: list[str] = Field(default_factory=list)
+    unreviewed_requirements: list[str] = Field(default_factory=list)
+    evidence_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class ReviewFinding(BaseModel):
@@ -98,8 +105,13 @@ class ReviewFinding(BaseModel):
     requirement_id: str = ""
     requirement_title: str = ""
     target: str = Field(default="", description="指向的用例标题 / 字段名 / 需求条目")
+    target_type: str = Field(default="", description="requirement | field | case")
+    target_id: str = ""
     issue: str = Field(default="", description="发现的问题")
     suggestion: str = Field(default="", description="建议怎么改")
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: ClaimStatus = ClaimStatus.INFERRED
+    uncertainty_reason: str = ""
 
 
 class TestCaseSuite(BaseModel):

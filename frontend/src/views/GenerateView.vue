@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
 
 import { api, saveBlob } from "@/api";
-import type { DocumentSummary, ExportFormatInfo, GenerateResult } from "@/api";
+import type { ExportFormatInfo } from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
 import CaseTable from "@/components/CaseTable.vue";
 import EmptyState from "@/components/EmptyState.vue";
@@ -12,14 +13,15 @@ import ErrorNote from "@/components/ErrorNote.vue";
 import FieldHint from "@/components/FieldHint.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatReadout from "@/components/StatReadout.vue";
+import StickyActionBar from "@/components/StickyActionBar.vue";
 import Tip from "@/components/Tip.vue";
 import ReviewFindings from "@/components/ReviewFindings.vue";
 import WarningList from "@/components/WarningList.vue";
 import { confirmAction } from "@/composables/useFeedback";
 import { useHealthStore } from "@/stores/health";
+import { useGenerateSession } from "@/stores/generateSession";
 import { useNoticeStore } from "@/stores/notice";
 import {
-  DEFAULT_METHODS,
   FALLBACK_UPLOAD_EXTENSIONS,
   METHOD_NOTES,
   displayExtensions,
@@ -29,43 +31,48 @@ import {
   methodLabel,
 } from "@/utils/labels";
 
+defineOptions({ name: "GenerateView" });
+
 const router = useRouter();
 const health = useHealthStore();
 const notice = useNoticeStore();
+const session = useGenerateSession();
 
-const mode = ref<"text" | "upload">("text");
-const text = ref("");
-const title = ref("粘贴的需求文本");
-const docId = ref<string | null>(null);
-const docInfo = ref<DocumentSummary | null>(null);
-const uploading = ref(false);
+const {
+  mode,
+  text,
+  title,
+  docId,
+  docInfo,
+  uploading,
+  methods,
+  maxItems,
+  maxCases,
+  initialisedFromServer,
+  useLlm,
+  useLlmInDesign,
+  llmDesignMode,
+  generating,
+  result,
+  failure,
+  startedAt,
+} = storeToRefs(session);
 
-const methods = ref<string[]>([...DEFAULT_METHODS]);
-const maxItems = ref(8);
 /**
  * 单条需求用例上限：防爆护栏，不是"推荐产量"。
  * 默认值取自服务端（`/health` 的 limits），未配置时按 200 —— 六种方法全开时，
  * 结构完整的需求自然产出 65~75 条，默认值低于它就会天天截断。
  */
-const maxCases = ref(200);
-/** 只在首次拿到服务端上限时同步一次，之后用户改过的值不被覆盖。 */
-const initialisedFromServer = ref(false);
-const useLlm = ref(true);
-const useLlmInDesign = ref(false);
 /**
  * 生成阶段大模型的参与方式。默认 scenario = 与 V1.0 完全一致（只让场景法补充用例）；
  * review / enhance 是 V2.0 新增：一次调用覆盖六种方法的产出复核。
  */
-const llmDesignMode = ref("scenario");
 const LLM_DESIGN_MODES = [
   { value: "scenario", label: "仅场景法补充", hint: "只让场景法补充易漏场景（V1.0 起的行为）。" },
   { value: "review", label: "复核规则产出", hint: "六种方法都覆盖：模型复核规则引擎的产出并给出意见，不改写用例。每条需求一次调用。" },
   { value: "enhance", label: "复核 + 补充用例", hint: "在复核之外允许模型补充用例，补充项标为「[LLM补充] · 需复核」，每条需求最多 5 条。" },
 ] as const;
 
-const generating = ref(false);
-const result = ref<GenerateResult | null>(null);
-const failure = ref<{ message: string; code: string } | null>(null);
 /** 导出格式与设计方法都以服务端能力清单为准（health 已在 App 启动时加载）。 */
 const formats = computed<ExportFormatInfo[]>(() => health.exportFormats);
 
@@ -119,9 +126,28 @@ const warnings = computed(() => {
   );
 });
 
+const clock = ref(Date.now());
+let clockTimer: number | undefined;
+const elapsedLive = computed(() => {
+  if (!generating.value || !startedAt.value) return 0;
+  return Math.max(clock.value - startedAt.value, 0);
+});
+const stickySummary = computed(
+  () =>
+    `${methods.value.length} 种方法 · ${useLlm.value ? "LLM 解析" : "规则解析"} · ` +
+    `单条上限 ${maxCases.value} · ${sourceLabel.value}`,
+);
+
 onMounted(() => {
   // 直接从当前路由进来时 App 的初始化请求可能还没回来，补一次（store 内有 15s 缓存，不会重复打）。
   if (!health.info) void health.load();
+  clockTimer = window.setInterval(() => {
+    if (generating.value) clock.value = Date.now();
+  }, 500);
+});
+
+onUnmounted(() => {
+  if (clockTimer) window.clearInterval(clockTimer);
 });
 
 // 上限的默认值以服务端生效值为准：改 .env 或换环境后界面跟着走，不会各说各话。
@@ -160,8 +186,7 @@ async function onFileChange(file: UploadFile): Promise<void> {
 }
 
 function reset() {
-  result.value = null;
-  failure.value = null;
+  session.resetResult();
 }
 
 async function generate(): Promise<void> {
@@ -178,9 +203,9 @@ async function generate(): Promise<void> {
     if (!confirmed) return;
   }
 
-  generating.value = true;
+  session.start();
+  clock.value = Date.now();
   result.value = null;
-  failure.value = null;
   try {
     const common = {
       methods: methods.value,
@@ -196,14 +221,14 @@ async function generate(): Promise<void> {
         : { text: text.value, title: title.value.trim() || "未命名需求", ...common };
     const data = await api.generate(payload);
     result.value = data;
-    notice.success(
-      "用例集已生成",
-      `共 ${data.suite.stats.total} 条 · 用时 ${formatDuration(data.suite.generation_meta.elapsed_ms)}`,
-    );
+    notice.push("success", "用例集已生成", `共 ${data.suite.stats.total} 条 · 用时 ${formatDuration(data.suite.generation_meta.elapsed_ms)}`, {
+      label: "查看结果",
+      run: () => void router.push(`/suites/${data.suite.suite_id}`),
+    });
   } catch (err) {
     failure.value = { message: (err as Error).message, code: "" };
   } finally {
-    generating.value = false;
+    session.finish();
   }
 }
 
@@ -433,6 +458,11 @@ async function exportSuite(format: string): Promise<void> {
 
       <template v-if="generating">
         <SectionCard title="正在生成" sub="规则引擎跑方法，必要时调用大模型增强">
+          <div class="pipeline" role="status" aria-live="polite">
+            <span class="pipeline__rail"><i /></span>
+            <span>正在执行当前可用阶段，未完成的阶段不会提前标记完成</span>
+            <b class="mono">{{ formatDuration(elapsedLive) }}</b>
+          </div>
           <div class="grid grid--4">
             <StatReadout label="用例总数" :value="null" pending hint="本轮生成的用例条目数" />
             <StatReadout label="去重合并" :value="null" pending hint="精确指纹与语义重叠合并掉的条数" />
@@ -492,6 +522,29 @@ async function exportSuite(format: string): Promise<void> {
               :title="engineTitle(result.suite.generation_meta)"
             >
               生成：{{ engineLabel(result.suite.generation_meta) }}
+            </span>
+            <span
+              v-if="result.suite.generation_meta.prompt_runs.length"
+              class="chip chip--ghost mono"
+              :title="result.suite.generation_meta.prompt_runs.map((run) => `${run.prompt_id}@${run.prompt_version}`).join('\n')"
+            >
+              Prompt {{ result.suite.generation_meta.prompt_runs.length }} 次
+            </span>
+            <span class="chip chip--pass">
+              原文已核验 {{ result.suite.generation_meta.evidence_counts.verified ?? 0 }}
+            </span>
+            <span
+              v-if="result.suite.generation_meta.evidence_counts.inferred"
+              class="chip chip--warn"
+            >
+              推断待复核 {{ result.suite.generation_meta.evidence_counts.inferred }}
+            </span>
+            <span
+              v-if="result.suite.generation_meta.unreviewed_requirements.length"
+              class="chip chip--warn"
+              :title="result.suite.generation_meta.unreviewed_requirements.join('\n')"
+            >
+              未复核 {{ result.suite.generation_meta.unreviewed_requirements.length }} 条
             </span>
             <span
               v-if="result.suite.generation_meta.llm_calls"
@@ -589,6 +642,18 @@ async function exportSuite(format: string): Promise<void> {
         </FieldHint>
       </SectionCard>
     </div>
+
+    <StickyActionBar
+      label="生成用例集"
+      :summary="stickySummary"
+      :disabled="!canGenerate"
+      :busy="generating"
+      @primary="generate"
+    >
+      <el-button v-if="result" size="small" plain :disabled="generating" @click="reset">
+        清空结果
+      </el-button>
+    </StickyActionBar>
   </div>
 </template>
 
@@ -603,6 +668,60 @@ async function exportSuite(format: string): Promise<void> {
 /* 产出跨两列铺满，所以送检面板不吸顶：吸顶会被下方表格压住 */
 .gen__intake {
   min-width: 0;
+}
+
+.pipeline {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+  padding: 8px 10px;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: var(--ice-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.pipeline__rail {
+  position: relative;
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 90px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ice-3);
+}
+
+.pipeline__rail i {
+  position: absolute;
+  inset-block: 0;
+  width: 34%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--glacier), transparent);
+  animation: pipeline-scan 1.5s linear infinite;
+}
+
+.pipeline b {
+  flex: none;
+  color: var(--ink-1);
+}
+
+@keyframes pipeline-scan {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(330%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline__rail i {
+    width: 100%;
+    animation: none;
+    background: var(--glacier-tint);
+  }
 }
 
 .gen__side,

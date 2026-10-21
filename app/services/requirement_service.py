@@ -23,14 +23,26 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import EmptyDocumentError, LLMError
 from app.core.logging import get_logger
 from app.core.utils import Timer, new_id, truncate
-from app.llm.base import LLMProvider
+from app.llm.base import LLMProvider, user
 from app.llm.factory import get_llm_provider
+from app.llm.prompt_registry import PROMPT_REQUIREMENT_EXTRACTION
 from app.llm.prompts import build_requirement_messages
 from app.repository import Repository, get_repository
 from app.schemas.common import DataType, Priority, RequirementType, ValueCharset
-from app.schemas.requirement import FieldConstraint, ParseMeta, RequirementDoc, RequirementItem
+from app.schemas.requirement import (
+    ClaimStatus,
+    FieldConstraint,
+    ParseMeta,
+    RequirementDoc,
+    RequirementItem,
+)
 from app.schemas.traceability import RequirementDiff, TraceabilityMatrix
 from app.services import rule_parser
+from app.services.evidence import (
+    detect_prompt_injection,
+    gate_requirement_payload,
+    normalize_evidence,
+)
 from app.services.traceability import build_traceability_matrix, diff_requirements
 
 logger = get_logger(__name__)
@@ -99,6 +111,9 @@ class _LLMField(BaseModel):
     default: str | None = None
     unit: str | None = None
     description: str = ""
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: str = ClaimStatus.VERIFIED.value
+    uncertainty_reason: str = ""
 
     @field_validator("name", "label", "description", mode="before")
     @classmethod
@@ -156,6 +171,11 @@ class _LLMField(BaseModel):
             return None
         text = str(value).strip()
         return text or None
+
+    @field_validator("evidence_quotes", mode="before")
+    @classmethod
+    def _quotes(cls, value: Any) -> list[str]:
+        return _text_list(value)
 
 
 # LLM 常把「11位数字」这类自然语言描述塞进 pattern 字段，而不是给出真正的正则。
@@ -217,6 +237,9 @@ class _LLMItem(BaseModel):
     exceptions: list[str] = Field(default_factory=list)
     acceptance_criteria: list[str] = Field(default_factory=list)
     source_ref: str = ""
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: str = ClaimStatus.INFERRED.value
+    uncertainty_reason: str = ""
 
     @field_validator("id", "title", "module", "description", "priority", "requirement_type", "source_ref", mode="before")
     @classmethod
@@ -234,6 +257,11 @@ class _LLMItem(BaseModel):
     )
     @classmethod
     def _list(cls, value: Any) -> list[str]:
+        return _text_list(value)
+
+    @field_validator("evidence_quotes", mode="before")
+    @classmethod
+    def _quotes(cls, value: Any) -> list[str]:
         return _text_list(value)
 
 
@@ -380,17 +408,78 @@ class RequirementService:
         doc.source_type = source_type
         doc.parse_meta.fallback_used = meta.fallback_used
         doc.parse_meta.fallback_reason = meta.fallback_reason
+        doc.parse_meta.injection_warnings = detect_prompt_injection(text)
+        if use_llm:
+            doc.parse_meta.prompt_id = PROMPT_REQUIREMENT_EXTRACTION.prompt_id
+            doc.parse_meta.prompt_version = PROMPT_REQUIREMENT_EXTRACTION.version
+            doc.parse_meta.prompt_temperature = PROMPT_REQUIREMENT_EXTRACTION.temperature
+            doc.parse_meta.prompt_runs = [
+                {
+                    **PROMPT_REQUIREMENT_EXTRACTION.meta(),
+                    "model": self.llm.model,
+                    "validation_failures": [meta.fallback_reason] if meta.fallback_reason else [],
+                }
+            ]
+            if meta.fallback_reason and "校验" in meta.fallback_reason:
+                doc.parse_meta.validation_failures.append(meta.fallback_reason)
         if meta.fallback_reason:
             doc.parse_meta.warnings.append("已使用规则引擎解析：" + meta.fallback_reason)
+        doc.parse_meta.warnings.extend(doc.parse_meta.injection_warnings)
         return doc
 
     # ------------------------------------------------------------------ #
     async def _parse_with_llm(self, text: str, *, title: str, doc_id: str, max_items: int) -> RequirementDoc:
         messages = build_requirement_messages(text, title=title, max_items=max_items)
-        response = await self.llm.complete_json(messages, expect=dict)
-        payload = response.parsed or {}
+        validation_failures: list[str] = []
+        prompt_runs: list[dict[str, Any]] = []
+        gate = None
+        response = None
+        parsed_doc: _LLMDoc | None = None
+
+        # Semantic validation gets exactly one repair attempt.  Invalid output is
+        # never passed through as a best-effort requirement model.
+        for attempt in range(2):
+            response = await self.llm.complete_json(
+                messages,
+                expect=dict,
+                prompt=PROMPT_REQUIREMENT_EXTRACTION,
+                retries=0,
+            )
+            payload = response.parsed or {}
+            gate = gate_requirement_payload(payload, text, max_items=max_items)
+            prompt_runs.append(
+                {
+                    "prompt_id": response.prompt_id or PROMPT_REQUIREMENT_EXTRACTION.prompt_id,
+                    "prompt_version": response.prompt_version or PROMPT_REQUIREMENT_EXTRACTION.version,
+                    "model": response.model or self.llm.model,
+                    "temperature": response.temperature,
+                    "attempt": attempt + 1,
+                    "validation_failures": gate.all_errors,
+                }
+            )
+            if not gate.critical_errors:
+                break
+            validation_failures = gate.all_errors
+            logger.warning(
+                "需求抽取语义校验失败（第 %s 次）：%s",
+                attempt + 1,
+                "；".join(validation_failures[:5]),
+            )
+            if attempt == 0:
+                messages = [
+                    *messages,
+                    user(
+                        "上一次输出未通过确定性校验，请修复后重新输出完整 JSON。"
+                        "不得删除结构字段，也不得编造原文不存在的证据。校验错误清单：\n- "
+                        + "\n- ".join(validation_failures[:20])
+                    ),
+                ]
+
+        if response is None or gate is None:
+            raise LLMError("LLM 未返回可校验的需求解析结果。")
+
         try:
-            parsed_doc = _LLMDoc.model_validate(payload)
+            parsed_doc = _LLMDoc.model_validate(gate.payload)
         except ValidationError as exc:
             raise LLMError(f"LLM 返回结构不符合预期：{exc.error_count()} 处校验失败") from exc
 
@@ -402,6 +491,10 @@ class RequirementService:
         items = [item for item in items if item.title]
         if not items:
             raise LLMError("LLM 未解析出任何需求条目（items 为空），已降级规则解析。")
+        if gate.counts.get(ClaimStatus.VERIFIED.value, 0) == 0:
+            raise LLMError(
+                "LLM 解析结果没有可核验的原文条目，按失败关闭策略降级规则解析。"
+            )
 
         rule_doc = self._parse_with_rules(text, title=title, doc_id=doc_id, max_items=max_items)
         enriched = self._merge_rule_fields(items, rule_doc.items)
@@ -418,7 +511,18 @@ class RequirementService:
                 llm_used=True,
                 fallback_used=False,
                 attempts=response.attempts,
-                warnings=list(rule_doc.parse_meta.warnings) + field_warnings,
+                warnings=[
+                    *rule_doc.parse_meta.warnings,
+                    *gate.injection_warnings,
+                    *field_warnings,
+                    *[issue.message for issue in gate.issues if not issue.critical],
+                ],
+                prompt_id=PROMPT_REQUIREMENT_EXTRACTION.prompt_id,
+                prompt_version=PROMPT_REQUIREMENT_EXTRACTION.version,
+                prompt_temperature=PROMPT_REQUIREMENT_EXTRACTION.temperature,
+                prompt_runs=prompt_runs,
+                validation_failures=validation_failures,
+                injection_warnings=gate.injection_warnings,
             ),
         )
 
@@ -440,6 +544,9 @@ class RequirementService:
             exceptions=raw.exceptions,
             acceptance_criteria=raw.acceptance_criteria,
             source_ref=raw.source_ref,
+            evidence_quotes=raw.evidence_quotes,
+            claim_status=_claim_status(raw.claim_status),
+            uncertainty_reason=raw.uncertainty_reason,
         )
 
     @staticmethod
@@ -489,11 +596,20 @@ class RequirementService:
             unit=raw.unit,
             value_charset=charset,
             description=raw.description,
+            evidence_quotes=raw.evidence_quotes,
+            claim_status=_claim_status(raw.claim_status),
+            uncertainty_reason=raw.uncertainty_reason,
         )
 
     @staticmethod
     def _merge_rule_fields(llm_items: list[RequirementItem], rule_items: list[RequirementItem]) -> list[RequirementItem]:
-        """LLM 未给出字段约束时，用规则解析结果补齐（两路互补，提高召回）。"""
+        """Fill missing fields only when the two extraction paths agree strongly.
+
+        V2.1 removed the old 0.4 similarity fallback: it was low enough to pull
+        fields from a different chapter into the current requirement.  A merge
+        now requires an exact normalized title, an identical non-empty source
+        anchor, or a very high title score with the same module.
+        """
         if not rule_items:
             return llm_items
         pool = list(rule_items)
@@ -501,7 +617,19 @@ class RequirementService:
             if item.fields:
                 continue
             best, score = _best_match(item.title, pool)
-            if best is not None and score >= 0.4:
+            exact_title = bool(best and normalize_evidence(item.title) == normalize_evidence(best.title))
+            same_anchor = bool(
+                best
+                and item.source_ref.strip()
+                and best.source_ref.strip()
+                and normalize_evidence(item.source_ref) == normalize_evidence(best.source_ref)
+            )
+            same_module = bool(best and item.module and item.module == best.module)
+            if best is not None and (
+                exact_title
+                or same_anchor
+                or (score >= 0.88 and same_module)
+            ):
                 item.fields = list(best.fields)
                 if not item.main_flow and best.main_flow:
                     item.main_flow = list(best.main_flow)
@@ -533,6 +661,13 @@ class RequirementService:
 def _to_priority(value: str) -> Priority:
     text = (value or "").strip().upper()
     return Priority(text) if text in Priority._value2member_map_ else Priority.P2
+
+
+def _claim_status(value: str) -> ClaimStatus:
+    try:
+        return ClaimStatus(str(value or ClaimStatus.INFERRED.value).strip().lower())
+    except ValueError:
+        return ClaimStatus.INFERRED
 
 
 def _best_match(title: str, pool: list[RequirementItem]) -> tuple[RequirementItem | None, float]:

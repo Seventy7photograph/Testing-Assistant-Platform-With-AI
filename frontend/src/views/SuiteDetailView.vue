@@ -280,6 +280,29 @@ async function remove(): Promise<void> {
           >
             解析：{{ engineLabel(suite.parse_meta) }}
           </span>
+          <span
+            v-if="suite.generation_meta.prompt_runs.length"
+            class="chip chip--ghost mono"
+            :title="suite.generation_meta.prompt_runs.map((run) => `${run.prompt_id}@${run.prompt_version}`).join('\n')"
+          >
+            Prompt {{ suite.generation_meta.prompt_runs.length }} 次
+          </span>
+          <span class="chip chip--pass">
+            原文已核验 {{ suite.generation_meta.evidence_counts.verified ?? 0 }}
+          </span>
+          <span
+            v-if="suite.generation_meta.evidence_counts.inferred"
+            class="chip chip--warn"
+          >
+            推断待复核 {{ suite.generation_meta.evidence_counts.inferred }}
+          </span>
+          <span
+            v-if="suite.generation_meta.unreviewed_requirements.length"
+            class="chip chip--warn"
+            :title="suite.generation_meta.unreviewed_requirements.join('\n')"
+          >
+            未复核 {{ suite.generation_meta.unreviewed_requirements.length }} 条
+          </span>
           <button
             type="button"
             class="sourcelink mono"

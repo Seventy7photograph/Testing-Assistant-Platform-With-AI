@@ -49,7 +49,7 @@ const icon: Record<NoticeKind, string> = {
 .host {
   position: fixed;
   right: var(--s5);
-  bottom: var(--s5);
+  bottom: calc(var(--s5) + 136px + env(safe-area-inset-bottom));
   z-index: 90;
   display: flex;
   flex-direction: column-reverse;
@@ -178,7 +178,7 @@ const icon: Record<NoticeKind, string> = {
   .host {
     right: var(--s3);
     left: var(--s3);
-    bottom: var(--s3);
+    bottom: calc(var(--s3) + 136px + env(safe-area-inset-bottom));
     width: auto;
   }
 }

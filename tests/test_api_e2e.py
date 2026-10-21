@@ -129,6 +129,32 @@ def test_pipeline_endpoint_returns_requirement_and_suite(client) -> None:
     assert data["suite"]["cases"]
     assert isinstance(data["warnings"], list)
     assert data["suite"]["generation_meta"]["methods"] == ["equivalence", "boundary", "scenario"]
+    doc_id = data["requirement_doc"]["doc_id"]
+    document = client.get(f"{API}/documents/{doc_id}")
+    assert document.status_code == 200
+    summary = document.json()["data"]
+    assert summary["filename"] == "注册需求.txt"
+    assert summary["parser"] == "pasted_text"
+    assert summary["has_requirement"] is True
+    downloaded = client.get(f"{API}/documents/{doc_id}/download")
+    assert downloaded.status_code == 200
+    assert downloaded.content.decode("utf-8") == REQUIREMENT_MD
+
+
+def test_requirement_parse_text_is_recorded_in_document_library(client) -> None:
+    text = "# 粘贴解析需求\n\n## 登录\n手机号：11位数字，必填\n"
+    response = client.post(
+        f"{API}/requirements/parse",
+        json={"text": text, "title": "粘贴来源", "use_llm": False, "max_items": 5},
+    )
+    assert response.status_code == 200, response.text
+    doc_id = response.json()["data"]["doc_id"]
+
+    document = client.get(f"{API}/documents/{doc_id}").json()["data"]
+    assert document["filename"] == "粘贴来源.txt"
+    assert document["char_count"] == len(text)
+    assert document["has_requirement"] is True
+    assert document["requirement_items"] >= 1
 
 
 def test_export_excel_and_json(client) -> None:
@@ -426,9 +452,8 @@ def test_suite_list_filters_by_source_requirement(client) -> None:
 def test_batch_delete_suites_reports_missing_and_cleans_orphans(client) -> None:
     """批量删除要如实报告未找到的 ID，并回收没有源文档的孤立解析结果。
 
-    回归：粘贴文本生成用例时会为需求合成 ID 并落盘（用例集详情页靠它渲染追溯
-    矩阵）。最后一份引用它的用例集被删除后，该文件再也没有入口，不清理就会在
-    storage/data/requirements 里无限堆积。
+    回归：粘贴文本现在同时进入文档库，因此删除用例集不能把仍有文档入口的需求清掉。
+    对于历史遗留或源文档已被手动删除的孤儿需求，批量删除仍要负责回收。
     """
     from app.repository import get_repository
 
@@ -458,6 +483,15 @@ def test_batch_delete_suites_reports_missing_and_cleans_orphans(client) -> None:
     result = body["data"]
     assert result["deleted"] == 1, "重复 ID 只应删除一次"
     assert result["missing"] == ["SUITE-does-not-exist"]
-    assert not repository.requirements.exists(doc_id), "无引用的需求应被回收"
+    assert repository.requirements.exists(doc_id), "粘贴文本已进入文档库，不得当成孤儿删除"
+    assert repository.documents.exists(doc_id), "粘贴文本的文档记录应保留"
     assert repository.requirements.exists(second["doc_id"]), "仍被引用的需求不得回收"
+
+    # 模拟历史遗留的孤立需求：源文档已不存在且没有用例集引用。
+    repository.documents.delete(doc_id)
+    client.post(
+        f"{API}/testcases/batch-delete",
+        json={"ids": ["SUITE-does-not-exist"]},
+    )
+    assert not repository.requirements.exists(doc_id), "无文档且无引用的需求应被回收"
 

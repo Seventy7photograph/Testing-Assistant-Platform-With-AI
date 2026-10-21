@@ -334,6 +334,22 @@ async function main() {
     }
     await page.waitForTimeout(400);
 
+    const pastedDocument = await page.evaluate(async () => {
+      const response = await fetch("/api/v1/documents?limit=10");
+      const body = await response.json();
+      return (body.data ?? []).find((item) => item.parser === "pasted_text");
+    });
+    check(
+      "粘贴文本已记录到文档库",
+      Boolean(pastedDocument) &&
+        pastedDocument.has_requirement === true &&
+        pastedDocument.char_count > 0 &&
+        pastedDocument.filename.endsWith(".txt"),
+      pastedDocument
+        ? `${pastedDocument.filename} · ${pastedDocument.char_count} 字`
+        : "未找到 pasted_text 文档记录",
+    );
+
     const overflow = await page.evaluate(() => ({
       scroll: document.documentElement.scrollWidth,
       client: document.documentElement.clientWidth,

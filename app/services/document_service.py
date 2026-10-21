@@ -1,6 +1,7 @@
 """文档服务：上传校验 + 解析 + 图片识别 + 落盘。"""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
@@ -22,11 +23,51 @@ from app.vision.registry import build_vision_extractor
 
 logger = get_logger(__name__)
 
+_INVALID_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
 
 class DocumentService:
     def __init__(self, settings: Settings | None = None, repository: Repository | None = None) -> None:
         self.settings = settings or get_settings()
         self.repository = repository or get_repository()
+
+    # ------------------------------------------------------------------ #
+    def save_text(self, *, text: str, title: str = "粘贴的需求文本") -> DocumentRecord:
+        """把粘贴文本保存为可追溯的文档记录。
+
+        粘贴入口过去只保存需求模型，导致用例集详情能追溯需求，文档库却看不到来源。
+        这里使用与上传入口相同的 ``DocumentRecord`` 契约，并落一份 UTF-8 原文，
+        因此文档详情、下载、删除与图片能力都能沿用现有流程。
+        """
+        content = text or ""
+        if not content.strip():
+            raise DocumentParseError("粘贴的需求文本为空，无法保存到文档库。")
+
+        doc_id = new_id("DOC-")
+        data = content.encode("utf-8")
+        filename = self._text_filename(title)
+        stored_path = self._store_raw(doc_id, "txt", data)
+        record = DocumentRecord(
+            doc_id=doc_id,
+            filename=filename,
+            extension="txt",
+            size_bytes=len(data),
+            text=content,
+            text_base=content,
+            char_count=len(content),
+            line_count=content.count("\n") + 1,
+            encoding="utf-8",
+            stored_path=str(stored_path),
+            parser="pasted_text",
+        )
+        self.repository.documents.save(record)
+        logger.info(
+            "粘贴文本已入库：%s（%s，%d 字符）",
+            doc_id,
+            filename,
+            record.char_count,
+        )
+        return record
 
     # ------------------------------------------------------------------ #
     async def save_and_parse(self, *, filename: str, data: bytes) -> DocumentRecord:
@@ -191,6 +232,15 @@ class DocumentService:
         return supported_extensions()
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _text_filename(title: str) -> str:
+        stem = _INVALID_FILENAME_RE.sub("_", (title or "").strip()).strip(" ._")
+        if not stem:
+            stem = "粘贴的需求文本"
+        if stem.lower().endswith(".txt"):
+            stem = stem[:-4].rstrip(" ._") or "粘贴的需求文本"
+        return f"{stem[:80]}.txt"
+
     def _store_raw(self, doc_id: str, extension: str, data: bytes) -> Path:
         """保存原始文件，便于问题回溯（失败不影响主流程）。"""
         suffix = f".{extension}" if extension else ""

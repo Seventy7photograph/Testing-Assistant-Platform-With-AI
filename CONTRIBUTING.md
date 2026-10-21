@@ -143,3 +143,5 @@ git checkout develop && git merge --no-ff release/2.0   # 回合修复
 - [ ] `python -m pytest` 全绿，且离线冒烟脚本通过
 - [ ] `frontend` 已 `npm run build`，且 `app/static/` 产物已一并提交（平台按「后端托管前端」交付，产物随仓库提供）
 - [ ] 打 tag：`git tag -a vX.Y.Z -m "Release vX.Y.Z"` 并推送
+- [ ] GitHub Release 已出现在仓库 Release 列表（`.github/workflows/release.yml` 会按 tag
+      与 `CHANGELOG.md` 自动创建；发布后必须人工确认，不得只推 tag）

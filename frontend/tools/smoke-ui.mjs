@@ -178,14 +178,20 @@ async function main() {
     console.log("\n=== 生成页：方法清单与后端一致性 ===");
     await page.goto(`${base}/generate`, { waitUntil: "networkidle" });
     await page.waitForSelector(".methods");
-    check("生成页首屏显示吸底送检栏", await page.locator(".sticky-actions").isVisible());
+    check("生成页首屏显示吸底送检栏", (await page.locator(".sticky-actions").count()) === 1);
+    const initialGenerateBar = await page.locator(".sticky-actions .el-button--primary").textContent();
+    check("生成页底部栏主操作是生成用例集", initialGenerateBar?.includes("生成用例集") === true, initialGenerateBar ?? "");
 
     // SPA 内切换菜单：Pinia 会话必须保留输入，KeepAlive 也必须保住组件状态。
     await page.fill("textarea", "状态缓存验证：手机号：11位数字，必填");
     await page.locator('a[href="/"]').first().click();
+    check("总览不残留生成页或报告页吸底栏", (await page.locator(".sticky-actions").count()) === 0);
     await page.locator('a[href="/generate"]').first().click();
+    await page.waitForTimeout(200);
     const cachedInput = await page.locator("textarea").inputValue();
     check("菜单切换后生成输入仍在", cachedInput.includes("状态缓存验证"), cachedInput.slice(0, 24));
+    const returnedBarCount = await page.locator(".sticky-actions").count();
+    check("返回生成页只显示生成页吸底栏", returnedBarCount === 1, `count=${returnedBarCount}`);
     await page.fill("textarea", "");
     const uiMethods = await page.$$eval(".methods .method", (nodes) =>
       nodes.map((node) => ({
@@ -281,10 +287,23 @@ async function main() {
     await page.waitForTimeout(200);
     const reportCached = await page.locator("textarea").first().inputValue();
     check("报告输入在菜单切换后保留", reportCached.includes("total_cases"), reportCached);
-    check("报告工作台首屏显示吸底送检栏", await page.locator(".sticky-actions").isVisible());
+    check("报告工作台首屏显示吸底送检栏", (await page.locator(".sticky-actions").count()) === 1);
+    const reportBar = await page.locator(".sticky-actions .el-button--primary").textContent();
+    check("报告工作台底部栏主操作是生成报告", reportBar?.includes("生成报告") === true, reportBar ?? "");
+
+    // 回归：报告页用 Teleport 挂到 body，KeepAlive 停用后必须移除底部栏。
+    await page.locator('a[href="/"]').first().click();
+    check("离开报告页后总览无吸底栏", (await page.locator(".sticky-actions").count()) === 0);
+    await page.locator('a[href="/report"]').first().click();
+    await page.waitForTimeout(200);
+    check("返回报告页只显示报告页吸底栏", (await page.locator(".sticky-actions").count()) === 1);
 
     console.log("\n=== 生成页：提示是否刷屏 / 长文本是否撑宽页面 ===");
-    await page.goto(`${base}/generate`, { waitUntil: "networkidle" });
+    await page.locator('a[href="/generate"]').first().click();
+    await page.waitForTimeout(200);
+    check("从报告页切到生成页不会残留报告底部栏", (await page.locator(".sticky-actions").count()) === 1);
+    const switchedGenerateBar = await page.locator(".sticky-actions .el-button--primary").textContent();
+    check("切到生成页后底部栏恢复生成用例集", switchedGenerateBar?.includes("生成用例集") === true, switchedGenerateBar ?? "");
     // 关掉「解析用大模型」：让规则解析的结果确定，冒烟结论不受 Provider 影响。
     // 注意 el-switch 真正可点的是外层 .el-switch（里层的 input 是隐藏的原生控件）。
     const parseLlmSwitch = page.locator('.switch:has-text("解析用大模型") .el-switch');

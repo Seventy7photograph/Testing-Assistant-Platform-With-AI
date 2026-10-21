@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onActivated, onDeactivated, ref } from "vue";
+
 import { useUiStore } from "@/stores/ui";
 
 withDefaults(
@@ -13,11 +15,31 @@ withDefaults(
 
 const emit = defineEmits<{ (event: "primary"): void }>();
 const ui = useUiStore();
+/**
+ * Teleport targets body, so a cached KeepAlive subtree does not automatically
+ * remove the teleported node when its owning route is deactivated. Keep it in
+ * sync with the component lifecycle to prevent a report action bar leaking onto
+ * the generator or dashboard.
+ */
+const active = ref(true);
+
+onActivated(() => {
+  active.value = true;
+});
+
+onDeactivated(() => {
+  active.value = false;
+});
 </script>
 
 <template>
   <Teleport to="body">
-    <div class="sticky-actions" :data-collapsed="ui.railCollapsed ? '1' : '0'">
+    <div
+      v-if="active"
+      class="sticky-actions"
+      data-action-bar
+      :data-collapsed="ui.railCollapsed ? '1' : '0'"
+    >
       <div class="sticky-actions__inner">
         <p class="sticky-actions__summary" :title="summary">{{ summary }}</p>
         <slot />

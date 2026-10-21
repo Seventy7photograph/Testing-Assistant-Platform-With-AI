@@ -1,0 +1,88 @@
+name: Publish GitHub Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: github-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Ensure version has a GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Read application version
+        id: version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          from pathlib import Path
+
+          text = Path("app/__init__.py").read_text(encoding="utf-8")
+          match = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+          if not match:
+              raise SystemExit("app/__init__.py has no __version__")
+          print(f"version={match.group(1)}")
+          PY
+
+      - name: Create release if tag exists and release is missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG does not exist yet; skipping release creation."
+            exit 0
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub Release $TAG already exists."
+            exit 0
+          fi
+
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          pattern = re.compile(
+              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+              re.MULTILINE | re.DOTALL,
+          )
+          match = pattern.search(changelog)
+          if not match:
+              raise SystemExit(f"CHANGELOG.md has no section for {version}")
+
+          heading = match.group(0).splitlines()[0]
+          suffix = heading.split("·", 1)[1].strip() if "·" in heading else version
+          body = match.group(1).strip()
+          body += (
+              "\n\n---\n\n"
+              f"Commit: `{os.environ.get('GITHUB_SHA', '')}`\n"
+              f"Full changelog: https://github.com/{os.environ['GITHUB_REPOSITORY']}/blob/v{version}/CHANGELOG.md"
+          )
+          Path(os.environ["RUNNER_TEMP"], "release-title.txt").write_text(
+              f"v{version} · {suffix}", encoding="utf-8"
+          )
+          Path(os.environ["RUNNER_TEMP"], "release-body.md").write_text(body + "\n", encoding="utf-8")
+          PY
+
+          gh release create "$TAG" \
+            --title "$(cat "$RUNNER_TEMP/release-title.txt")" \
+            --notes-file "$RUNNER_TEMP/release-body.md" \
+            --verify-tag

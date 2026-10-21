@@ -38,6 +38,7 @@ from app.schemas.requirement import (
 )
 from app.schemas.traceability import RequirementDiff, TraceabilityMatrix
 from app.services import rule_parser
+from app.services.document_service import DocumentService
 from app.services.evidence import (
     detect_prompt_injection,
     gate_requirement_payload,
@@ -308,6 +309,15 @@ class RequirementService:
         if not (text or "").strip():
             raise EmptyDocumentError("需求内容为空，请检查文档或粘贴文本。")
 
+        if doc_id is None and persist:
+            record = DocumentService(self.settings, self.repository).save_text(
+                text=text,
+                title=title,
+            )
+            doc_id = record.doc_id
+            source_file = source_file or record.filename
+            if not source_type or source_type == "text":
+                source_type = record.extension
         doc_id = doc_id or new_id("DOC-")
         with Timer() as timer:
             doc = await self._build_doc(

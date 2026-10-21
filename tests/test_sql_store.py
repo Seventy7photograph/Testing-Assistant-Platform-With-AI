@@ -81,6 +81,26 @@ class TestBackendSwitch:
         sql_suite = sql_repo.suites.list_recent(5)[0]
         assert [case.title for case in json_suite.cases] == [case.title for case in sql_suite.cases]
 
+    def test_pasted_text_document_is_saved_on_both_backends(self, tmp_path: Path) -> None:
+        for backend in ("json", "sqlite"):
+            repo = build_repository(make_settings(tmp_path / backend, backend))
+            service = PipelineService(repo.settings, NullProvider(repo.settings), repo)
+            result = asyncio.run(
+                service.run(
+                    text=SAMPLE,
+                    title=f"粘贴需求-{backend}",
+                    methods=["equivalence"],
+                    use_llm=False,
+                )
+            )
+            doc_id = result.requirement_doc.doc_id
+            record = repo.documents.get(doc_id)
+            assert record.filename == f"粘贴需求-{backend}.txt"
+            assert record.parser == "pasted_text"
+            assert Path(record.stored_path).read_text(encoding="utf-8") == SAMPLE
+            assert repo.requirements.exists(doc_id)
+            assert repo.count_linked_requirements() == 1
+
     def test_sqlite_stores_are_isolated_by_kind(self, tmp_path: Path) -> None:
         """三类实体同名主键不能互相覆盖（同一张表用 kind 区分）。"""
         repo = build_repository(make_settings(tmp_path, "sqlite"))

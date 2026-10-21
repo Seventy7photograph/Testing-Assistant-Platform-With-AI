@@ -19,10 +19,13 @@ from fastapi import HTTPException
 from dataclasses import dataclass
 
 from app.core.config import Settings
+from app.core.logging import get_logger
 from app.llm.base import PROBE_MAX_TOKENS
 from app.llm.factory import get_effective_settings
 from app.report.config import provider_label
-from .prompts import SYSTEM_PROMPT
+from .prompts import PROMPT_SPEC, SYSTEM_PROMPT
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -62,7 +65,11 @@ def llm_settings(
         api_key=(effective.llm_api_key or "").strip(),
         base_url=(effective.llm_base_url or "https://api.deepseek.com").rstrip("/"),
         model=(model or effective.llm_model or "deepseek-flash").strip() or "deepseek-flash",
-        temperature=effective.llm_temperature if temperature is None else temperature,
+        temperature=(
+            float(effective.report_temperature)
+            if temperature is None
+            else temperature
+        ),
         timeout=float(effective.llm_timeout or 60.0),
         max_retries=max(0, int(effective.llm_max_retries or 0)),
     )
@@ -230,6 +237,14 @@ async def complete(user_prompt: str, settings: LLMSettings) -> tuple[str, dict[s
     """一次性生成，返回 (正文, usage)。"""
 
     _require_key(settings)
+    logger.info(
+        "Prompt use: id=%s version=%s task=%s model=%s temperature=%s mode=sync",
+        PROMPT_SPEC.prompt_id,
+        PROMPT_SPEC.version,
+        PROMPT_SPEC.task,
+        settings.model,
+        settings.temperature,
+    )
     response = await _request_with_retry(settings, user_prompt)
     try:
         data = response.json()
@@ -250,6 +265,14 @@ async def stream(
     """
 
     _require_key(settings)
+    logger.info(
+        "Prompt use: id=%s version=%s task=%s model=%s temperature=%s mode=stream",
+        PROMPT_SPEC.prompt_id,
+        PROMPT_SPEC.version,
+        PROMPT_SPEC.task,
+        settings.model,
+        settings.temperature,
+    )
     attempts = settings.max_retries + 1
     include_usage = usage_sink is not None
     attempt = 0

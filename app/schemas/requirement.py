@@ -7,12 +7,21 @@
 """
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.utils import now_iso
 from app.schemas.common import DataType, Priority, RequirementType, ValueCharset
+
+
+class ClaimStatus(str, Enum):
+    """How strongly a model-derived claim is backed by source evidence."""
+
+    VERIFIED = "verified"
+    INFERRED = "inferred"
+    REJECTED = "rejected"
 
 
 class FieldConstraint(BaseModel):
@@ -36,6 +45,9 @@ class FieldConstraint(BaseModel):
         description="长度类字段的测试数据字符集：text(字母) / digits(数字)",
     )
     description: str = ""
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: ClaimStatus = ClaimStatus.VERIFIED
+    uncertainty_reason: str = ""
 
     @field_validator("enum_values", mode="before")
     @classmethod
@@ -112,11 +124,22 @@ class RequirementItem(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     source_ref: str = Field(default="", description="来源锚点，如摘要/章节标题")
     raw_text: str = Field(default="", description="该条需求的原文片段，便于人工回溯")
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: ClaimStatus = ClaimStatus.VERIFIED
+    uncertainty_reason: str = ""
 
     @property
     def testable_fields(self) -> list[FieldConstraint]:
-        """有实际可测约束的字段（无约束的纯文本字段会被设计引擎降级处理）。"""
-        return [f for f in self.fields if f.name]
+        """Fields allowed to enter deterministic design rules.
+
+        Inferred model claims remain visible for human review but are not fed to
+        the rule engine as if they were source facts.
+        """
+        return [
+            field
+            for field in self.fields
+            if field.name and field.claim_status is ClaimStatus.VERIFIED
+        ]
 
     @property
     def flows(self) -> list[str]:
@@ -135,6 +158,12 @@ class ParseMeta(BaseModel):
     elapsed_ms: int = 0
     item_count: int = 0
     warnings: list[str] = Field(default_factory=list)
+    prompt_id: str = ""
+    prompt_version: str = ""
+    prompt_temperature: float | None = None
+    prompt_runs: list[dict[str, Any]] = Field(default_factory=list)
+    validation_failures: list[str] = Field(default_factory=list)
+    injection_warnings: list[str] = Field(default_factory=list)
 
 
 class RequirementDoc(BaseModel):

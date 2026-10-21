@@ -22,10 +22,12 @@ from app.design.base import (
     pattern_is_digit_only,
     pattern_sample,
 )
+from app.llm.prompt_registry import PROMPT_SCENARIO_ENRICHMENT
 from app.llm.prompts import build_scenario_messages
 from app.schemas.common import CaseSource, CaseType, DesignMethod, Priority, ValueCharset
-from app.schemas.requirement import FieldConstraint, RequirementItem
+from app.schemas.requirement import ClaimStatus, FieldConstraint, RequirementItem
 from app.schemas.testcase import TestCase, TestStep
+from app.services.evidence import quote_in_source, requirement_source_text
 
 logger = get_logger(__name__)
 
@@ -70,11 +72,23 @@ class _LLMScenarioCase(BaseModel):
     steps: list[_LLMStep] = Field(default_factory=list)
     expected_result: str = ""
     test_data: dict[str, str] = Field(default_factory=dict)
+    evidence_quotes: list[str] = Field(default_factory=list)
+    claim_status: str = "inferred"
+    uncertainty_reason: str = ""
 
     @field_validator("title", "expected_result", mode="before")
     @classmethod
     def _to_text(cls, value: Any) -> str:
         return "" if value is None else str(value)
+
+    @field_validator("evidence_quotes", mode="before")
+    @classmethod
+    def _to_quotes(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value.strip()] if value.strip() else []
+        return [str(item).strip() for item in value if str(item).strip()]
 
     @field_validator("preconditions", mode="before")
     @classmethod
@@ -226,11 +240,26 @@ class ScenarioStrategy(DesignStrategy):
         )
         try:
             self.context.llm_call_count += 1
-            response = await self.context.llm.complete_json(messages, expect=dict)
+            response = await self.context.llm.complete_json(
+                messages,
+                expect=dict,
+                prompt=PROMPT_SCENARIO_ENRICHMENT,
+            )
         except LLMError as exc:
             self.context.warn(f"场景法 LLM 增强失败（{exc.code}），已降级为规则用例：{exc.message}")
             return []
 
+        self.context.prompt_runs.append(
+            {
+                "prompt_id": response.prompt_id or PROMPT_SCENARIO_ENRICHMENT.prompt_id,
+                "prompt_version": response.prompt_version or PROMPT_SCENARIO_ENRICHMENT.version,
+                "model": response.model or self.context.llm.model,
+                "temperature": response.temperature,
+                "requirement_id": item.id,
+                "attempt": response.attempts,
+                "validation_failures": [],
+            }
+        )
         raw_cases = (response.parsed or {}).get("cases")
         if not isinstance(raw_cases, list):
             self.context.warn("场景法 LLM 返回缺少 cases 数组，已忽略该次增强结果。")
@@ -270,7 +299,18 @@ class ScenarioStrategy(DesignStrategy):
                 + "。如与用例意图不符请人工复核。"
             )
 
-        return self.build_case(
+        source = requirement_source_text(item)
+        verified_quotes = [
+            quote for quote in parsed.evidence_quotes if quote_in_source(quote, source)
+        ]
+        status = ClaimStatus.VERIFIED if verified_quotes else ClaimStatus.INFERRED
+        if not verified_quotes:
+            self.context.warn(
+                f"场景法 LLM 用例「{truncate(parsed.title, 30)}」未找到可核验证据，"
+                "已标为模型推断并保留人工复核。"
+            )
+
+        case = self.build_case(
             item,
             title=f"[场景-LLM] {parsed.title}",
             case_type=case_type,
@@ -283,6 +323,12 @@ class ScenarioStrategy(DesignStrategy):
             tags=["LLM增强", "需复核"],
             source=CaseSource.LLM,
         )
+        case.evidence_quotes = verified_quotes[:5]
+        case.claim_status = status
+        case.uncertainty_reason = (
+            "" if verified_quotes else (parsed.uncertainty_reason or "未找到原文逐字证据")
+        )
+        return case
 
 
 # 这些用例类型代表「正常路径」，其测试数据必须满足字段自身约束；
@@ -293,7 +339,7 @@ _VALID_CASE_TYPES = frozenset({CaseType.FUNCTIONAL, CaseType.BOUNDARY, CaseType.
 def _index_fields(item: RequirementItem) -> dict[str, FieldConstraint]:
     """按字段名与字段中文标签建立索引，兼容 LLM 用标签当 key 的情况。"""
     fields: dict[str, FieldConstraint] = {}
-    for field in item.fields:
+    for field in item.testable_fields:
         fields.setdefault(field.name, field)
         if field.label:
             fields.setdefault(field.label, field)

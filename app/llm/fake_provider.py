@@ -59,6 +59,9 @@ _FAKE_REQUIREMENT_DOC: dict[str, Any] = {
             "exceptions": ["短信通道异常", "数据库写入失败"],
             "acceptance_criteria": ["注册成功后自动登录并跳转首页"],
             "source_ref": "假数据",
+            "evidence_quotes": ["手机号"],
+            "claim_status": "verified",
+            "uncertainty_reason": "",
         }
     ],
 }
@@ -75,6 +78,9 @@ _FAKE_SCENARIO_CASES: dict[str, Any] = {
             ],
             "expected_result": "数据库不产生重复用户记录",
             "test_data": {"phone": "13800000000"},
+            "evidence_quotes": ["手机号"],
+            "claim_status": "verified",
+            "uncertainty_reason": "",
         },
         {
             "title": "弱网环境下重复点击提交按钮",
@@ -84,6 +90,9 @@ _FAKE_SCENARIO_CASES: dict[str, Any] = {
             "steps": [{"action": "连续点击提交 5 次", "expected": "按钮置灰并只提交一次"}],
             "expected_result": "不产生重复注册记录",
             "test_data": {},
+            "evidence_quotes": ["手机号"],
+            "claim_status": "verified",
+            "uncertainty_reason": "",
         },
     ]
 }
@@ -96,12 +105,18 @@ _FAKE_REVIEW: dict[str, Any] = {
             "target": "手机号 有效等价类",
             "issue": "假数据：规则用例未覆盖「手机号已注册」这一分支，而业务规则明确要求提示直接登录。",
             "suggestion": "补充一条「手机号已注册时提交」的异常用例。",
+            "evidence_quotes": ["手机号"],
+            "claim_status": "verified",
+            "uncertainty_reason": "",
         },
         {
             "severity": "info",
             "target": "年龄",
             "issue": "假数据：年龄字段允许为空，但需求未说明为空时按什么规则处理。",
             "suggestion": "确认空值语义后再决定是否需要单独的用例。",
+            "evidence_quotes": ["年龄"],
+            "claim_status": "verified",
+            "uncertainty_reason": "",
         },
     ],
     "cases": [
@@ -115,6 +130,9 @@ _FAKE_REVIEW: dict[str, Any] = {
             "expected_result": "不产生重复用户记录",
             "test_data": {"phone": "13800000000"},
             "reason": "业务规则「同一手机号不可重复注册」在规则用例里没有对应用例。",
+            "evidence_quotes": ["手机号"],
+            "claim_status": "verified",
+            "uncertainty_reason": "",
         },
         {
             "title": "并发提交同一手机号",
@@ -126,6 +144,9 @@ _FAKE_REVIEW: dict[str, Any] = {
             "expected_result": "数据库无重复记录",
             "test_data": {},
             "reason": "并发属于规则方法覆盖不到的测试点。",
+            "evidence_quotes": ["手机号"],
+            "claim_status": "inferred",
+            "uncertainty_reason": "并发场景由测试经验推断",
         },
     ],
 }

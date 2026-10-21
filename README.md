@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883.svg)](https://vuejs.org/)
-[![Version](https://img.shields.io/badge/version-v2.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v2.1.1-blue.svg)](CHANGELOG.md)
 
 > 面向测试工程师的**一体化本地 / 内网工作台**：把「需求文档 → 测试用例」与「测试执行数据 → 测试报告」
 > 两条日常高频链路，收进同一个控制台、同一套配置、同一份存储。
@@ -35,7 +35,7 @@
 
 | 能力 | 说明 |
 | --- | --- |
-| 文档上传与解析 | `.docx` / `.pdf` / `.xlsx` / `.txt` / `.md` / `.csv` / `.json` / 图片（`.png` `.jpg` `.webp` `.bmp` `.tif`），兼容 GBK 等中文编码，Word 表格结构化平铺，Excel 字段表与需求清单分形态解析 |
+| 文档上传与解析 | `.docx` / `.pdf` / `.xlsx` / `.txt` / `.md` / `.csv` / `.json` / 图片（`.png` `.jpg` `.webp` `.bmp` `.tif`），兼容 GBK 等中文编码；粘贴文本同样作为 `.txt` 文档入库并可追溯 |
 | 图片识别（多模态 OCR） | 文档内嵌图 / 扫描件整页 / 直接上传的截图 → 文字。**主模型不必支持图片**：识别走独立通道（多模态模型 → 本地 OCR → 云端 OCR 依次降级），识别结果回填到正文的图片位置，模型推断部分单独成段、不参与字段约束抽取 |
 | 需求结构化 | LLM 结构化抽取 + 规则引擎解析双路，LLM 缺失 / 失败自动降级并显式告警 |
 | Prompt 可信工程 | 四个任务独立 Prompt ID / 版本 / 输入边界；证据归一化校验、失败关闭、单次修复、注入告警与 20 个离线对抗样本 |

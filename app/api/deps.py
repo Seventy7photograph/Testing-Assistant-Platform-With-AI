@@ -16,6 +16,7 @@ from app.llm.factory import get_effective_settings, get_llm_provider
 from app.repository import Repository, get_repository
 from app.services.document_service import DocumentService
 from app.services.export_service import ExportService
+from app.services.api_service import ApiService
 from app.services.pipeline_service import PipelineService
 from app.services.requirement_service import RequirementService
 
@@ -59,6 +60,13 @@ def export_service_dep(
     return ExportService(settings, repository)
 
 
+def api_service_dep(
+    settings: Annotated[Settings, Depends(settings_dep)],
+    repository: Annotated[Repository, Depends(repository_dep)],
+) -> ApiService:
+    return ApiService(settings, repository)
+
+
 def pipeline_service_dep(
     settings: Annotated[Settings, Depends(settings_dep)],
     llm: Annotated[LLMProvider, Depends(llm_dep)],
@@ -74,4 +82,5 @@ DocumentServiceDep = Annotated[DocumentService, Depends(document_service_dep)]
 RequirementServiceDep = Annotated[RequirementService, Depends(requirement_service_dep)]
 DesignEngineDep = Annotated[DesignEngine, Depends(design_engine_dep)]
 ExportServiceDep = Annotated[ExportService, Depends(export_service_dep)]
+ApiServiceDep = Annotated[ApiService, Depends(api_service_dep)]
 PipelineServiceDep = Annotated[PipelineService, Depends(pipeline_service_dep)]

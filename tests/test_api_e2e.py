@@ -71,6 +71,7 @@ def test_health_reports_capabilities(client) -> None:
     assert methods["decision_table"] and methods["cause_effect"] and methods["orthogonal"]
     assert "excel" in {item["name"] for item in data["export_formats"]}
     assert {"csv", "xmind", "testlink"} <= {item["name"] for item in data["export_formats"]}
+    assert "postman" in {item["name"] for item in data["export_formats"]}
     assert "docx" in data["supported_extensions"]
 
 
@@ -175,7 +176,14 @@ def test_export_excel_and_json(client) -> None:
     assert download.headers["content-type"].startswith("application/json")
 
     formats = client.get(f"{API}/export/formats").json()["data"]
-    assert {item["name"] for item in formats} == {"excel", "json", "csv", "xmind", "testlink"}
+    assert {item["name"] for item in formats} == {
+        "excel",
+        "json",
+        "csv",
+        "xmind",
+        "testlink",
+        "postman",
+    }
 
 
 def test_export_unknown_suite_returns_404(client) -> None:

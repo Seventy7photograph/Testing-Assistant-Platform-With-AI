@@ -19,7 +19,7 @@ interface Topic {
 const topics: Record<string, Topic> = {
   dashboard: {
     title: "总览",
-    intro: "这里把两条链路的状态放在一起：左边是你手上的素材，右边是你产出的交付物。",
+    intro: "这里把两条 AI 工作流的状态放在一起：左边是你手上的素材，右边是你产出的交付物。",
     points: [
       { label: "刻度", text: "数字全部来自服务端实际存储，不是估算值。" },
       { label: "降级", text: "未配置大模型时，用例链路仍可用；报告链路会在生成前明确提示。" },
@@ -52,6 +52,16 @@ const topics: Record<string, Topic> = {
       { label: "导出", text: "Excel 四个 Sheet：用例明细 / 用例统计 / 需求追溯 / 生成信息。" },
     ],
   },
+  apis: {
+    title: "接口资产",
+    intro: "导入 OpenAPI 3 规范，按 operation 查看来源、缺口与契约用例，再导出可直接导入的 Postman Collection。",
+    points: [
+      { label: "只信规范", text: "路径、参数、schema 断言只来自规范化 OpenAPI；缺失约束会标为待补充，不编造边界。" },
+      { label: "引用", text: "支持本地 $ref 展开与循环检测；外部引用会明确报错，不会静默丢掉 operation。" },
+      { label: "凭据", text: "导出只保留 {{baseUrl}}、{{authToken}} 等占位符，不写入真实 Token / API Key。" },
+    ],
+    steps: ["上传 OpenAPI JSON / YAML", "打开规范查看 operation", "展开用例核对断言", "导出 Postman 2.1"],
+  },
   report: {
     title: "报告工作台",
     intro: "指标由代码算，判断由模型写。左侧送检、右侧读数，生成过程是流式的。",
@@ -72,7 +82,7 @@ const topics: Record<string, Topic> = {
   },
   settings: {
     title: "大模型与阈值",
-    intro: "两条链路共用同一份大模型配置；判定阈值只作用于报告的发版结论。",
+    intro: "两条 AI 链路共用同一份大模型配置；判定阈值只作用于报告的发版结论。",
     points: [
       { label: "优先级", text: "界面保存的覆盖 > .env 基线。可以逐项恢复，也可以一键回到 .env。" },
       { label: "密钥", text: "只回显掩码，不落明文到日志；填写后无需重启即可生效。" },

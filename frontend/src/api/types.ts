@@ -359,6 +359,200 @@ export interface ExportFormatInfo {
   extension: string;
 }
 
+/* ================= 接口测试资产（V2.2） ================= */
+
+export interface ApiServer {
+  url: string;
+  description: string;
+}
+
+export interface ApiSecurityScheme {
+  name: string;
+  type: string;
+  scheme: string;
+  location: string;
+  parameter_name: string;
+  bearer_format: string;
+  description: string;
+}
+
+export interface ApiParameter {
+  name: string;
+  location: "path" | "query" | "header" | "cookie";
+  required: boolean;
+  description: string;
+  deprecated: boolean;
+  example: unknown;
+  schema: Record<string, unknown>;
+  source_ref: string;
+}
+
+export interface ApiMediaType {
+  content_type: string;
+  schema: Record<string, unknown>;
+  example: unknown;
+  examples: Record<string, unknown>;
+  source_ref: string;
+}
+
+export interface ApiRequestBody {
+  required: boolean;
+  description: string;
+  content: ApiMediaType[];
+  source_ref: string;
+}
+
+export interface ApiResponseDefinition {
+  status_code: string;
+  description: string;
+  content: ApiMediaType[];
+  headers: ApiParameter[];
+  source_ref: string;
+}
+
+export interface ApiOperation {
+  operation_id: string;
+  method: string;
+  path: string;
+  summary: string;
+  description: string;
+  tags: string[];
+  deprecated: boolean;
+  parameters: ApiParameter[];
+  request_body: ApiRequestBody | null;
+  responses: ApiResponseDefinition[];
+  security: Record<string, string[]>[];
+  servers: ApiServer[];
+  requirement_ids: string[];
+  source_ref: string;
+  warnings: string[];
+}
+
+export interface ApiSpecStats {
+  operations: number;
+  cases: number;
+  positive_cases: number;
+  negative_cases: number;
+  contract_assertions: number;
+  manual_assertions: number;
+  operation_gaps: number;
+}
+
+export interface ApiReviewFinding {
+  severity: "info" | "warning";
+  kind: "case_gap" | "assertion_gap" | "documentation";
+  operation_id: string;
+  target: string;
+  issue: string;
+  suggestion: string;
+  source_ref: string;
+  claim_status: "inferred" | "verified" | "rejected";
+  uncertainty_reason: string;
+}
+
+export interface ApiReviewMeta {
+  requested: boolean;
+  used: boolean;
+  status: "running" | "completed" | "failed";
+  provider: string;
+  model: string;
+  prompt_id: string;
+  prompt_version: string;
+  temperature: number | null;
+  llm_calls: number;
+  reviewed_operations: number;
+  elapsed_ms: number;
+  warnings: string[];
+}
+
+export interface ApiReviewResult {
+  spec_id: string;
+  findings: ApiReviewFinding[];
+  meta: ApiReviewMeta;
+  created_at: string;
+}
+
+export interface ApiSpec {
+  spec_id: string;
+  title: string;
+  version: string;
+  openapi_version: string;
+  description: string;
+  source_file: string;
+  source_format: string;
+  source_hash: string;
+  size_bytes: number;
+  servers: ApiServer[];
+  security_schemes: ApiSecurityScheme[];
+  operations: ApiOperation[];
+  stats: ApiSpecStats;
+  ai_review: ApiReviewResult | null;
+  warnings: string[];
+  created_at: string;
+}
+
+export type ApiSpecSummary = Omit<
+  ApiSpec,
+  "servers" | "security_schemes" | "operations" | "source_hash" | "ai_review"
+>;
+
+export interface ExecutionSpec {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  query: Record<string, string>;
+  path_params: Record<string, string>;
+  cookies: Record<string, string>;
+  body: unknown;
+  body_kind: string;
+  environment_variables: {
+    name: string;
+    description: string;
+    secret: boolean;
+  }[];
+}
+
+export interface ApiAssertion {
+  kind: "status" | "header" | "json";
+  path: string;
+  operator: string;
+  expected: unknown;
+  description: string;
+  source_ref: string;
+  status: "defined" | "manual";
+}
+
+export interface ApiCaseSpec {
+  case_id: string;
+  spec_id: string;
+  operation_id: string;
+  title: string;
+  method: string;
+  path: string;
+  category: "positive" | "negative" | "boundary" | "security" | "contract";
+  priority: Priority;
+  preconditions: string[];
+  execution: ExecutionSpec;
+  assertions: ApiAssertion[];
+  requirement_ids: string[];
+  tags: string[];
+  source_ref: string;
+  warnings: string[];
+  created_at: string;
+}
+
+export interface ApiCaseCollection {
+  spec_id: string;
+  operation_id: string | null;
+  cases: ApiCaseSpec[];
+}
+
+export interface ApiImportResult {
+  spec: ApiSpec;
+  cases: ApiCaseSpec[];
+  warnings: string[];
+}
+
 export interface HealthInfo {
   app_name: string;
   version: string;

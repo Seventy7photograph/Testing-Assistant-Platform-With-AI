@@ -37,6 +37,12 @@ class BadRequestError(AppError):
     default_message = "请求参数不合法"
 
 
+class ConflictError(AppError):
+    code = "CONFLICT"
+    http_status = 409
+    default_message = "资源正在处理中"
+
+
 class NotFoundError(AppError):
     code = "NOT_FOUND"
     http_status = 404
@@ -59,6 +65,12 @@ class DocumentParseError(AppError):
     code = "DOCUMENT_PARSE_FAILED"
     http_status = 422
     default_message = "文档解析失败"
+
+
+class OpenApiParseError(AppError):
+    code = "OPENAPI_PARSE_FAILED"
+    http_status = 422
+    default_message = "OpenAPI 规范解析失败"
 
 
 class EmptyDocumentError(DocumentParseError):

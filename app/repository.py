@@ -24,6 +24,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import AppError, NotFoundError
 from app.core.logging import get_logger
 from app.schemas.document import DocumentRecord
+from app.schemas.api_testing import ApiCaseSpec, ApiSpec
 from app.schemas.requirement import RequirementDoc
 from app.schemas.testcase import TestCaseSuite
 
@@ -183,6 +184,12 @@ class Repository:
         self.suites: JsonObjectStore[TestCaseSuite] = JsonObjectStore(
             base / "suites", TestCaseSuite, id_attr="suite_id", label="用例集"
         )
+        self.api_specs: JsonObjectStore[ApiSpec] = JsonObjectStore(
+            base / "api_specs", ApiSpec, id_attr="spec_id", label="接口规范"
+        )
+        self.api_cases: JsonObjectStore[ApiCaseSpec] = JsonObjectStore(
+            base / "api_cases", ApiCaseSpec, id_attr="case_id", label="接口用例"
+        )
 
     def _build_sql_collections(self) -> None:
         # 延迟导入：只用 JSON 后端时不必依赖 SQLAlchemy。
@@ -198,6 +205,12 @@ class Repository:
         self.suites = SqlObjectStore(
             self.engine, TestCaseSuite, kind="suites", id_attr="suite_id", label="用例集"
         )
+        self.api_specs = SqlObjectStore(
+            self.engine, ApiSpec, kind="api_specs", id_attr="spec_id", label="接口规范"
+        )
+        self.api_cases = SqlObjectStore(
+            self.engine, ApiCaseSpec, kind="api_cases", id_attr="case_id", label="接口用例"
+        )
         self._warn_if_json_left_behind()
 
     def _warn_if_json_left_behind(self) -> None:
@@ -206,14 +219,20 @@ class Repository:
         不提示的后果很具体：升级后打开界面一片空白，使用者会以为"数据丢了"。
         """
         try:
-            if self.documents.count() or self.requirements.count() or self.suites.count():
+            if (
+                self.documents.count()
+                or self.requirements.count()
+                or self.suites.count()
+                or self.api_specs.count()
+                or self.api_cases.count()
+            ):
                 return
         except Exception:  # noqa: BLE001 - 统计失败不影响主流程
             return
         legacy = self.settings.data_dir
         stale = [
             folder
-            for folder in ("documents", "requirements", "suites")
+            for folder in ("documents", "requirements", "suites", "api_specs", "api_cases")
             if any((legacy / folder).glob("*.json"))
         ]
         if stale:

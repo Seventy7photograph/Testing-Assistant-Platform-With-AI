@@ -92,9 +92,9 @@ def run_scenario(title: str, env: dict[str, str], *, expect_llm: bool, min_items
             check("六种设计方法均已实现",
                   {m["name"] for m in health["methods"] if m["implemented"]}
                   >= {"equivalence", "boundary", "scenario", "decision_table", "cause_effect", "orthogonal"})
-            check("导出格式含 excel/json/csv/xmind/testlink",
+            check("导出格式含 excel/json/csv/xmind/testlink/postman",
                   {f["name"] for f in health["export_formats"]}
-                  == {"excel", "json", "csv", "xmind", "testlink"})
+                  >= {"excel", "json", "csv", "xmind", "testlink", "postman"})
             check("支持 docx/pdf/xlsx/txt/md/图片",
                   {"docx", "pdf", "xlsx", "txt", "md", "png", "jpg"} <= set(health["supported_extensions"]))
             check("图片识别能力已上报",

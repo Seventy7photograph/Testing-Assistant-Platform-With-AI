@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.core.utils import Timer
 from app.llm.base import LLMMessage, LLMProvider, LLMResponse
 from app.llm.prompts import (
+    TASK_API_CASE_REVIEW,
     TASK_GENERATION_REVIEW,
     TASK_REQUIREMENT_EXTRACTION,
     TASK_SCENARIO_ENRICHMENT,
@@ -151,6 +152,22 @@ _FAKE_REVIEW: dict[str, Any] = {
     ],
 }
 
+_FAKE_API_CASE_REVIEW: dict[str, Any] = {
+    "findings": [
+        {
+            "severity": "warning",
+            "kind": "case_gap",
+            "operation_id": "createPet",
+            "target": "request.body.status",
+            "issue": "假数据：可补充状态迁移与重复创建的人工场景。",
+            "suggestion": "人工确认业务是否允许重复创建同名宠物，再补充对应用例。",
+            "source_ref": "paths./pets.post",
+            "claim_status": "inferred",
+            "uncertainty_reason": "规范未声明业务唯一性规则。",
+        }
+    ]
+}
+
 
 class FakeProvider(LLMProvider):
     """确定性 Provider，按任务标记返回预置 JSON。"""
@@ -164,6 +181,7 @@ class FakeProvider(LLMProvider):
             TASK_REQUIREMENT_EXTRACTION: _FAKE_REQUIREMENT_DOC,
             TASK_SCENARIO_ENRICHMENT: _FAKE_SCENARIO_CASES,
             TASK_GENERATION_REVIEW: _FAKE_REVIEW,
+            TASK_API_CASE_REVIEW: _FAKE_API_CASE_REVIEW,
         }
         self.calls: list[list[LLMMessage]] = []
 

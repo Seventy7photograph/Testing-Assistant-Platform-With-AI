@@ -140,6 +140,12 @@ export const FALLBACK_EXPORT_FORMATS: ExportFormatInfo[] = [
   { name: "csv", label: "CSV", media_type: "", extension: "csv" },
   { name: "xmind", label: "XMind", media_type: "", extension: "xmind" },
   { name: "testlink", label: "TestLink XML", media_type: "", extension: "xml" },
+  {
+    name: "postman",
+    label: "Postman Collection 2.1",
+    media_type: "application/json",
+    extension: "postman_collection.json",
+  },
 ];
 
 /** 上传控件 accept 的兜底值（`/health` 拉不到时用）。 */

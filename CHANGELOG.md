@@ -4,6 +4,59 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)：`MAJOR.MINOR.PATCH`。
 
+## [2.2.0] - 2026-10-23 · 接口测试资产（OpenAPI → 契约用例 → Postman）
+
+主题：把 OpenAPI 3 规范变成可追溯、可审查、可交付的接口测试资产。接口路径、参数、
+请求/响应 schema 与断言只从规范化规格产生；规范缺失的约束不会由模型或规则引擎补造。
+
+### Added
+
+- **OpenAPI 3 导入**：支持 JSON / YAML、本地 JSON Pointer `$ref` 展开、路径级/operation 级
+  parameters 合并、servers、securitySchemes、requestBody、responses、examples 与 tags。
+  缺失 `$ref`、外部 `$ref` 与 Swagger 2.0 返回可定位的错误；循环 `$ref` 保留占位节点并告警。
+- **独立接口资产模型**：新增 `ApiSpec / ApiOperation / ApiCaseSpec / ExecutionSpec`，与通用
+  `TestCase` 分离，通过 `case_id / requirement_ids` 保留追溯关系；JSON 与 SQLite 仓储均支持。
+- **契约用例生成**：每个 operation 至少生成正向与异常用例；覆盖必填参数/字段缺失、类型、
+  枚举、长度、数值边界、pattern、Content-Type、鉴权前置条件与错误响应。
+- **契约断言**：状态码、响应头、JSON 字段路径、required、nullable、type、enum、pattern、
+  minimum、maximum 均可追溯到具体 responses/content/schema 路径；响应示例不作为固定断言。
+- **nullable-only union**：`anyOf / oneOf` 中仅包含“一个实际类型 + null”时直接归一为 nullable，
+  不再整段降级为人工断言；系统自身规范重新导入后的待补充断言由 255 条降至 111 条。
+- **Postman Collection 2.1**：新增 `postman` 导出格式，保留 `{{baseUrl}}` / `{{authToken}}` 等
+  环境变量、请求体样例、operation 分组与可执行 schema tests；不写明文 Token / API Key。
+- **接口资产界面**：新增接口库、规范详情、operation 列表与接口用例抽屉；展示来源文件、
+  规范版本、schema 断言数、规范化缺口、需求追溯与待人工补充断言。
+- **系统 OpenAPI 文档补全**：补充 `PUBLIC_BASE_URL` servers、全部 operation 描述、参数业务说明、
+  标准业务错误响应（400 / 404 / 500 等），并声明文件下载、动态导出、SSE 与 Postman 的真实 Content-Type。
+- **接口用例 AI 只读复核（可选）**：新增 `api.case_review` Prompt 与显式触发入口；
+  模型只能提出缺口、文档问题和补充场景建议，悬空 operation/source_ref 会被丢弃，
+  不允许改写路径、参数、schema 断言或确定性用例。复核结果持久化并标注 Prompt 版本与调用元信息。
+- **持久化迁移**：JSON → SQLite 迁移/回滚脚本同步覆盖 `api_specs` / `api_cases`。
+
+### Changed
+
+- 导出能力清单增加 `postman`；通用用例集导出会对该格式返回 400 并提示从接口规范详情导出。
+- Vite 开发态使用根路径、生产构建继续使用 `/static/`；开发代理收紧为 `/api/`，
+  避免 `/apis` 接口资产页面被 API 代理误吞。
+- 版本号统一升级为 `2.2.0`，XMind 创建者版本同步。
+
+### Fixed
+
+- AI 复核建议移到 operation 列表之后，默认只展示前 3 条，可展开/收起全部建议，避免把接口用例入口推到页面底部。
+- AI 复核状态持久化为 `running / completed / failed`：离开页面再返回仍显示“复核中”并自动轮询；
+  已完成规范禁用复核按钮，服务端对执行中或已完成任务返回 409，阻止重复计费调用。
+- 接口页将“规范缺口”改为更准确的“待补异常”，并说明它表示无法只凭规范确定异常输入，不等同于接口缺陷。
+
+### Verification
+
+- 后端全量 `pytest`：418 passed。
+- 前端 `vue-tsc --noEmit` 与 `npm run build`：通过。
+- Playwright：接口库、详情、operation 用例抽屉、断言展开、AI 只读复核、桌面/390px 移动端
+  与 Postman 下载通过；页面无横向溢出、无浏览器 console error。
+- 系统 OpenAPI：63 个 operation 均具备描述、参数说明与标准错误响应；
+  文件/SSE/动态导出的 Content-Type 已补全，对自身规范重新导入后响应 schema 缺口为 0。
+- Postman Collection 通过官方 Collection 2.1 JSON Schema 校验。
+
 ## [2.1.1] - 2026-10-22 · 粘贴来源入库与吸底栏修复
 
 ### Fixed

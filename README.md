@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883.svg)](https://vuejs.org/)
-[![Version](https://img.shields.io/badge/version-v2.1.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v2.2.0-blue.svg)](CHANGELOG.md)
 
 > 面向测试工程师的**一体化本地 / 内网工作台**：把「需求文档 → 测试用例」与「测试执行数据 → 测试报告」
 > 两条日常高频链路，收进同一个控制台、同一套配置、同一份存储。
@@ -15,6 +15,7 @@
 > 全站带操作提示与动效。
 > **未配置大模型 API Key 时自动降级为纯规则引擎，链路依然端到端可用。**
 >
+> V2.2：OpenAPI 3 JSON / YAML → operation / 契约断言 → Postman Collection 2.1，接口资产与需求用例共用追溯体系。
 > V2.1：Prompt 具备版本、输入边界、证据校验与固定对抗回归；模型事实与推断在界面分开展示。
 > V2.0：六种测试设计方法齐备（含判定表 / 因果图 / 正交实验），
 > 需求文档里的**图片**（内嵌图 / 扫描件整页 / 截图）可经独立识别通道转成文字，
@@ -29,7 +30,7 @@
 
 ## 一、能力范围
 
-平台由两条**互相独立、共用基座**的链路组成。它们可以分别使用，也可以串在同一次工作流里。
+平台由两条 AI 工作流和一条接口资产链路组成。它们共用存储与能力基座，可以分别使用，也可以串在同一次工作流里。
 
 ### 1.1 用例生成链路（需求 → 用例）
 
@@ -38,7 +39,7 @@
 | 文档上传与解析 | `.docx` / `.pdf` / `.xlsx` / `.txt` / `.md` / `.csv` / `.json` / 图片（`.png` `.jpg` `.webp` `.bmp` `.tif`），兼容 GBK 等中文编码；粘贴文本同样作为 `.txt` 文档入库并可追溯 |
 | 图片识别（多模态 OCR） | 文档内嵌图 / 扫描件整页 / 直接上传的截图 → 文字。**主模型不必支持图片**：识别走独立通道（多模态模型 → 本地 OCR → 云端 OCR 依次降级），识别结果回填到正文的图片位置，模型推断部分单独成段、不参与字段约束抽取 |
 | 需求结构化 | LLM 结构化抽取 + 规则引擎解析双路，LLM 缺失 / 失败自动降级并显式告警 |
-| Prompt 可信工程 | 四个任务独立 Prompt ID / 版本 / 输入边界；证据归一化校验、失败关闭、单次修复、注入告警与 20 个离线对抗样本 |
+| Prompt 可信工程 | 五个任务独立 Prompt ID / 版本 / 输入边界；证据归一化校验、失败关闭、单次修复、注入告警与固定对抗样本 |
 | 测试设计 | 六种方法：等价类划分、边界值分析（min-1/min/min+1/max-1/max/max+1）、场景法、**判定表**（条件桩 → 动作桩 → 无关项合并）、**因果图**（因/果/异或·包含·屏蔽约束 → 判定表）、**正交实验**（因子水平 → 两两覆盖表） |
 | 生成阶段大模型参与 | 三档可调：**仅场景法补充**（默认）/ **复核规则产出**（六种方法都覆盖，只给意见、不改写用例）/ **复核 + 补充用例**（补充项标「[LLM补充] · 需复核」）。按需求条数计费，受调用次数上限约束 |
 | 用例优化 | 两层去重（精确指纹 + 跨方法语义重叠，合并关联需求并记录覆盖方法）、优先级排序、按方法自动编号（TC-EQ / BV / DT / CE / OR / SC） |
@@ -46,7 +47,16 @@
 | 需求追溯 | 需求条目 ↔ 用例双向追溯矩阵（正查 + 反查 + 孤儿用例）；**字段 / 边界 / 规则三维覆盖率与缺口清单**；**需求变更差异对比**（新增 / 删除 / 修改 + 字段级 diff） |
 | 用例版本 | 同一需求的多次生成自动编号为「第 N 版」，可按需求查看历史版本 |
 
-### 1.2 测试报告链路（执行数据 → 报告）
+### 1.2 接口资产链路（OpenAPI → 契约用例）
+
+| 能力 | 说明 |
+| --- | --- |
+| 接口资产（V2.2） | 导入 OpenAPI 3 JSON / YAML，展开本地 `$ref` 并检测循环；按 operation 生成正向、必填缺失、类型 / 枚举 / 长度 / 数值边界、Content-Type、鉴权与响应 schema 断言；缺口显式标为待补充 |
+| AI 只读复核（可选） | 手动触发模型检查 operation 与确定性用例摘要，只提出缺口、风险与补充场景建议；不允许改写路径、参数、schema 或既有断言 |
+| Postman 交付 | Collection 2.1 保留 `{{baseUrl}}` / `{{authToken}}` 等环境占位符、请求体样例和 schema tests；不写入明文 Token / API Key |
+| 追溯与审查 | operation、来源 schema 路径、需求 ID 与待补充断言在同一个用例抽屉中查看；响应示例不作为固定返回值断言 |
+
+### 1.3 测试报告链路（执行数据 → 报告）
 
 | 能力 | 说明 |
 | --- | --- |
@@ -57,12 +67,12 @@
 | 存档与趋势 | SQLite 存档，历史报告检索、趋势对比、多份报告横向比对 |
 | 报告导出 | Markdown / HTML / DOCX / JSON 四种格式 |
 
-### 1.3 平台能力
+### 1.4 平台能力
 
 | 能力 | 说明 |
 | --- | --- |
-| 统一总览 | 首页仪表盘汇总两条链路的状态、最近文档 / 用例集 / 报告与关键指标 |
-| 统一配置 | 两条链路**共用同一份大模型配置**（`.env` 基线 + 界面运行时覆盖），保存即生效、可一键恢复；图片识别通道独立配置，且可复用大模型的 Key 与端点 |
+| 统一总览 | 首页仪表盘汇总 AI 工作流状态、最近文档 / 用例集 / 报告与关键指标；接口资产从独立入口进入 |
+| 统一配置 | 两条 AI 链路**共用同一份大模型配置**（`.env` 基线 + 界面运行时覆盖），保存即生效、可一键恢复；图片识别通道独立配置，且可复用大模型的 Key 与端点 |
 | 持久化可选 | `STORAGE_BACKEND=json`（默认，一对象一文件、零依赖）或 `sqlite`（SQLAlchemy 单文件库）；两者接口一致，业务层零改动切换，并提供一次性迁移与回滚脚本 |
 | 双主题与密度 | 默认「冰川蓝 + 白」，顶部一键切换**深色护眼模式**；标准 / 紧凑 / 宽松三档显示密度 |
 | 批量操作 | 文档库、用例集、报告存档均支持多选与**批量删除**（服务端一次最多 200 条，自动去重） |
@@ -102,6 +112,7 @@ Testing-Assistant-Platform With AI/
 │   │       ├── documents.py          #   文档上传 / 列表 / 详情 / 原文下载 / 图片查看与重识别 / 删除
 │   │       ├── requirements.py       #   需求解析 / 查询 / 变更差异 / 追溯矩阵 / 基于需求生成用例
 │   │       ├── testcases.py          #   设计方法清单 / 用例集列表 / 生成 / 详情 / 覆盖率 / 删除
+│   │       ├── api_specs.py          #   OpenAPI 导入 / operation / 接口用例 / Postman 导出
 │   │       ├── pipeline.py           #   一键流水线
 │   │       ├── export.py             #   导出格式 / 导出文件流
 │   │       ├── llm.py                #   大模型配置读写 / 连通性测试 / 模型候选
@@ -112,8 +123,8 @@ Testing-Assistant-Platform With AI/
 │   ├── services/                     # 应用服务：文档 / 需求 / 证据闸门 / 流水线 / 导出 / 规则解析 / 图片识别 / 差异与追溯
 │   ├── parsers/                      # 文档解析器（docx / pdf / excel / image / text + 注册表，含内嵌图提取）
 │   ├── vision/                       # 图片识别通道（多模态模型 / 本地 OCR / 云端 OCR / 假实现 + 注册表）
-│   ├── design/                       # 测试设计引擎（六种方法 / 优化器 / 覆盖率分析）
-│   ├── exporters/                    # 用例导出器（excel / json / csv / xmind / testlink + 注册表）
+│   ├── design/                       # 测试设计引擎（六种方法 / 接口契约用例 / 优化器 / 覆盖率分析）
+│   ├── exporters/                    # 用例导出器（excel / json / csv / xmind / testlink / postman + 注册表）
 │   ├── llm/                          # LLM Provider + Prompt 注册表（版本 / 边界 / 温度 / 变更记录）
 │   ├── report/                       # 测试报告模块（config/metrics/prompts/llm/store/exporters/samples/schemas）
 │   ├── integrations/                 # 外部集成抽象（禅道 / Jira 占位，未实现）
@@ -123,7 +134,7 @@ Testing-Assistant-Platform With AI/
 │   │   ├── api/                      # 类型化 API 客户端（client / index / types）
 │   │   ├── components/               # 通用组件（AppShell / SideRail / TopBar / Tip / NoticeHost ...）
 │   │   ├── composables/              # useAsync / useFeedback（含 confirmAction）
-│   │   ├── router/                   # 路由表（11 条路由）
+│   │   ├── router/                   # 路由表（13 条路由）
 │   │   ├── stores/                   # Pinia：health / notice / ui（密度与主题偏好）
 │   │   ├── styles/                   # tokens.css / base.css / element.css（设计令牌 / 双主题 / 动效）
 │   │   ├── utils/                    # labels / markdown
@@ -262,6 +273,28 @@ node tools/smoke-ui.mjs   # 自动起后端 + Playwright：校验方法清单一
 | POST | `/export` | 导出用例集（返回文件流） |
 | GET | `/export/{suite_id}/{fmt}` | 按路径导出（便于浏览器直接下载） |
 
+### 接口资产（V2.2）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api-specs/import` | 上传 OpenAPI 3 JSON / YAML（multipart，字段名 `file`），展开本地 `$ref` 并生成契约用例 |
+| GET | `/api-specs` | 接口规范列表（来源文件、版本、operation / 用例 / 缺口统计） |
+| GET | `/api-specs/{spec_id}` | 规范详情与全部 operation |
+| GET | `/api-specs/{spec_id}/operations` | operation 列表 |
+| GET | `/api-specs/{spec_id}/operations/{operation_id}` | 单个 operation 详情 |
+| GET | `/api-specs/{spec_id}/cases` | 接口用例列表；`operation_id` 可过滤 |
+| POST | `/api-specs/{spec_id}/review` | 可选的大模型只读复核；只保存建议，不改写确定性用例 |
+| GET | `/api-specs/{spec_id}/export/postman` | 导出 Postman Collection 2.1 |
+| DELETE | `/api-specs/{spec_id}` | 删除规范与全部派生接口用例 |
+
+接口导入的边界：
+
+- 只支持 OpenAPI 3.x 单文件 JSON / YAML；Swagger 2.0 与外部 `$ref` 会返回明确错误。
+- 循环 `$ref` 保留占位节点并告警，不递归展开到无限深度。
+- 响应示例只用于展示，不作为固定返回值断言。
+- `requestBody` / 参数 / response schema 中缺失的约束不会补造；无法静态确定的断言标为 `manual`。
+- Postman 导出只写环境变量占位符，目标账号、Cookie、Token 与 API Key 不进入平台存储。
+
 ### 测试报告链路（前缀 `/report`）
 
 | 方法 | 路径 | 说明 |
@@ -310,7 +343,7 @@ HTTP 路由 (app/api/routes)
 | 图片识别 | `ImageTextExtractor` | `app/vision/registry.py` | 新增视觉模型 / OCR 服务只需实现子类并注册，解析器与主干不动 |
 | 外部集成 | `ExternalSyncAdapter` | `app/integrations/base.py` | 抽象已定义，占位调用返回 501 |
 
-### 5.3 配置优先级（两条链路共用）
+### 5.3 配置优先级（两条 AI 链路共用）
 
 ```
 界面运行时覆盖 (storage/data/llm_config.json)
@@ -321,11 +354,12 @@ HTTP 路由 (app/api/routes)
 ```
 
 - 报告链路额外维护「发版判定阈值」，存于 `storage/data/report_config.json`，同样支持界面改、界面恢复。
+- OpenAPI / Postman 的默认服务地址由 `PUBLIC_BASE_URL` 控制，默认 `http://127.0.0.1:8000`。
 - 版本号以代码 `app/__init__.py` 为唯一来源，`.env` 中的 `APP_VERSION` 不会覆盖它。
 
-### 5.4 Prompt 可信工程（V2.1）
+### 5.4 Prompt 可信工程（V2.2）
 
-四个模型任务分别使用独立 Prompt，不允许抽取、复核、补缺、报告归纳混用同一套指令：
+五个模型任务分别使用独立 Prompt，不允许抽取、复核、补缺、报告归纳、接口复核混用同一套指令：
 
 | Prompt ID | 任务 | 输入边界 | 温度 |
 | --- | --- | --- | --- |
@@ -333,6 +367,7 @@ HTTP 路由 (app/api/routes)
 | `design.scenario_enrichment` | 场景补缺 | 单条结构化需求与已有用例标题 | 0.2 |
 | `design.generation_review` | 生成复核 | 单条需求与规则用例摘要（最多 4000 字） | 0.1 |
 | `report.summarize` | 报告归纳 | 确定性指标与原始执行数据，原始数据视为不可信文本 | `REPORT_TEMPERATURE`（默认 0.3） |
+| `api.case_review` | 接口用例复核 | 规范化 operation、确定性接口用例摘要与允许引用的 source_ref，不含密钥与完整请求体 | 0.1 |
 
 证据闸门会先做 NFKC、空白、标点和 OCR 换行归一化，再判断 `evidence_quotes` 是否真实出现在原文；
 字段名还必须能在证据或结构化需求中定位。校验结果按 `verified / inferred / rejected` 记录：
@@ -363,7 +398,7 @@ HTTP 路由 (app/api/routes)
 做一次「冰面重结晶」而不是硬跳。主题选择写入 `localStorage`，下次打开保持。
 
 **布局**：左侧可展开菜单栏（窄屏自动收起为浮层 + 遮罩，点击任意处关闭）+ 顶部导航
-（面包屑、命令面板入口、显示密度、主题开关、帮助抽屉、健康状态）。11 条路由：总览 / 用例生成 /
+（面包屑、命令面板入口、显示密度、主题开关、帮助抽屉、健康状态）。13 条路由：总览 / 用例生成 /
 文档与需求 / 结构化需求 / 用例集 / 用例集详情 / 报告工作台 / 报告存档 / 报告详情 / 大模型与阈值 / 404。
 
 **五种提示形态**（覆盖「不打断」到「必须确认」的全部强度）：

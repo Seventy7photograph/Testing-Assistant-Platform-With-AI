@@ -23,7 +23,7 @@ const groups: NavGroup[] = [
   {
     caption: "平台",
     items: [
-      { nav: "dashboard", to: "/", label: "总览", hint: "两条链路的状态", icon: "gauge" },
+      { nav: "dashboard", to: "/", label: "总览", hint: "AI 用例 · 报告", icon: "gauge" },
     ],
   },
   {
@@ -31,6 +31,7 @@ const groups: NavGroup[] = [
     items: [
       { nav: "generate", to: "/generate", label: "用例生成", hint: "需求 → 用例", icon: "sparkle" },
       { nav: "documents", to: "/documents", label: "文档与需求", hint: "上传 · 解析", icon: "doc" },
+      { nav: "apis", to: "/apis", label: "接口资产", hint: "OpenAPI · Postman", icon: "route" },
       { nav: "suites", to: "/suites", label: "用例集", hint: "统计 · 导出", icon: "cases" },
     ],
   },
@@ -44,7 +45,7 @@ const groups: NavGroup[] = [
   {
     caption: "平台设置",
     items: [
-      { nav: "settings", to: "/settings", label: "大模型与阈值", hint: "两条链路共用", icon: "sliders" },
+      { nav: "settings", to: "/settings", label: "大模型与阈值", hint: "两条 AI 链路共用", icon: "sliders" },
     ],
   },
 ];

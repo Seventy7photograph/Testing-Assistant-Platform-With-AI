@@ -22,7 +22,7 @@ export const router = createRouter({
       path: "/",
       name: "dashboard",
       component: () => import("@/views/DashboardView.vue"),
-      meta: { nav: "dashboard", title: "总览", domain: "platform", hint: "两条链路的状态与最近动态" },
+      meta: { nav: "dashboard", title: "总览", domain: "platform", hint: "AI 工作流状态与最近动态" },
     },
     {
       path: "/generate",
@@ -52,6 +52,24 @@ export const router = createRouter({
         domain: "case",
         parentPath: "/documents",
         parentTitle: "文档与需求",
+      },
+    },
+    {
+      path: "/apis",
+      name: "api-library",
+      component: () => import("@/views/ApiSpecsView.vue"),
+      meta: { nav: "apis", title: "接口资产", domain: "case", hint: "OpenAPI · 契约用例 · Postman" },
+    },
+    {
+      path: "/apis/:specId",
+      name: "api-spec-detail",
+      component: () => import("@/views/ApiSpecDetailView.vue"),
+      meta: {
+        nav: "apis",
+        title: "接口规范详情",
+        domain: "case",
+        parentPath: "/apis",
+        parentTitle: "接口资产",
       },
     },
     {
@@ -106,7 +124,7 @@ export const router = createRouter({
       path: "/settings",
       name: "settings",
       component: () => import("@/views/SettingsView.vue"),
-      meta: { nav: "settings", title: "大模型与阈值", domain: "platform", hint: "两条链路共用" },
+      meta: { nav: "settings", title: "大模型与阈值", domain: "platform", hint: "两条 AI 链路共用" },
     },
     {
       path: "/:pathMatch(.*)*",

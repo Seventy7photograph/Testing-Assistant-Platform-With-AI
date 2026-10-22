@@ -3,8 +3,10 @@ import { fileURLToPath, URL } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
-export default defineConfig({
-  base: "/static/",
+export default defineConfig(({ command }) => ({
+  // 生产构建由 FastAPI 挂载在 /static/；开发服务器则必须使用根路径，
+  // 否则 Vite 会把 / 重定向到 /static/，Vue Router 再将 /static/ 当成不存在的业务路由。
+  base: command === "serve" ? "/" : "/static/",
   plugins: [vue()],
   resolve: {
     alias: {
@@ -20,7 +22,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      // 只代理真正的 API 前缀；"/apis" 是接口资产页面，不能被 "/api" 前缀误吞。
+      "^/api/": { target: "http://127.0.0.1:8000", changeOrigin: true },
     },
   },
-});
+}));

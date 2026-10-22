@@ -70,8 +70,9 @@ def test_fixture_count_and_prompt_registry() -> None:
         "design.scenario_enrichment",
         "design.generation_review",
         "report.summarize",
+        "api.case_review",
     }
-    assert all(spec.version == "2.1.0" for spec in ALL_PROMPTS)
+    assert all(spec.version in {"2.1.0", "2.2.0"} for spec in ALL_PROMPTS)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])
@@ -235,5 +236,6 @@ def test_prompt_registry_endpoint(client) -> None:
         "design.scenario_enrichment",
         "design.generation_review",
         "report.summarize",
+        "api.case_review",
     }
-    assert all(item["version"] == "2.1.0" for item in items)
+    assert all(item["version"] in {"2.1.0", "2.2.0"} for item in items)

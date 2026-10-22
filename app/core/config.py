@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # ---------- 应用 ----------
     app_name: str = "测试工程师助手平台"
     api_prefix: str = "/api/v1"
+    #: OpenAPI / Postman 中展示的默认访问地址。部署到内网或反向代理后应显式覆盖。
+    public_base_url: str = "http://127.0.0.1:8000"
     debug: bool = False
     log_level: str = "INFO"
 

@@ -3,6 +3,12 @@ import { del, downloadFile, get, post, put, upload } from "./client";
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
+  ApiCaseCollection,
+  ApiImportResult,
+  ApiOperation,
+  ApiReviewResult,
+  ApiSpec,
+  ApiSpecSummary,
   BatchDeleteResult,
   CoverageReport,
   DocumentSummary,
@@ -88,6 +94,30 @@ export const api = {
   /* ---------- 用例生成域 ---------- */
   methods: () => get<MethodInfo[]>("/testcases/methods"),
   exportFormats: () => get<ExportFormatInfo[]>("/export/formats"),
+
+  /* ---------- 接口测试资产（V2.2） ---------- */
+  apiSpecs: (limit = 30) => get<ApiSpecSummary[]>("/api-specs", { limit }),
+  apiSpec: (specId: string) =>
+    get<ApiSpec>(`/api-specs/${encodeURIComponent(specId)}`),
+  apiOperations: (specId: string) =>
+    get<ApiOperation[]>(`/api-specs/${encodeURIComponent(specId)}/operations`),
+  apiOperation: (specId: string, operationId: string) =>
+    get<ApiOperation>(
+      `/api-specs/${encodeURIComponent(specId)}/operations/${encodeURIComponent(operationId)}`,
+    ),
+  apiCases: (specId: string, operationId?: string) =>
+    get<ApiCaseCollection>(`/api-specs/${encodeURIComponent(specId)}/cases`, {
+      ...(operationId ? { operation_id: operationId } : {}),
+    }),
+  reviewApiSpec: (specId: string) =>
+    post<ApiReviewResult>(`/api-specs/${encodeURIComponent(specId)}/review`),
+  importApiSpec: (file: File) => upload<ApiImportResult>("/api-specs/import", file),
+  exportApiPostman: (specId: string) =>
+    downloadFile(`/api-specs/${encodeURIComponent(specId)}/export/postman`),
+  deleteApiSpec: (specId: string) =>
+    del<{ deleted: boolean; spec_id: string; deleted_cases: number }>(
+      `/api-specs/${encodeURIComponent(specId)}`,
+    ),
 
   documents: (limit = 20) => get<DocumentSummary[]>("/documents", { limit }),
   document: (docId: string) => get<DocumentSummary>(`/documents/${docId}`),

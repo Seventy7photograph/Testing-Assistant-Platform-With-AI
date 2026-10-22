@@ -325,7 +325,7 @@ async function save(): Promise<void> {
     await health.load(true);
     // 刚保存的端点/密钥此刻才生效，强制重拉一次实时模型列表。
     void refreshModels(true);
-    notice.success("大模型配置已保存", "两条链路立即生效，无需重启。");
+    notice.success("大模型配置已保存", "两条 AI 链路立即生效，无需重启。");
   } catch (err) {
     notice.error("保存失败", (err as Error).message);
   } finally {

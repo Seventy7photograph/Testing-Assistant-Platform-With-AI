@@ -6,6 +6,7 @@ from app.exporters.base import Exporter
 from app.exporters.csv_exporter import CsvExporter
 from app.exporters.excel_exporter import ExcelExporter
 from app.exporters.json_exporter import JsonExporter
+from app.exporters.postman_exporter import PostmanExporter
 from app.exporters.testlink_exporter import TestLinkXmlExporter
 from app.exporters.xmind_exporter import XMindExporter
 
@@ -28,6 +29,8 @@ register_exporter(JsonExporter())
 register_exporter(XMindExporter())
 register_exporter(CsvExporter())
 register_exporter(TestLinkXmlExporter())
+# V2.2：接口用例导出。格式在能力清单中可见，但调用方必须提供接口资产。
+register_exporter(PostmanExporter())
 
 
 def available_formats() -> list[dict]:

@@ -79,11 +79,23 @@ PROMPT_REPORT_SUMMARY = PromptSpec(
     ),
 )
 
+PROMPT_API_CASE_REVIEW = PromptSpec(
+    prompt_id="api.case_review",
+    version="2.2.0",
+    task="api_case_review",
+    input_boundary="规范化 operation 摘要、确定性接口用例摘要与允许引用的 source_ref；不含密钥与完整请求体",
+    temperature=0.1,
+    change_log=(
+        "2.2.0 接口用例只读复核：只提缺口与补充建议，不改写路径、参数和 schema 断言",
+    ),
+)
+
 ALL_PROMPTS: tuple[PromptSpec, ...] = (
     PROMPT_REQUIREMENT_EXTRACTION,
     PROMPT_SCENARIO_ENRICHMENT,
     PROMPT_GENERATION_REVIEW,
     PROMPT_REPORT_SUMMARY,
+    PROMPT_API_CASE_REVIEW,
 )
 
 PROMPTS_BY_ID = {spec.prompt_id: spec for spec in ALL_PROMPTS}
@@ -96,6 +108,7 @@ def prompt_meta(prompt_id: str) -> dict[str, Any]:
 __all__ = [
     "ALL_PROMPTS",
     "PROMPTS_BY_ID",
+    "PROMPT_API_CASE_REVIEW",
     "PROMPT_GENERATION_REVIEW",
     "PROMPT_REPORT_SUMMARY",
     "PROMPT_REQUIREMENT_EXTRACTION",

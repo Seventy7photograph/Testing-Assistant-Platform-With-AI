@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Circular schema
+  version: 1.0.0
+paths:
+  /nodes:
+    get:
+      operationId: listNodes
+      responses:
+        "200":
+          description: Nodes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+components:
+  schemas:
+    Node:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        child:
+          $ref: "#/components/schemas/Node"

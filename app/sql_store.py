@@ -11,7 +11,7 @@
      与存储解耦，与 V1.0 的 JSON 文件语义严格一致（同样的 model_dump_json）；
   2. SQLite 自带 JSON 函数，真需要按字段查询时仍可在 SQL 侧提取，
      不必为此重构表结构；
-  3. 主键 (kind, obj_id) 天然隔离三类实体，避免三张表重复写同样的读写代码。
+  3. 主键 (kind, obj_id) 天然隔离各类实体，避免为每类对象重复写同样的读写代码。
 
 并发注意：FastAPI 的同步路由跑在线程池里，SQLite 连接默认禁止跨线程使用，
 因此引擎必须显式 ``check_same_thread=False``，并为每次操作开一个短生命周期连接。
@@ -50,7 +50,7 @@ T = TypeVar("T", bound=BaseModel)
 
 METADATA = MetaData()
 
-#: 唯一的物理表：三类实体共用，用 kind 区分。
+#: 唯一的物理表：文档 / 需求 / 用例集 / 接口规范 / 接口用例共用，用 kind 区分。
 OBJECTS = Table(
     "objects",
     METADATA,

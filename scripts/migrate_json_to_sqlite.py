@@ -9,7 +9,7 @@
 没有迁移路径的「后端可切换」等于逼人手动搬数据，实际结果就是没人敢切。
 
 回滚说明：``--rollback`` 会把数据库里的对象按原来的目录结构写回
-``storage/data/{documents,requirements,suites}/*.json``；因此在迁移到 SQLite 后
+``storage/data/{documents,requirements,suites,api_specs,api_cases}/*.json``；因此在迁移到 SQLite 后
 **不要立刻删除原 JSON 文件** —— 保留它们就是最省事的备份。确认新后端工作正常后再清理。
 """
 from __future__ import annotations
@@ -31,6 +31,8 @@ COLLECTIONS: dict[str, tuple[str, str]] = {
     "documents": ("documents", "doc_id"),
     "requirements": ("requirements", "doc_id"),
     "suites": ("suites", "suite_id"),
+    "api_specs": ("api_specs", "spec_id"),
+    "api_cases": ("api_cases", "case_id"),
 }
 
 

@@ -24,13 +24,14 @@ interface Entry {
 }
 
 const pages: Entry[] = [
-  { label: "总览", hint: "两条链路的状态与最近动态", icon: "gauge", to: "/", group: "页面" },
+  { label: "总览", hint: "AI 工作流状态与最近动态", icon: "gauge", to: "/", group: "页面" },
   { label: "用例生成", hint: "需求文档 → 结构化需求 → 用例集", icon: "sparkle", to: "/generate", group: "页面" },
   { label: "文档与需求", hint: "上传 · 解析 · 追溯", icon: "doc", to: "/documents", group: "页面" },
+  { label: "接口资产", hint: "OpenAPI → 契约用例 → Postman", icon: "route", to: "/apis", group: "页面" },
   { label: "用例集", hint: "浏览 · 统计 · 导出", icon: "cases", to: "/suites", group: "页面" },
   { label: "报告工作台", hint: "执行数据 → 指标 → AI 报告", icon: "chart", to: "/report", group: "页面" },
   { label: "报告存档", hint: "趋势 · 检索 · 对比", icon: "archive", to: "/report/archive", group: "页面" },
-  { label: "大模型与阈值", hint: "两条链路共用配置", icon: "sliders", to: "/settings", group: "页面" },
+  { label: "大模型与阈值", hint: "两条 AI 链路共用配置", icon: "sliders", to: "/settings", group: "页面" },
 ];
 
 function score(entry: Entry, needle: string): number {

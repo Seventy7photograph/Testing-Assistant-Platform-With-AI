@@ -338,6 +338,64 @@ curl "http://127.0.0.1:8000/api/v1/automation/events?run_id=RUN-xxxx"
 
 ---
 
+## 5.3 自动化受控 AI 增强
+
+四种任务共用同一个入口，模型只返回建议，不会修改资产：
+
+```powershell
+$review = Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/ai/reviews" `
+  -ContentType "application/json" `
+  -Body (@{
+    kind = "operation_gap"
+    spec_id = "API-912338d6"
+    artifact_id = "AUTO-xxxx"
+    focus = "优先检查幂等和重复创建"
+  } | ConvertTo-Json)
+
+$review.data.findings | Format-Table severity,operation_id,target,issue,suggestion
+```
+
+可用的 `kind`：
+
+| kind | 必要上下文 | 输出 |
+| --- | --- | --- |
+| `operation_gap` | `spec_id`，可选 `artifact_id` | 未覆盖 operation 的人工补充场景建议 |
+| `failure_assertion` | `spec_id` + `run_id` | 失败 case 的待确认断言提案 |
+| `fixture_recipe` | `spec_id`，可选 `artifact_id` | 环境变量、fixture 与测试数据结构 |
+| `script_review` | `spec_id` + 已通过校验的 `artifact_id` | 现有脚本的只读审查意见 |
+
+人工决定单条建议：
+
+```powershell
+Invoke-RestMethod -Method Put `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/ai/reviews/$($review.data.review_id)/findings/$($review.data.findings[0].finding_id)" `
+  -ContentType "application/json" `
+  -Body '{"disposition":"accepted"}'
+```
+
+生成并下载 fixture / 测试数据配方：
+
+```powershell
+$recipe = Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/ai/reviews" `
+  -ContentType "application/json" `
+  -Body (@{
+    kind = "fixture_recipe"
+    spec_id = "API-912338d6"
+    artifact_id = "AUTO-xxxx"
+  } | ConvertTo-Json)
+
+Invoke-WebRequest `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/ai/reviews/$($recipe.data.review_id)/recipe" `
+  -OutFile "fixture-recipe.json"
+```
+
+> 配方必须通过明文密钥和可执行代码扫描；operation / case / source_ref 越界的建议会被丢弃。
+> 采纳只是人工确认状态，不会自动写入下载项目。
+
+---
+
 ## 6. Python 客户端示例
 
 ```python

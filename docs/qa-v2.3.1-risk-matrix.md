@@ -1,7 +1,7 @@
-# v2.3.0 QA Risk Matrix
+# v2.3.1 QA Risk Matrix
 
-> Scope: V2.3 automation artifact generation, JUnit ingestion, structured events,
-> work items, reminders, delivery workspace, storage and release.
+> Scope: V2.3.1 controlled automation AI, V2.3 asset generation, JUnit ingestion,
+> structured events, work items, reminders, delivery workspace, storage and release.
 > Method: risk-based testing (`Impact × Probability`); score ≥ 10 receives failure-mode analysis.
 > This curated suite does not claim a statistical failure rate.
 
@@ -17,6 +17,9 @@
 | R-06 | Delivery workspace breaks on route or viewport | 4 | 3 | 12 | HIGH | Vue typecheck/build; Playwright desktop and 390 px viewport |
 | R-07 | Release version/tag/docs disagree | 3 | 3 | 9 | MEDIUM | version grep; full test/build; tag and GitHub Release inspection |
 | R-08 | Deleting a run/asset leaves dangling records or events | 3 | 3 | 9 | MEDIUM | linked-delete conflict test; cascade event-delete API test |
+| R-09 | AI suggestion crosses operation/case/source boundary or contains executable recipe | 4 | 3 | 12 | HIGH | source-ownership tests, invalid finding drop tests, recipe secret/code rejection |
+| R-10 | Rejected artifact source code is sent to the model | 5 | 2 | 10 | HIGH | rejected-artifact script review API test |
+| R-11 | Delivery workspace remounts or scrolls on tab switch | 2 | 4 | 8 | MEDIUM | DOM-instance marker, scroll-position measurement, route query check |
 
 ## Failure Mode Analysis
 
@@ -68,13 +71,29 @@
 - **Current mitigation:** Single workspace with segmented tabs; responsive grid collapses at 760 px.
 - **Coverage gap addressed:** 390 px viewport measured `scrollWidth == clientWidth == 390`.
 
+### R-09: AI suggestion boundary escape
+
+- **Trigger:** Model returns a source_ref from another operation/case, invalid assertion operator, code in recipe, or leaked secret.
+- **Blast radius:** Human reviewer may accept a misleading assertion recipe or copy unsafe instructions into a project.
+- **Detection:** Schema validation, operation/case source ownership maps, secret patterns, executable-code patterns.
+- **Current mitigation:** Invalid findings are dropped with warnings; recipes fail closed; no automatic artifact write.
+- **Coverage gap addressed:** Unit/API tests cover operation, failure assertion, recipe, script review and decision state.
+
+### R-10: Rejected asset sent to model
+
+- **Trigger:** A rejected artifact is selected for script review.
+- **Blast radius:** Suspected credentials or unsafe code leave the local machine.
+- **Detection:** API/service rejection before prompt construction.
+- **Current mitigation:** Script review requires `artifact.status == validated`.
+- **Coverage gap addressed:** Rejected artifact review returns an actionable error and does not call the provider.
+
 ## Coverage Alignment
 
 | Zone | Required coverage | Implemented for v2.3 |
 | --- | --- | --- |
 | CRITICAL | Unit + integration + real execution path | R-01/R-02/R-03 each have deterministic unit/API evidence; R-01 also runs the generated project |
-| HIGH | Happy path + top error paths + periodic manual review | R-04/R-05/R-06 have API and browser evidence |
-| MEDIUM | Happy path and release check | R-07/R-08 verified during release gate |
+| HIGH | Happy path + top error paths + periodic manual review | R-04/R-05/R-06/R-09/R-10 have API and browser evidence |
+| MEDIUM | Happy path and release check | R-07/R-08/R-11 verified during release gate |
 
 ## Reassessment Triggers
 
@@ -104,3 +123,13 @@ The release is go only when:
 | Browser | Desktop generation → JUnit import → matched/unmatched → follow-up → save/complete → reminder passed; zero console errors in fresh session |
 | Responsive | 390 px viewport measured `scrollWidth = clientWidth = 390`; no horizontal overflow |
 | Offline scripts | `demo_offline.py`, `demo_report_offline.py`, `acceptance_check.py` passed |
+
+### Controlled AI Enhancement Recheck
+
+| Gate | Result |
+| --- | --- |
+| Full backend suite | 435 collected / 435 passed |
+| Controlled AI tests | 5 passed: operation gap, cross-source rejection, failure assertion, recipe safety, API decisions/download |
+| Frontend | TypeScript + production build passed |
+| Workspace tabs | DOM instance marker preserved; scroll position and `tab` query preserved across all three tabs |
+| Responsive | AI panels and review records remain within 390 px viewport |

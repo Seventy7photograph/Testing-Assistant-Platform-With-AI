@@ -17,6 +17,7 @@ from app.repository import Repository, get_repository
 from app.services.document_service import DocumentService
 from app.services.export_service import ExportService
 from app.services.api_service import ApiService
+from app.services.automation_ai_service import AutomationAIService
 from app.services.execution_service import ExecutionService
 from app.services.pipeline_service import PipelineService
 from app.services.requirement_service import RequirementService
@@ -91,6 +92,13 @@ def work_item_service_dep(
     return WorkItemService(settings, repository)
 
 
+def automation_ai_service_dep(
+    settings: Annotated[Settings, Depends(settings_dep)],
+    repository: Annotated[Repository, Depends(repository_dep)],
+) -> AutomationAIService:
+    return AutomationAIService(settings, repository)
+
+
 SettingsDep = Annotated[Settings, Depends(settings_dep)]
 RepositoryDep = Annotated[Repository, Depends(repository_dep)]
 LLMDep = Annotated[LLMProvider, Depends(llm_dep)]
@@ -102,3 +110,4 @@ ApiServiceDep = Annotated[ApiService, Depends(api_service_dep)]
 PipelineServiceDep = Annotated[PipelineService, Depends(pipeline_service_dep)]
 AutomationServiceDep = Annotated[ExecutionService, Depends(automation_service_dep)]
 WorkItemServiceDep = Annotated[WorkItemService, Depends(work_item_service_dep)]
+AutomationAIServiceDep = Annotated[AutomationAIService, Depends(automation_ai_service_dep)]

@@ -24,6 +24,7 @@ from app import __version__
 from app.api.routes import (
     api_specs,
     automation,
+    automation_ai,
     documents,
     export,
     health,
@@ -65,6 +66,7 @@ DESCRIPTION = f"""
   2. 测试报告：测试执行数据 -> 确定性指标（通过率/执行率/缺陷分布/发版判定）-> AI 归纳与建议 -> 存档 / 趋势 / Markdown / HTML / DOCX 导出。
   3. 接口资产：OpenAPI 3 JSON/YAML -> $ref 展开与 operation 规范化 -> 契约用例 / 断言 -> Postman Collection 2.1。
   4. 自动交付：接口用例 -> 受控 pytest 资产 -> JUnit 结果回收 -> 失败跟进事项 / 到期提醒。
+     自动化 AI 只在人工触发下提供覆盖建议、断言提案、数据配方与只读审查，不自动改写资产。
 
 - 未配置 LLM_API_KEY 时，用例生成自动降级为纯规则引擎，报告链路显式提示，功能依然可解释；
 - 设计策略、导出器、LLM Provider、外部集成均为插件式接口，新增能力只需注册，不改主干。
@@ -167,6 +169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         vision,
         api_specs,
         automation,
+        automation_ai,
         work_items,
     ):
         app.include_router(module.router, prefix=settings.api_prefix)

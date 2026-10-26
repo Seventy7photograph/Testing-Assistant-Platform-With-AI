@@ -135,7 +135,7 @@ export const router = createRouter({
       path: "/settings",
       name: "settings",
       component: () => import("@/views/SettingsView.vue"),
-      meta: { nav: "settings", title: "大模型与阈值", domain: "platform", hint: "两条 AI 链路共用" },
+      meta: { nav: "settings", title: "大模型与阈值", domain: "platform", hint: "所有模型任务共用" },
     },
     {
       path: "/:pathMatch(.*)*",

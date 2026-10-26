@@ -19,7 +19,7 @@ interface Topic {
 const topics: Record<string, Topic> = {
   dashboard: {
     title: "总览",
-    intro: "这里把两条 AI 工作流的状态放在一起：左边是你手上的素材，右边是你产出的交付物。",
+    intro: "所有模型任务共用同一份配置，素材、生成与交付状态集中在这里。",
     points: [
       { label: "刻度", text: "数字全部来自服务端实际存储，不是估算值。" },
       { label: "降级", text: "未配置大模型时，用例链路仍可用；报告链路会在生成前明确提示。" },
@@ -82,7 +82,7 @@ const topics: Record<string, Topic> = {
   },
   settings: {
     title: "大模型与阈值",
-    intro: "两条 AI 链路共用同一份大模型配置；判定阈值只作用于报告的发版结论。",
+    intro: "所有模型任务共用同一份大模型配置；判定阈值只作用于报告的发版结论。",
     points: [
       { label: "优先级", text: "界面保存的覆盖 > .env 基线。可以逐项恢复，也可以一键回到 .env。" },
       { label: "密钥", text: "只回显掩码，不落明文到日志；填写后无需重启即可生效。" },

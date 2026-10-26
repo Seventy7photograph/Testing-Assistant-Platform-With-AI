@@ -4,6 +4,38 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)：`MAJOR.MINOR.PATCH`。
 
+## [2.3.1] - 2026-10-27 · 自动化受控 AI 与工作台切换修复
+
+### Added
+
+- **自动化受控 AI 增强**：新增 operation 覆盖建议、失败断言提案、fixture/测试数据配方、
+  现有脚本只读审查四种任务；每条结果持久化并需人工采纳或驳回，不自动改写资产或确定性断言。
+- **四条独立 Prompt**：`automation.operation_gap@2.3.1`、`automation.failure_assertion@2.3.1`、
+  `automation.fixture_recipe@2.3.1`、`automation.script_review@2.3.1`。
+- **来源约束**：operation 建议必须引用该 operation 的 `source_ref`，失败断言必须引用对应 case 的来源；
+  越界建议直接丢弃并记录告警。
+- **配方安全门禁**：拒绝疑似明文密钥、可执行代码和越界 `case_id`；secret 环境变量只保留占位符。
+- **配方下载**：fixture / 测试数据配方可下载为带免责声明与 Prompt 元信息的 JSON。
+- **自动化 AI 建议界面**：资产页提供覆盖建议、数据配方、只读审查；执行记录页提供失败断言建议，
+  支持逐条采纳/驳回和配方整体决定。
+
+### Fixed
+
+- 交付工作台三个页签切换改为本地状态切换与 `history.replaceState()`，不再触发 Vue Router 重建、
+  页面回顶或 RouterView 重挂载；切换前后组件实例、滚动位置和可分享 URL 保持一致。
+
+### Changed
+
+- 脚本审查只允许读取已通过静态安全校验的资产，避免把被拦截的源码发送给模型。
+
+### Verification
+
+- 全量 `pytest`：435 passed。
+- 自动化受控 AI 定向回归：5 passed，覆盖四类任务、人工决定、来源越界、密钥/代码拒绝与配方下载。
+- 前端 `vue-tsc --noEmit` 与生产 Vite build：通过。
+- Playwright：四个 AI 任务入口、断言提案、配方决定、桌面/390px 无横向溢出通过；
+  三个页签切换时 DOM marker 保持、滚动位置保持、URL 同步。
+
 ## [2.3.0] - 2026-10-26 · 自动化交付与工作收件箱
 
 主题：把接口用例变成可审查的自动化资产，把 JUnit 结果接回可追溯运行记录，
@@ -26,7 +58,7 @@
   幂等去重，页面关闭后明确不承诺后台提醒。
 - **交付工作台**：统一管理自动化资产、执行记录与工作事项；失败运行一键创建关联事项，
   运行数据可送入报告工作台，总览、侧边栏与命令面板均增加入口。
-- **QA 证据**：新增 v2.3.0 风险矩阵、JUnit / 生成器 / 双存储 / 提醒回归，以及真实运行生成项目的测试。
+- **QA 证据**：新增 v2.3.1 风险矩阵、JUnit / 生成器 / 双存储 / 提醒回归，以及真实运行生成项目的测试。
 
 ### Changed
 
@@ -570,6 +602,7 @@
 - 使用 JSON 文件存储，不适合多实例并发部署。
 - PDF 仅支持文本型，暂不做 OCR。
 
-[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.2.0...v2.3.0
 [1.0.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/releases/tag/v1.0.0

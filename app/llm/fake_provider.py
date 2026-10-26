@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from app.core.config import Settings
@@ -14,6 +15,10 @@ from app.core.utils import Timer
 from app.llm.base import LLMMessage, LLMProvider, LLMResponse
 from app.llm.prompts import (
     TASK_API_CASE_REVIEW,
+    TASK_AUTOMATION_FAILURE_ASSERTION,
+    TASK_AUTOMATION_FIXTURE_RECIPE,
+    TASK_AUTOMATION_OPERATION_GAP,
+    TASK_AUTOMATION_SCRIPT_REVIEW,
     TASK_GENERATION_REVIEW,
     TASK_REQUIREMENT_EXTRACTION,
     TASK_SCENARIO_ENRICHMENT,
@@ -168,6 +173,177 @@ _FAKE_API_CASE_REVIEW: dict[str, Any] = {
     ]
 }
 
+_FAKE_AUTOMATION_OPERATION_GAP: dict[str, Any] = {
+    "summary": "假数据：存在 operation 尚未进入自动化资产。",
+    "findings": [
+        {
+            "severity": "warning",
+            "operation_id": "createPet",
+            "target": "response.201",
+            "issue": "假数据：未覆盖创建后的标识返回。",
+            "suggestion": "人工确认创建响应字段后补充断言场景。",
+            "rationale": "OpenAPI 响应包含 id 与 name。",
+            "source_ref": "paths./pets.post",
+            "claim_status": "inferred",
+        }
+    ],
+}
+
+_FAKE_AUTOMATION_FAILURE_ASSERTION: dict[str, Any] = {
+    "summary": "假数据：失败更像断言不足，而非明确产品缺陷。",
+    "findings": [
+        {
+            "severity": "warning",
+            "case_id": "API-POST-83D9E0C255",
+            "operation_id": "createPet",
+            "target": "response.body.id",
+            "issue": "假数据：失败信息不足以定位响应字段。",
+            "suggestion": "人工确认后补充 id 类型与存在性断言。",
+            "rationale": "当前失败消息只包含状态码差异。",
+            "source_ref": "paths./pets.post",
+            "claim_status": "inferred",
+            "proposed_assertion": {
+                "kind": "json",
+                "path": "$.id",
+                "operator": "type",
+                "expected": "integer",
+                "description": "创建成功后返回整数 id",
+                "source_ref": "paths./pets.post",
+            },
+        }
+    ],
+}
+
+_FAKE_AUTOMATION_FIXTURE_RECIPE: dict[str, Any] = {
+    "summary": "假数据：接口测试 fixture 与数据配方。",
+    "recipe": {
+        "summary": "使用环境变量和本地测试数据完成接口准备。",
+        "environment_variables": [
+            {
+                "name": "BASE_URL",
+                "description": "目标服务地址",
+                "secret": False,
+                "placeholder": "http://127.0.0.1:8000",
+            },
+            {
+                "name": "AUTH_TOKEN",
+                "description": "测试环境授权 Token",
+                "secret": True,
+                "placeholder": "AUTH_TOKEN",
+            },
+        ],
+        "fixtures": [
+            {
+                "name": "pet_fixture",
+                "purpose": "准备可查询的测试宠物",
+                "setup": ["在测试环境创建一只 available 状态的宠物"],
+                "data": {"name": "fixture-pet", "status": "available"},
+            }
+        ],
+        "test_data": [
+            {
+                "case_id": "API-GET-6EB7EEAE24",
+                "title": "列表查询数据",
+                "data": {"limit": 1},
+                "notes": "假数据，仅用于离线演示",
+            }
+        ],
+        "preconditions": ["测试环境可访问", "AUTH_TOKEN 由本地环境注入"],
+        "execution_notes": ["运行前人工核对 fixture 清理策略"],
+        "warnings": ["假数据不代表真实业务约束"],
+    },
+}
+
+_FAKE_AUTOMATION_SCRIPT_REVIEW: dict[str, Any] = {
+    "summary": "假数据：脚本结构清晰，建议补充断言来源说明。",
+    "findings": [
+        {
+            "severity": "info",
+            "target": "tests/test_api_cases.py",
+            "issue": "假数据：断言失败信息可以更明确。",
+            "suggestion": "人工评估是否补充断言 source_ref。",
+            "rationale": "当前失败消息包含 case_id 与预期状态。",
+            "source_ref": "tests/test_api_cases.py",
+            "claim_status": "inferred",
+        }
+    ],
+}
+
+
+def _first_quoted_value(blob: str, key: str) -> str:
+    match = re.search(rf'"{re.escape(key)}"\s*:\s*"([^"]+)"', blob)
+    return match.group(1) if match else ""
+
+
+def _first_python_file(blob: str) -> str:
+    match = re.search(r'"(tests/[^"]+\.py)"', blob) or re.search(r'"([^"]+\.py)"', blob)
+    return match.group(1) if match else "tests/test_api_cases.py"
+
+
+def _dynamic_automation_payload(marker: str, messages: list[LLMMessage]) -> dict[str, Any] | None:
+    user_blob = str(messages[-1].content) if messages else ""
+    if marker == TASK_AUTOMATION_OPERATION_GAP:
+        operation_id = _first_quoted_value(user_blob, "operation_id")
+        source_ref = _first_quoted_value(user_blob, "source_ref")
+        if operation_id and source_ref:
+            return {
+                "summary": "假数据：存在 operation 尚未进入自动化资产。",
+                "findings": [
+                    {
+                        "severity": "warning",
+                        "operation_id": operation_id,
+                        "target": "request / response contract",
+                        "issue": "假数据：该 operation 尚未进入当前自动化资产。",
+                        "suggestion": "人工确认后补充成功路径与错误响应场景。",
+                        "rationale": "该 operation 出现在未覆盖清单中。",
+                        "source_ref": source_ref,
+                        "claim_status": "inferred",
+                    }
+                ],
+            }
+    if marker == TASK_AUTOMATION_FAILURE_ASSERTION:
+        case_id = _first_quoted_value(user_blob, "case_id")
+        operation_id = _first_quoted_value(user_blob, "operation_id")
+        source_ref = _first_quoted_value(user_blob, "source_ref")
+        if case_id and operation_id and source_ref:
+            return {
+                "summary": "假数据：失败更像断言不足，而非明确产品缺陷。",
+                "findings": [
+                    {
+                        "severity": "warning",
+                        "case_id": case_id,
+                        "operation_id": operation_id,
+                        "target": "response contract",
+                        "issue": "假数据：现有失败消息不足以区分环境问题与断言缺口。",
+                        "suggestion": "人工确认后补充错误响应字段断言。",
+                        "rationale": "当前只有状态码差异和有限断言摘要。",
+                        "source_ref": source_ref,
+                        "claim_status": "inferred",
+                        "proposed_assertion": {
+                            "kind": "json",
+                            "path": "$.code",
+                            "operator": "exists",
+                            "expected": True,
+                            "description": "错误响应包含可诊断的错误码",
+                            "source_ref": source_ref,
+                        },
+                    }
+                ],
+            }
+    if marker == TASK_AUTOMATION_FIXTURE_RECIPE:
+        case_id = _first_quoted_value(user_blob, "case_id")
+        payload = json.loads(json.dumps(_FAKE_AUTOMATION_FIXTURE_RECIPE))
+        if case_id and payload.get("recipe", {}).get("test_data"):
+            payload["recipe"]["test_data"][0]["case_id"] = case_id
+        return payload
+    if marker == TASK_AUTOMATION_SCRIPT_REVIEW:
+        source_ref = _first_python_file(user_blob)
+        payload = json.loads(json.dumps(_FAKE_AUTOMATION_SCRIPT_REVIEW))
+        payload["findings"][0]["source_ref"] = source_ref
+        payload["findings"][0]["target"] = source_ref
+        return payload
+    return None
+
 
 class FakeProvider(LLMProvider):
     """确定性 Provider，按任务标记返回预置 JSON。"""
@@ -177,11 +353,16 @@ class FakeProvider(LLMProvider):
 
     def __init__(self, settings: Settings | None = None, *, scripted: dict[str, Any] | None = None) -> None:
         super().__init__(settings)
+        self._use_dynamic_automation = scripted is None
         self.scripted: dict[str, Any] = scripted or {
             TASK_REQUIREMENT_EXTRACTION: _FAKE_REQUIREMENT_DOC,
             TASK_SCENARIO_ENRICHMENT: _FAKE_SCENARIO_CASES,
             TASK_GENERATION_REVIEW: _FAKE_REVIEW,
             TASK_API_CASE_REVIEW: _FAKE_API_CASE_REVIEW,
+            TASK_AUTOMATION_OPERATION_GAP: _FAKE_AUTOMATION_OPERATION_GAP,
+            TASK_AUTOMATION_FAILURE_ASSERTION: _FAKE_AUTOMATION_FAILURE_ASSERTION,
+            TASK_AUTOMATION_FIXTURE_RECIPE: _FAKE_AUTOMATION_FIXTURE_RECIPE,
+            TASK_AUTOMATION_SCRIPT_REVIEW: _FAKE_AUTOMATION_SCRIPT_REVIEW,
         }
         self.calls: list[list[LLMMessage]] = []
 
@@ -197,6 +378,10 @@ class FakeProvider(LLMProvider):
         blob = "\n".join(message.content for message in messages)
         for marker, payload in self.scripted.items():
             if marker in blob:
+                if self._use_dynamic_automation:
+                    dynamic = _dynamic_automation_payload(marker, messages)
+                    if dynamic is not None:
+                        return dynamic
                 return payload
         return {"_fake": True, "note": "FakeProvider 未匹配到任务标记，返回占位对象。"}
 

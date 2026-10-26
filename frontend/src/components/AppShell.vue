@@ -8,11 +8,13 @@ import NoticeHost from "@/components/NoticeHost.vue";
 import SideRail from "@/components/SideRail.vue";
 import TopBar from "@/components/TopBar.vue";
 import { useUiStore } from "@/stores/ui";
+import { useWorkItemsStore } from "@/stores/workItems";
 
 /** 窄屏下导航轨是浮层：默认收起，避免盖住内容。 */
 const NARROW = 1080;
 
 const ui = useUiStore();
+const workItems = useWorkItemsStore();
 const paletteOpen = ref(false);
 
 function syncRailToViewport() {
@@ -43,11 +45,13 @@ onMounted(() => {
   syncRailToViewport();
   document.addEventListener("keydown", onKeydown);
   window.addEventListener("resize", syncRailToViewport);
+  workItems.start();
 });
 
 onUnmounted(() => {
   document.removeEventListener("keydown", onKeydown);
   window.removeEventListener("resize", syncRailToViewport);
+  workItems.stop();
 });
 </script>
 

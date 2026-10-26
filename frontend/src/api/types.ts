@@ -553,6 +553,170 @@ export interface ApiImportResult {
   warnings: string[];
 }
 
+/* ================= 自动化交付与工作收件箱（V2.3） ================= */
+
+export interface ValidationIssue {
+  code: string;
+  message: string;
+  path: string;
+}
+
+export interface GeneratedFile {
+  path: string;
+  content: string;
+  media_type: string;
+}
+
+export interface AutomationArtifactSummary {
+  artifact_id: string;
+  spec_id: string;
+  spec_title: string;
+  revision: number;
+  framework: string;
+  template_version: string;
+  case_count: number;
+  operation_count: number;
+  file_count: number;
+  total_bytes: number;
+  status: "validated" | "rejected";
+  validation_errors: ValidationIssue[];
+  warnings: string[];
+  created_at: string;
+}
+
+export interface AutomationArtifact extends Omit<
+  AutomationArtifactSummary,
+  "case_count" | "operation_count" | "file_count" | "total_bytes"
+> {
+  case_ids: string[];
+  operation_ids: string[];
+  files: GeneratedFile[];
+}
+
+export interface CaseResult {
+  case_id: string | null;
+  name: string;
+  classname: string;
+  status: "passed" | "failed" | "error" | "skipped";
+  duration_ms: number;
+  operation_id: string | null;
+  message: string;
+  stdout: string;
+  stderr: string;
+}
+
+export interface TestRunSummary {
+  run_id: string;
+  artifact_id: string | null;
+  spec_id: string | null;
+  source_file: string;
+  total: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  skipped: number;
+  matched: number;
+  unmatched: number;
+  pass_rate: number;
+  duration_ms: number;
+  warnings: string[];
+  created_at: string;
+}
+
+export interface TestRun extends TestRunSummary {
+  framework: string;
+  source_hash: string;
+  cases: CaseResult[];
+  unmatched_cases: CaseResult[];
+  raw_xml: string;
+}
+
+export interface JobEvent {
+  event_id: string;
+  trace_id: string;
+  action: string;
+  status: string;
+  artifact_id: string | null;
+  run_id: string | null;
+  work_item_id: string | null;
+  message: string;
+  created_at: string;
+}
+
+export type WorkItemType = "note" | "task";
+export type WorkItemStatus = "inbox" | "todo" | "doing" | "done" | "archived";
+export type WorkItemPriority = "P0" | "P1" | "P2" | "P3";
+export type ResourceType =
+  | "document"
+  | "requirement"
+  | "suite"
+  | "api_spec"
+  | "test_run"
+  | "report"
+  | "external";
+
+export interface WorkItemLink {
+  resource_type: ResourceType;
+  resource_id: string;
+  label: string;
+  href: string;
+}
+
+export interface WorkItem {
+  work_item_id: string;
+  item_type: WorkItemType;
+  title: string;
+  body: string;
+  status: WorkItemStatus;
+  priority: WorkItemPriority;
+  due_at: string | null;
+  remind_at: string | null;
+  reminded_at: string | null;
+  tags: string[];
+  pinned: boolean;
+  links: WorkItemLink[];
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface WorkItemCreate {
+  item_type?: WorkItemType;
+  title: string;
+  body?: string;
+  status?: WorkItemStatus;
+  priority?: WorkItemPriority;
+  due_at?: string | null;
+  remind_at?: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  links?: WorkItemLink[];
+}
+
+export interface WorkItemUpdate {
+  title?: string;
+  body?: string;
+  status?: WorkItemStatus;
+  priority?: WorkItemPriority;
+  due_at?: string | null;
+  remind_at?: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  links?: WorkItemLink[];
+}
+
+export interface WorkItemSummary {
+  inbox: number;
+  today: number;
+  upcoming: number;
+  overdue: number;
+  open_tasks: number;
+  completed: number;
+  due_reminders: number;
+  recent_notes: WorkItem[];
+  recent_tasks: WorkItem[];
+}
+
 export interface HealthInfo {
   app_name: string;
   version: string;
@@ -833,12 +997,18 @@ export interface PlatformOverview {
     suites: number;
     cases: number;
     reports: number;
+    automation_artifacts: number;
+    test_runs: number;
+    work_items_open: number;
+    work_items_overdue: number;
   };
   report: { llm_configured: boolean; thresholds: Record<string, number> };
   recent: {
     documents: DocumentSummary[];
     suites: TestCaseSuiteSummary[];
     reports: ReportSummary[];
+    work_items: WorkItem[];
+    work_summary: WorkItemSummary;
   };
   capabilities: {
     methods: MethodInfo[];

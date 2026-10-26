@@ -27,9 +27,16 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "suite_id": "用例集 ID。",
     "report_id": "报告存档 ID。",
     "spec_id": "接口规范 ID。",
+    "artifact_id": "自动化资产 ID。",
+    "run_id": "执行记录 ID。",
+    "work_item_id": "工作事项 ID。",
     "operation_id": "OpenAPI operation ID。",
     "filename": "文档附件文件名。",
     "fmt": "导出格式注册名，例如 excel / json / csv / xmind / testlink。",
+    "view": "工作事项视图：inbox / today / upcoming / overdue / all / completed。",
+    "status": "工作事项状态或执行结果状态。",
+    "priority": "优先级 P0–P3。",
+    "tag": "工作事项标签。",
     "format": "导出格式，例如 md / html / docx / json。",
     "limit": "本次最多返回的记录数。",
     "offset": "分页偏移量。",
@@ -47,6 +54,9 @@ _RESOURCE_PATH_NAMES = {
     "suite_id",
     "report_id",
     "spec_id",
+    "artifact_id",
+    "run_id",
+    "work_item_id",
     "operation_id",
     "filename",
     "fmt",
@@ -57,6 +67,7 @@ _BINARY_200_PATHS = {
     ("GET", "/api/v1/documents/{doc_id}/images/{filename}"),
     ("POST", "/api/v1/export"),
     ("GET", "/api/v1/export/{suite_id}/{fmt}"),
+    ("GET", "/api/v1/automation/artifacts/{artifact_id}/download"),
 }
 
 _REPORT_EXPORT_PATH = "/api/v1/report/reports/{report_id}/export"
@@ -150,7 +161,11 @@ def _enrich_responses(
     if method.lower() in {"post", "put", "patch"} and operation.get("requestBody"):
         _add_error(operation, "400", "业务参数不合法或请求无法处理。")
 
-    if path in {"/api/v1/documents/upload", "/api/v1/api-specs/import"}:
+    if path in {
+        "/api/v1/documents/upload",
+        "/api/v1/api-specs/import",
+        "/api/v1/automation/runs/import",
+    }:
         _add_error(operation, "413", "上传文件超过服务端大小限制。")
         _add_error(operation, "415", "上传文件格式不受支持。")
         _add_error(operation, "422", "文件内容或结构化数据校验失败。")
@@ -174,6 +189,13 @@ def _enrich_responses(
     if path == "/api/v1/api-specs/{spec_id}/review":
         _add_error(operation, "409", "同一接口规范已有复核任务执行中，或已完成复核。")
         _add_error(operation, "503", "大模型服务尚未配置或不可用。")
+
+    if path == "/api/v1/automation/artifacts/{artifact_id}":
+        _add_error(operation, "409", "资产已关联执行记录，不能直接删除。")
+    if path == "/api/v1/automation/artifacts/{artifact_id}/download":
+        _add_error(operation, "409", "资产未通过静态安全校验，禁止下载。")
+    if path.startswith("/api/v1/work-items"):
+        _add_error(operation, "422", "工作事项字段、日期、标签或关联资源校验失败。")
 
     _add_error(operation, "500", "服务内部错误。")
 

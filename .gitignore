@@ -50,6 +50,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.playwright-cli/
 
 # ---------- 编辑器 / 操作系统 ----------
 .idea/

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import { api, saveBlob } from "@/api";
@@ -9,19 +9,22 @@ import EmptyState from "@/components/EmptyState.vue";
 import ErrorNote from "@/components/ErrorNote.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import { confirmAction } from "@/composables/useFeedback";
+import { useActionSession } from "@/stores/actionSession";
 import { useNoticeStore } from "@/stores/notice";
 import { formatBytes, formatRelative } from "@/utils/labels";
 
 const router = useRouter();
 const notice = useNoticeStore();
+const actions = useActionSession();
 
 const specs = ref<ApiSpecSummary[]>([]);
 const loading = ref(true);
-const importing = ref(false);
+const importing = computed(() => actions.isRunning("api-spec.import"));
 const exporting = ref("");
 const error = ref("");
 const keyword = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
+let viewAlive = true;
 
 const rows = computed(() => {
   const needle = keyword.value.trim().toLowerCase();
@@ -42,6 +45,10 @@ const totals = computed(() => ({
 
 onMounted(() => {
   void load();
+});
+
+onBeforeUnmount(() => {
+  viewAlive = false;
 });
 
 async function load(): Promise<void> {
@@ -69,19 +76,21 @@ async function onFile(event: Event): Promise<void> {
     notice.error("文件格式不支持", "请选择 OpenAPI 3 的 .json、.yaml 或 .yml 文件。");
     return;
   }
-  importing.value = true;
+  if (!actions.begin("api-spec.import", file.name)) return;
   try {
     const result = await api.importApiSpec(file);
     notice.success(
       "OpenAPI 已导入",
       `${result.spec.stats.operations} 个 operation · ${result.spec.stats.cases} 条接口用例`,
     );
-    await load();
-    await router.push(`/apis/${result.spec.spec_id}`);
+    if (viewAlive) {
+      await load();
+      await router.push(`/apis/${result.spec.spec_id}`);
+    }
   } catch (err) {
     notice.error("导入失败", (err as Error).message);
   } finally {
-    importing.value = false;
+    actions.end("api-spec.import");
   }
 }
 

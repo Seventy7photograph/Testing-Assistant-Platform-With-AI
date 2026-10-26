@@ -88,9 +88,20 @@ onMounted(async () => {
             hint="已归档的测试报告数量"
           />
           <StatReadout
-            label="支持格式"
-            :value="data.capabilities.extensions.length"
-            hint="可解析的需求文档扩展名数量"
+            label="自动化资产"
+            :value="data.counts.automation_artifacts"
+            hint="已生成的受控 pytest 项目版本数"
+          />
+          <StatReadout
+            label="执行记录"
+            :value="data.counts.test_runs"
+            hint="已回收的 JUnit 运行记录数"
+          />
+          <StatReadout
+            label="待跟进"
+            :value="data.counts.work_items_open"
+            hint="未完成的工作任务数"
+            :tone="data.counts.work_items_overdue ? 'warn' : 'default'"
           />
         </div>
       </section>
@@ -180,6 +191,42 @@ onMounted(async () => {
           </p>
         </article>
       </div>
+
+      <section class="delivery-band">
+        <div class="delivery-band__head">
+          <span class="delivery-band__mark"><AppIcon name="route" :size="19" /></span>
+          <div>
+            <h2 class="lane__title">交付工作台</h2>
+            <p class="lane__sub">接口用例 → pytest 资产 → JUnit 结果 → 跟进事项与提醒</p>
+          </div>
+          <div class="spacer" />
+          <span class="chip" :class="data.counts.work_items_overdue ? 'chip--fail' : 'chip--ghost'">
+            逾期 {{ data.counts.work_items_overdue }}
+          </span>
+        </div>
+        <div class="delivery-band__facts">
+          <div>
+            <span class="label">今日事项</span>
+            <strong class="mono">{{ data.recent.work_summary.today }}</strong>
+          </div>
+          <div>
+            <span class="label">收件箱</span>
+            <strong class="mono">{{ data.recent.work_summary.inbox }}</strong>
+          </div>
+          <div>
+            <span class="label">即将到期</span>
+            <strong class="mono">{{ data.recent.work_summary.upcoming }}</strong>
+          </div>
+          <div class="delivery-band__recent">
+            <span class="label">最近跟进</span>
+            <span>{{ data.recent.work_items[0]?.title || "还没有待办，记下一条下一步。" }}</span>
+          </div>
+          <el-button type="primary" @click="router.push('/workspace')">
+            <AppIcon name="route" :size="15" />
+            打开交付工作台
+          </el-button>
+        </div>
+      </section>
 
       <!-- 最近动态 -->
       <div class="grid grid--3">
@@ -303,14 +350,14 @@ onMounted(async () => {
 
 .strip__grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--s4);
   padding-top: var(--s4);
 }
 
 @media (max-width: 1280px) {
   .strip__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -445,6 +492,75 @@ onMounted(async () => {
   font-size: var(--fs-xs);
   line-height: 1.65;
   color: var(--warn);
+}
+
+/* --- 交付闭环 ------------------------------------------------ */
+.delivery-band {
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--glacier-tint);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(106deg, var(--ice-0), var(--glacier-wash));
+}
+
+.delivery-band__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.delivery-band__mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 1px solid var(--glacier-tint);
+  border-radius: 12px;
+  background: var(--ice-0);
+  color: var(--glacier-deep);
+}
+
+.delivery-band__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, auto)) minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: var(--s4);
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--glacier-tint);
+}
+
+.delivery-band__facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.delivery-band__facts strong {
+  font-size: var(--fs-xl);
+}
+
+.delivery-band__recent span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 900px) {
+  .delivery-band__facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .delivery-band__recent {
+    grid-column: 1 / -1;
+  }
+
+  .delivery-band__facts :deep(.el-button) {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
 }
 
 /* --- 动态列表 ------------------------------------------------ */

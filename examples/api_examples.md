@@ -268,6 +268,76 @@ curl -X POST http://127.0.0.1:8000/api/v1/testcases/generate \
 
 ---
 
+## 5.2 V2.3 自动化交付与工作事项
+
+生成受控自动化资产（`case_ids` 省略时使用该规范全部接口用例）：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/automation/artifacts \
+  -H "Content-Type: application/json" \
+  -d '{"spec_id": "API-912338d6", "case_ids": ["API-GET-6EB7EEAE24"]}'
+```
+
+下载通过的 zip：
+
+```powershell
+$artifact = (Invoke-RestMethod -Method Get `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/artifacts?spec_id=API-912338d6").data |
+  Select-Object -First 1
+Invoke-WebRequest `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/artifacts/$($artifact.artifact_id)/download" `
+  -OutFile "api-tests-$($artifact.artifact_id).zip"
+```
+
+运行生成的 pytest 项目并把结果导回平台：
+
+```powershell
+Expand-Archive .\api-tests-AUTO-xxxx.zip -DestinationPath .\api-tests
+Set-Location .\api-tests
+$env:baseUrl = "http://127.0.0.1:8000"
+$env:authToken = "<local token>"
+python -m pytest --junitxml=result.xml
+Set-Location ..
+curl.exe -X POST http://127.0.0.1:8000/api/v1/automation/runs/import `
+  -F "file=@api-tests/result.xml" `
+  -F "artifact_id=AUTO-xxxx"
+```
+
+创建、完成与查询工作事项：
+
+```powershell
+$item = (Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/work-items" `
+  -ContentType "application/json" `
+  -Body (@{
+    item_type = "task"
+    title = "跟进支付接口失败"
+    status = "todo"
+    priority = "P1"
+    remind_at = (Get-Date).AddHours(1).ToString("o")
+    tags = @("回归", "支付")
+  } | ConvertTo-Json)).data
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/work-items/$($item.work_item_id)/complete"
+
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/work-items?view=today"
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/work-items/reminders/due"
+```
+
+从失败运行一键创建关联事项、读取可送入报告工作台的执行数据：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/automation/runs/RUN-xxxx/follow-up \
+  -H "Content-Type: application/json" -d '{"priority":"P1"}'
+curl http://127.0.0.1:8000/api/v1/automation/runs/RUN-xxxx/report-source
+curl "http://127.0.0.1:8000/api/v1/automation/events?run_id=RUN-xxxx"
+```
+
+> 平台不会执行下载的 pytest 项目。JUnit 未匹配 case 不会丢弃；资产未通过静态安全校验时下载返回 409。
+
+---
+
 ## 6. Python 客户端示例
 
 ```python
@@ -310,6 +380,9 @@ with httpx.Client(timeout=120) as client:
 | 415 | `UNSUPPORTED_FORMAT` | 不支持的文件扩展名 |
 | 422 | `DOCUMENT_PARSE_FAILED` / `DOCUMENT_EMPTY` | 文档损坏 / 抽不到有效文本 |
 | 422 | `VALIDATION_ERROR` | 请求体字段类型或取值范围不合法 |
+| 422 | `JUNIT_PARSE_FAILED` | JUnit XML 畸形、根节点错误或不是 pytest 兼容格式 |
+| 422 | `SCHEMA_VALIDATION_FAILED` | 工作事项日期、标签或关联字段校验失败 |
+| 409 | `CONFLICT` | 资产未通过安全校验、有关联运行尚不能删除，或执行中任务重复 |
 | 500 | `EXPORT_FAILED` | Excel 导出失败（如文件被占用） |
 | 501 | `FEATURE_NOT_AVAILABLE` | 调用预留但未实现的能力（判定表/因果图/正交实验等） |
 | 502 | `LLM_ERROR` / `LLM_RESPONSE_INVALID` | 大模型调用失败 / 多次重试后仍非合法 JSON |

@@ -1,4 +1,4 @@
-import { del, downloadFile, get, post, put, upload } from "./client";
+import { del, downloadFile, get, post, put, upload, uploadWithFields } from "./client";
 
 import type {
   AnalyzeRequest,
@@ -9,6 +9,8 @@ import type {
   ApiReviewResult,
   ApiSpec,
   ApiSpecSummary,
+  AutomationArtifact,
+  AutomationArtifactSummary,
   BatchDeleteResult,
   CoverageReport,
   DocumentSummary,
@@ -16,6 +18,7 @@ import type {
   GenerateResult,
   HealthInfo,
   IntegrationInfo,
+  JobEvent,
   LLMConfigInfo,
   LLMConfigPayload,
   LLMModelList,
@@ -33,11 +36,17 @@ import type {
   SampleDataset,
   TestCaseSuite,
   TestCaseSuiteSummary,
+  TestRun,
+  TestRunSummary,
   ThresholdView,
   TrendPoint,
   VisionConfigInfo,
   VisionConfigPayload,
   VisionTestResult,
+  WorkItem,
+  WorkItemCreate,
+  WorkItemSummary,
+  WorkItemUpdate,
 } from "./types";
 
 export interface GeneratePayload {
@@ -118,6 +127,86 @@ export const api = {
     del<{ deleted: boolean; spec_id: string; deleted_cases: number }>(
       `/api-specs/${encodeURIComponent(specId)}`,
     ),
+
+  /* ---------- 自动化交付（V2.3） ---------- */
+  automationArtifacts: (specId?: string, limit = 30) =>
+    get<AutomationArtifactSummary[]>("/automation/artifacts", {
+      limit,
+      ...(specId ? { spec_id: specId } : {}),
+    }),
+  automationArtifact: (artifactId: string) =>
+    get<AutomationArtifact>(`/automation/artifacts/${encodeURIComponent(artifactId)}`),
+  createAutomationArtifact: (specId: string, caseIds: string[] = []) =>
+    post<AutomationArtifact>("/automation/artifacts", {
+      spec_id: specId,
+      case_ids: caseIds,
+    }),
+  downloadAutomationArtifact: (artifactId: string) =>
+    downloadFile(`/automation/artifacts/${encodeURIComponent(artifactId)}/download`),
+  importJunitRun: (file: File, artifactId?: string) =>
+    uploadWithFields<TestRun>(
+      "/automation/runs/import",
+      file,
+      artifactId ? { artifact_id: artifactId } : {},
+    ),
+  testRuns: (query: { artifactId?: string; specId?: string; limit?: number } = {}) =>
+    get<TestRunSummary[]>("/automation/runs", {
+      limit: query.limit ?? 30,
+      ...(query.artifactId ? { artifact_id: query.artifactId } : {}),
+      ...(query.specId ? { spec_id: query.specId } : {}),
+    }),
+  testRun: (runId: string) =>
+    get<TestRun>(`/automation/runs/${encodeURIComponent(runId)}`),
+  testRunReportSource: (runId: string) =>
+    get<{ test_data: string; suggested_title: string }>(
+      `/automation/runs/${encodeURIComponent(runId)}/report-source`,
+    ),
+  createRunFollowUp: (
+    runId: string,
+    payload: { priority?: "P0" | "P1" | "P2" | "P3"; remind_at?: string | null } = {},
+  ) =>
+    post<WorkItem>(`/automation/runs/${encodeURIComponent(runId)}/follow-up`, payload),
+  jobEvents: (query: { runId?: string; artifactId?: string; limit?: number } = {}) =>
+    get<JobEvent[]>("/automation/events", {
+      limit: query.limit ?? 100,
+      ...(query.runId ? { run_id: query.runId } : {}),
+      ...(query.artifactId ? { artifact_id: query.artifactId } : {}),
+    }),
+
+  /* ---------- 工作事项（V2.3） ---------- */
+  workItems: (
+    query: {
+      view?: string;
+      q?: string;
+      status?: string;
+      priority?: string;
+      tag?: string;
+      limit?: number;
+    } = {},
+  ) =>
+    get<WorkItem[]>("/work-items", {
+      limit: query.limit ?? 200,
+      view: query.view ?? "all",
+      ...(query.q ? { q: query.q } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.priority ? { priority: query.priority } : {}),
+      ...(query.tag ? { tag: query.tag } : {}),
+    }),
+  workItem: (workItemId: string) =>
+    get<WorkItem>(`/work-items/${encodeURIComponent(workItemId)}`),
+  createWorkItem: (payload: WorkItemCreate) => post<WorkItem>("/work-items", payload),
+  updateWorkItem: (workItemId: string, payload: WorkItemUpdate) =>
+    put<WorkItem>(`/work-items/${encodeURIComponent(workItemId)}`, payload),
+  completeWorkItem: (workItemId: string) =>
+    post<WorkItem>(`/work-items/${encodeURIComponent(workItemId)}/complete`),
+  archiveWorkItem: (workItemId: string) =>
+    post<WorkItem>(`/work-items/${encodeURIComponent(workItemId)}/archive`),
+  deleteWorkItem: (workItemId: string) =>
+    del<{ deleted: boolean }>(`/work-items/${encodeURIComponent(workItemId)}`),
+  workItemSummary: () => get<WorkItemSummary>("/work-items/summary"),
+  dueWorkItemReminders: () => get<WorkItem[]>("/work-items/reminders/due"),
+  ackWorkItemReminders: (ids: string[]) =>
+    post<WorkItem[]>("/work-items/reminders/ack", { ids }),
 
   documents: (limit = 20) => get<DocumentSummary[]>("/documents", { limit }),
   document: (docId: string) => get<DocumentSummary>(`/documents/${docId}`),

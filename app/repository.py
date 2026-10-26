@@ -25,8 +25,10 @@ from app.core.exceptions import AppError, NotFoundError
 from app.core.logging import get_logger
 from app.schemas.document import DocumentRecord
 from app.schemas.api_testing import ApiCaseSpec, ApiSpec
+from app.schemas.execution import AutomationArtifact, JobEvent, TestRun
 from app.schemas.requirement import RequirementDoc
 from app.schemas.testcase import TestCaseSuite
+from app.schemas.work_item import WorkItem
 
 logger = get_logger(__name__)
 
@@ -190,6 +192,21 @@ class Repository:
         self.api_cases: JsonObjectStore[ApiCaseSpec] = JsonObjectStore(
             base / "api_cases", ApiCaseSpec, id_attr="case_id", label="接口用例"
         )
+        self.automation_artifacts: JsonObjectStore[AutomationArtifact] = JsonObjectStore(
+            base / "automation_artifacts",
+            AutomationArtifact,
+            id_attr="artifact_id",
+            label="自动化资产",
+        )
+        self.test_runs: JsonObjectStore[TestRun] = JsonObjectStore(
+            base / "test_runs", TestRun, id_attr="run_id", label="测试运行"
+        )
+        self.job_events: JsonObjectStore[JobEvent] = JsonObjectStore(
+            base / "job_events", JobEvent, id_attr="event_id", label="任务事件"
+        )
+        self.work_items: JsonObjectStore[WorkItem] = JsonObjectStore(
+            base / "work_items", WorkItem, id_attr="work_item_id", label="工作事项"
+        )
 
     def _build_sql_collections(self) -> None:
         # 延迟导入：只用 JSON 后端时不必依赖 SQLAlchemy。
@@ -211,6 +228,22 @@ class Repository:
         self.api_cases = SqlObjectStore(
             self.engine, ApiCaseSpec, kind="api_cases", id_attr="case_id", label="接口用例"
         )
+        self.automation_artifacts = SqlObjectStore(
+            self.engine,
+            AutomationArtifact,
+            kind="automation_artifacts",
+            id_attr="artifact_id",
+            label="自动化资产",
+        )
+        self.test_runs = SqlObjectStore(
+            self.engine, TestRun, kind="test_runs", id_attr="run_id", label="测试运行"
+        )
+        self.job_events = SqlObjectStore(
+            self.engine, JobEvent, kind="job_events", id_attr="event_id", label="任务事件"
+        )
+        self.work_items = SqlObjectStore(
+            self.engine, WorkItem, kind="work_items", id_attr="work_item_id", label="工作事项"
+        )
         self._warn_if_json_left_behind()
 
     def _warn_if_json_left_behind(self) -> None:
@@ -225,6 +258,10 @@ class Repository:
                 or self.suites.count()
                 or self.api_specs.count()
                 or self.api_cases.count()
+                or self.automation_artifacts.count()
+                or self.test_runs.count()
+                or self.job_events.count()
+                or self.work_items.count()
             ):
                 return
         except Exception:  # noqa: BLE001 - 统计失败不影响主流程
@@ -232,7 +269,17 @@ class Repository:
         legacy = self.settings.data_dir
         stale = [
             folder
-            for folder in ("documents", "requirements", "suites", "api_specs", "api_cases")
+            for folder in (
+                "documents",
+                "requirements",
+                "suites",
+                "api_specs",
+                "api_cases",
+                "automation_artifacts",
+                "test_runs",
+                "job_events",
+                "work_items",
+            )
             if any((legacy / folder).glob("*.json"))
         ]
         if stale:
@@ -330,6 +377,18 @@ class Repository:
         suites = self.suites.list_recent(max(limit, 1) * 5, predicate=lambda item: item.doc_id == doc_id)
         suites.sort(key=lambda item: item.revision, reverse=True)
         return suites[: max(limit, 1)]
+
+    def next_artifact_revision(self, spec_id: str) -> int:
+        """同一接口规范下自动化资产的下一版本号。"""
+        best = 0
+        for payload in self.automation_artifacts.iter_payloads():
+            if str(payload.get("spec_id") or "") != spec_id:
+                continue
+            try:
+                best = max(best, int(payload.get("revision") or 0))
+            except (TypeError, ValueError):
+                continue
+        return best + 1
 
 
 def normalize_backend(raw: object) -> str:

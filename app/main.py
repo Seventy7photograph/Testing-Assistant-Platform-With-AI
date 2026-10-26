@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.api.routes import (
     api_specs,
+    automation,
     documents,
     export,
     health,
@@ -33,6 +34,7 @@ from app.api.routes import (
     requirements,
     testcases,
     vision,
+    work_items,
 )
 from app.api.openapi import install_openapi
 from app.core.config import Settings, get_settings
@@ -58,10 +60,11 @@ logger = get_logger(__name__)
 DESCRIPTION = f"""
 测试工程师助手平台（v{__version__}）—— 面向测试工程师的一体化工作台。
 
-三条核心链路：
+四条核心链路：
   1. 用例生成：需求文档上传 -> 需求结构化解析 -> 测试设计引擎（六种方法）-> 用例优化去重 -> 多格式导出；
   2. 测试报告：测试执行数据 -> 确定性指标（通过率/执行率/缺陷分布/发版判定）-> AI 归纳与建议 -> 存档 / 趋势 / Markdown / HTML / DOCX 导出。
   3. 接口资产：OpenAPI 3 JSON/YAML -> $ref 展开与 operation 规范化 -> 契约用例 / 断言 -> Postman Collection 2.1。
+  4. 自动交付：接口用例 -> 受控 pytest 资产 -> JUnit 结果回收 -> 失败跟进事项 / 到期提醒。
 
 - 未配置 LLM_API_KEY 时，用例生成自动降级为纯规则引擎，报告链路显式提示，功能依然可解释；
 - 设计策略、导出器、LLM Provider、外部集成均为插件式接口，新增能力只需注册，不改主干。
@@ -163,6 +166,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         report_routes,
         vision,
         api_specs,
+        automation,
+        work_items,
     ):
         app.include_router(module.router, prefix=settings.api_prefix)
 

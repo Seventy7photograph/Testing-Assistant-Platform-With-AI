@@ -26,6 +26,7 @@ import {
   engineTitle,
   formatDuration,
   formatRelative,
+  methodOrderIndex,
   requirementTypeLabel,
 } from "@/utils/labels";
 
@@ -51,7 +52,9 @@ const suitesLoading = ref(false);
 
 /** 方法清单以服务端能力清单为准（store 已缓存 /health）。 */
 const methodList = computed(() =>
-  health.methods.map((item) => ({ ...item, note: METHOD_NOTES[item.name] ?? "" })),
+  [...health.methods]
+    .sort((left, right) => methodOrderIndex(left.name) - methodOrderIndex(right.name))
+    .map((item) => ({ ...item, note: METHOD_NOTES[item.name] ?? "" })),
 );
 
 const fieldsOf = computed<FieldConstraint[]>(() =>

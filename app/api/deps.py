@@ -17,8 +17,10 @@ from app.repository import Repository, get_repository
 from app.services.document_service import DocumentService
 from app.services.export_service import ExportService
 from app.services.api_service import ApiService
+from app.services.execution_service import ExecutionService
 from app.services.pipeline_service import PipelineService
 from app.services.requirement_service import RequirementService
+from app.services.work_item_service import WorkItemService
 
 
 def settings_dep() -> Settings:
@@ -75,6 +77,20 @@ def pipeline_service_dep(
     return PipelineService(settings, llm, repository)
 
 
+def automation_service_dep(
+    settings: Annotated[Settings, Depends(settings_dep)],
+    repository: Annotated[Repository, Depends(repository_dep)],
+) -> ExecutionService:
+    return ExecutionService(settings, repository)
+
+
+def work_item_service_dep(
+    settings: Annotated[Settings, Depends(settings_dep)],
+    repository: Annotated[Repository, Depends(repository_dep)],
+) -> WorkItemService:
+    return WorkItemService(settings, repository)
+
+
 SettingsDep = Annotated[Settings, Depends(settings_dep)]
 RepositoryDep = Annotated[Repository, Depends(repository_dep)]
 LLMDep = Annotated[LLMProvider, Depends(llm_dep)]
@@ -84,3 +100,5 @@ DesignEngineDep = Annotated[DesignEngine, Depends(design_engine_dep)]
 ExportServiceDep = Annotated[ExportService, Depends(export_service_dep)]
 ApiServiceDep = Annotated[ApiService, Depends(api_service_dep)]
 PipelineServiceDep = Annotated[PipelineService, Depends(pipeline_service_dep)]
+AutomationServiceDep = Annotated[ExecutionService, Depends(automation_service_dep)]
+WorkItemServiceDep = Annotated[WorkItemService, Depends(work_item_service_dep)]

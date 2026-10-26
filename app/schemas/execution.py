@@ -30,6 +30,8 @@ class AutomationArtifact(BaseModel):
     artifact_id: str
     spec_id: str
     spec_title: str = ""
+    parent_artifact_id: str | None = None
+    source_review_id: str | None = None
     revision: int = 1
     framework: str = "pytest+httpx"
     template_version: str = "1.0.0"
@@ -39,6 +41,7 @@ class AutomationArtifact(BaseModel):
     status: Literal["validated", "rejected"] = "validated"
     validation_errors: list[ValidationIssue] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    change_summary: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
 
     def summary(self) -> "AutomationArtifactSummary":
@@ -46,6 +49,8 @@ class AutomationArtifact(BaseModel):
             artifact_id=self.artifact_id,
             spec_id=self.spec_id,
             spec_title=self.spec_title,
+            parent_artifact_id=self.parent_artifact_id,
+            source_review_id=self.source_review_id,
             revision=self.revision,
             framework=self.framework,
             template_version=self.template_version,
@@ -56,6 +61,7 @@ class AutomationArtifact(BaseModel):
             status=self.status,
             validation_errors=self.validation_errors,
             warnings=self.warnings,
+            change_summary=self.change_summary,
             created_at=self.created_at,
         )
 
@@ -64,6 +70,8 @@ class AutomationArtifactSummary(BaseModel):
     artifact_id: str
     spec_id: str
     spec_title: str = ""
+    parent_artifact_id: str | None = None
+    source_review_id: str | None = None
     revision: int = 1
     framework: str = "pytest+httpx"
     template_version: str = "1.0.0"
@@ -74,6 +82,7 @@ class AutomationArtifactSummary(BaseModel):
     status: Literal["validated", "rejected"] = "validated"
     validation_errors: list[ValidationIssue] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    change_summary: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
 
 

@@ -13,6 +13,7 @@ from app.schemas.automation_ai import (
     FindingDecisionRequest,
     ReviewDecisionRequest,
 )
+from app.schemas.execution import AutomationArtifact
 
 router = APIRouter(tags=["自动化 AI 增强"])
 
@@ -72,6 +73,26 @@ async def get_automation_ai_review(
     service: AutomationAIServiceDep,
 ) -> dict:
     return ok(service.get_review(review_id))
+
+
+@router.post(
+    "/automation/ai/reviews/{review_id}/apply",
+    response_model=ApiResponse[AutomationArtifact],
+    summary="将已采纳建议应用为新的自动化资产版本",
+)
+async def apply_automation_ai_review(
+    review_id: str,
+    service: AutomationAIServiceDep,
+) -> dict:
+    artifact = service.apply_review(review_id)
+    return ok(
+        artifact,
+        message=(
+            f"已生成 v{artifact.revision} 派生资产"
+            if artifact.status == "validated"
+            else "已生成派生资产，但未通过静态安全校验，禁止下载"
+        ),
+    )
 
 
 @router.put(

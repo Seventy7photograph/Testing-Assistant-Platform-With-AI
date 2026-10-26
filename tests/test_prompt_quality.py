@@ -76,7 +76,7 @@ def test_fixture_count_and_prompt_registry() -> None:
         "automation.fixture_recipe",
         "automation.script_review",
     }
-    assert all(spec.version in {"2.1.0", "2.2.0", "2.3.1"} for spec in ALL_PROMPTS)
+    assert all(spec.version in {"2.1.0", "2.2.0", "2.3.1", "2.3.2"} for spec in ALL_PROMPTS)
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])
@@ -246,4 +246,4 @@ def test_prompt_registry_endpoint(client) -> None:
         "automation.fixture_recipe",
         "automation.script_review",
     }
-    assert all(item["version"] in {"2.1.0", "2.2.0", "2.3.1"} for item in items)
+    assert all(item["version"] in {"2.1.0", "2.2.0", "2.3.1", "2.3.2"} for item in items)

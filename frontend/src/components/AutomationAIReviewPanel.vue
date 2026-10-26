@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 
 import { api, saveBlob } from "@/api";
 import type {
+  AutomationArtifact,
   AutomationAIFinding,
   AutomationAIKind,
   AutomationAIReview,
@@ -24,7 +25,10 @@ const props = withDefaults(
   },
 );
 
-const emit = defineEmits<{ (e: "changed"): void }>();
+const emit = defineEmits<{
+  (e: "changed"): void;
+  (e: "applied", artifact: AutomationArtifact): void;
+}>();
 const notice = useNoticeStore();
 const reviews = ref<AutomationAIReview[]>([]);
 const selectedReviewId = ref("");
@@ -155,6 +159,41 @@ async function decideFinding(
   }
 }
 
+function canApplyReview(review: AutomationAIReview): boolean {
+  if (review.status !== "completed" || review.applied_artifact_id || review.kind === "script_review") {
+    return false;
+  }
+  if (review.kind === "fixture_recipe") return review.decision === "accepted";
+  if (review.kind === "operation_gap") {
+    return review.findings.some(
+      (item) => item.disposition === "accepted" && item.proposed_case !== null,
+    );
+  }
+  return review.findings.some(
+    (item) => item.disposition === "accepted" && item.proposed_assertion !== null,
+  );
+}
+
+async function applyReview(review: AutomationAIReview) {
+  if (!canApplyReview(review)) return;
+  busy.value = `apply:${review.review_id}`;
+  try {
+    const artifact = await api.applyAutomationAIReview(review.review_id);
+    notice.success(
+      `已生成 v${artifact.revision} 派生资产`,
+      artifact.status === "validated"
+        ? `静态门禁通过 · ${artifact.files.length} 个文件`
+        : "静态门禁未通过，新版本禁止下载",
+    );
+    emit("applied", artifact);
+    await load();
+  } catch (err) {
+    notice.error("应用 AI 建议失败", (err as Error).message);
+  } finally {
+    busy.value = "";
+  }
+}
+
 async function decideRecipe(review: AutomationAIReview, decision: "accepted" | "rejected") {
   busy.value = `recipe:${review.review_id}`;
   try {
@@ -210,17 +249,6 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
 
 <template>
   <section class="ai-review" aria-label="AI 受控增强">
-    <header class="ai-review__head">
-      <div>
-        <p class="calib">CONTROLLED AI</p>
-        <h4>受控增强</h4>
-      </div>
-      <span class="ai-review__guard">
-        <AppIcon name="help" :size="14" />
-        建议需人工决定
-      </span>
-    </header>
-
     <div class="ai-review__tasks">
       <button
         v-for="kind in kinds"
@@ -327,13 +355,28 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
               </code>
               <p>{{ finding.proposed_assertion.description }}</p>
             </div>
+            <div v-if="finding.proposed_case" class="case-proposal">
+              <span class="label">待人工 case 提案</span>
+              <strong>{{ finding.proposed_case.title }}</strong>
+              <p>
+                {{ finding.proposed_case.operation_id }} ·
+                {{ finding.proposed_case.category }} ·
+                {{ finding.proposed_case.priority }}
+              </p>
+              <code v-for="assertion in finding.proposed_case.assertions" :key="`${assertion.kind}-${assertion.path}-${assertion.operator}`">
+                {{ assertion.kind }} {{ assertion.path }} {{ assertion.operator }} {{ assertion.expected }}
+              </code>
+              <span v-if="!finding.proposed_case.assertions.length" class="muted">
+                继承 base case 的既有断言
+              </span>
+            </div>
             <div class="finding__foot">
               <code>{{ finding.source_ref }}</code>
               <div class="spacer" />
               <button
                 type="button"
                 class="text-btn"
-                :disabled="Boolean(busy) || finding.disposition === 'rejected'"
+                :disabled="Boolean(busy) || finding.disposition === 'rejected' || Boolean(selectedReview.applied_artifact_id)"
                 @click="decideFinding(selectedReview, finding, 'rejected')"
               >
                 驳回
@@ -341,7 +384,7 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
               <button
                 type="button"
                 class="text-btn text-btn--primary"
-                :disabled="Boolean(busy) || finding.disposition === 'accepted'"
+                :disabled="Boolean(busy) || finding.disposition === 'accepted' || Boolean(selectedReview.applied_artifact_id)"
                 @click="decideFinding(selectedReview, finding, 'accepted')"
               >
                 采纳
@@ -407,7 +450,7 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
             <button
               type="button"
               class="text-btn"
-              :disabled="Boolean(busy) || selectedReview.decision === 'rejected'"
+              :disabled="Boolean(busy) || selectedReview.decision === 'rejected' || Boolean(selectedReview.applied_artifact_id)"
               @click="decideRecipe(selectedReview, 'rejected')"
             >
               驳回
@@ -415,12 +458,41 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
             <button
               type="button"
               class="text-btn text-btn--primary"
-              :disabled="Boolean(busy) || selectedReview.decision === 'accepted'"
+              :disabled="Boolean(busy) || selectedReview.decision === 'accepted' || Boolean(selectedReview.applied_artifact_id)"
               @click="decideRecipe(selectedReview, 'accepted')"
             >
               采纳配方
             </button>
           </div>
+        </div>
+
+        <div v-if="selectedReview.kind !== 'script_review'" class="apply-bar">
+          <div>
+            <strong>
+              {{
+                selectedReview.applied_artifact_id
+                  ? "已生成派生版本"
+                  : "生成派生版本"
+              }}
+            </strong>
+            <span>
+              {{
+                selectedReview.applied_artifact_id
+                  ? selectedReview.applied_artifact_id
+                  : "原版本不变；应用后重新执行 AST、语法与密钥门禁"
+              }}
+            </span>
+          </div>
+          <div class="spacer" />
+          <button
+            type="button"
+            class="apply-btn"
+            :disabled="Boolean(busy) || !canApplyReview(selectedReview)"
+            @click="applyReview(selectedReview)"
+          >
+            <AppIcon name="sparkle" :size="15" />
+            {{ busy === `apply:${selectedReview.review_id}` ? "生成中…" : "应用并生成新版本" }}
+          </button>
         </div>
 
         <p
@@ -446,7 +518,6 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
   background: color-mix(in srgb, var(--ice-1) 72%, var(--ice-0));
 }
 
-.ai-review__head,
 .review-meta,
 .finding__head,
 .finding__foot,
@@ -458,27 +529,10 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
   flex-wrap: wrap;
 }
 
-.ai-review__head {
-  justify-content: space-between;
-}
-
-.ai-review__head h4 {
-  margin-top: 2px;
-}
-
-.ai-review__guard {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ink-3);
-  font-size: 10.5px;
-}
-
 .ai-review__tasks {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s2);
-  margin-top: var(--s3);
 }
 
 .ai-task {
@@ -663,6 +717,29 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
   background: var(--glacier-wash);
 }
 
+.case-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--s3);
+  padding: var(--s2);
+  border-left: 2px solid var(--pass);
+  background: var(--pass-wash);
+}
+
+.case-proposal strong {
+  font-size: var(--fs-sm);
+}
+
+.case-proposal p,
+.case-proposal code {
+  font-size: 10.5px;
+}
+
+.case-proposal code {
+  overflow-wrap: anywhere;
+}
+
 .assertion code {
   display: block;
   margin-top: 3px;
@@ -772,6 +849,54 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
   margin-top: var(--s3);
   padding-top: var(--s3);
   border-top: 1px solid var(--ice-3);
+}
+
+.apply-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--glacier-tint);
+  border-radius: var(--radius);
+  background: var(--glacier-wash);
+}
+
+.apply-bar > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.apply-bar strong {
+  font-size: var(--fs-sm);
+}
+
+.apply-bar span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.apply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 11px;
+  border: 1px solid var(--glacier);
+  border-radius: var(--radius);
+  background: var(--glacier);
+  color: var(--on-mass);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.apply-btn:disabled {
+  border-color: var(--ice-4);
+  background: var(--ice-2);
+  color: var(--ink-3);
+  cursor: default;
 }
 
 .review-empty {

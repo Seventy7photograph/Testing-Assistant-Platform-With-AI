@@ -37,6 +37,31 @@ class AIAssertionProposal(BaseModel):
     source_ref: str = ""
 
 
+class AIRequestProposal(BaseModel):
+    """对确定性 base case 的请求补丁；不包含 method/path。"""
+
+    query: dict[str, Any] | None = None
+    path_params: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
+    cookies: dict[str, Any] | None = None
+    body: Any = None
+
+
+class AIApiCaseProposal(BaseModel):
+    """待人工采纳、再由应用引擎转换为新 ApiCaseSpec 的 case 提案。"""
+
+    base_case_id: str = ""
+    operation_id: str
+    title: str
+    category: Literal["positive", "negative", "boundary", "security", "contract"] = "positive"
+    priority: Literal["P0", "P1", "P2", "P3"] = "P2"
+    request: AIRequestProposal | None = None
+    assertions: list[AIAssertionProposal] = Field(default_factory=list)
+    preconditions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    source_ref: str = ""
+
+
 class AutomationAIFinding(BaseModel):
     finding_id: str
     category: Literal[
@@ -56,6 +81,7 @@ class AutomationAIFinding(BaseModel):
     claim_status: Literal["inferred"] = "inferred"
     disposition: FindingDisposition = "pending"
     proposed_assertion: AIAssertionProposal | None = None
+    proposed_case: AIApiCaseProposal | None = None
 
 
 class FixtureEnvironmentVariable(BaseModel):
@@ -117,6 +143,8 @@ class AutomationAIReview(BaseModel):
     decision: ReviewDecision = "pending"
     context: dict[str, Any] = Field(default_factory=dict)
     meta: AutomationAIMeta = Field(default_factory=AutomationAIMeta)
+    applied_artifact_id: str | None = None
+    applied_at: str | None = None
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 
@@ -131,6 +159,8 @@ class ReviewDecisionRequest(BaseModel):
 
 __all__ = [
     "AIAssertionProposal",
+    "AIApiCaseProposal",
+    "AIRequestProposal",
     "AutomationAIFinding",
     "AutomationAIKind",
     "AutomationAIMeta",

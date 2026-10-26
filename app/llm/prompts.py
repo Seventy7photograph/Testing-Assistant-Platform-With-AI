@@ -346,7 +346,34 @@ AUTOMATION_OPERATION_GAP_SYSTEM_PROMPT = f"""你是资深接口测试架构师�
       "suggestion": "建议人工补充什么场景，不输出可直接执行的代码",
       "rationale": "为什么值得补，引用输入中可见的约束",
       "source_ref": "必须逐字来自 allowed_source_refs",
-      "claim_status": "inferred"
+      "claim_status": "inferred",
+      "proposed_case": {{
+        "base_case_id": "可选的同 operation 已有 case_id",
+        "operation_id": "必须与当前 finding 相同",
+        "title": "建议新增用例标题",
+        "category": "positive|negative|boundary|security|contract",
+        "priority": "P0|P1|P2|P3",
+        "request": {{
+          "query": {{}},
+          "path_params": {{}},
+          "headers": {{}},
+          "cookies": {{}},
+          "body": null
+        }},
+        "assertions": [
+          {{
+            "kind": "status|header|json",
+            "path": "header 名或 JSON 路径",
+            "operator": "equals|exists|type|in|gte|lte",
+            "expected": "期望值",
+            "description": "断言语义",
+            "source_ref": "allowed_source_refs 中的来源"
+          }}
+        ],
+        "preconditions": [],
+        "tags": [],
+        "source_ref": "allowed_source_refs 中的来源"
+      }}
     }}
   ]
 }}
@@ -355,6 +382,7 @@ AUTOMATION_OPERATION_GAP_SYSTEM_PROMPT = f"""你是资深接口测试架构师�
 - 最多 8 条；没有合理缺口就返回空 findings。
 - 不得编造 operation、字段、状态码、业务规则或 source_ref。
 - 不得输出 Python、shell 或可直接执行的测试代码。
+- proposed_case 只能基于当前 operation 和已有 base case，应用时会再次校验字段和来源。
 - 业务语义不确定时必须说明原因，不能写成已验证事实。
 """
 

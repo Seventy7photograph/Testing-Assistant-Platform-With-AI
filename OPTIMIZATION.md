@@ -13,6 +13,7 @@
   ／ 2026-10-22（v2.1.1 补丁：粘贴文本入库与吸底栏跨路由残留）
   ／ 2026-10-26（第六轮 v2.3.0：自动化交付、JUnit 回收、工作收件箱与提醒）
   ／ 2026-10-27（v2.3.1：自动化受控 AI、页签切换抖动修复）
+  ／ 2026-10-27（v2.3.2：AI 受控自动派生、侧边抽屉）
 
 ---
 
@@ -464,7 +465,7 @@ Prompt 评测脚本、三个离线脚本、前端构建与 Playwright 冒烟。
 
 ---
 
-## 六、第六轮走查（v2.3.0 → v2.3.1）
+## 六、第六轮走查（v2.3.0 → v2.3.2）
 
 ### 6.1 走查范围与发现
 
@@ -488,7 +489,7 @@ V2.3 合并原 V2.3 自动化资产与 V2.4 工作事项。走查链路为：
 
 ### 6.2 风险与证据
 
-风险矩阵与失败模式分析见 [`docs/qa-v2.3.1-risk-matrix.md`](docs/qa-v2.3.1-risk-matrix.md)。
+风险矩阵与失败模式分析见 [`docs/qa-v2.3.2-risk-matrix.md`](docs/qa-v2.3.2-risk-matrix.md)。
 最高风险集中在生成代码安全、密钥泄漏、JUnit 映射、提醒去重和双存储一致性；
 对应测试覆盖生成器、validator、真实 pytest 运行、JUnit fixture、API、JSON/SQLite 与 Playwright。
 
@@ -501,6 +502,16 @@ V2.3 合并原 V2.3 自动化资产与 V2.4 工作事项。走查链路为：
 - 配方仅接收脱敏后的请求结构与字段类型，不发送实际请求值，可下载为 JSON 配方供人工使用。
 - 页签抖动的根因是 `router.replace()` 改变 `fullPath`，使 RouterView 依据 fullPath 重建并触发回顶。
   改为本地 `activeTab` 切换 + `history.replaceState()` 后，组件实例、DOM marker、滚动位置和 URL 均保持。
+
+### 6.4 v2.3.2 受控应用与侧边抽屉
+
+- AI 工作区由页面底部内联区域迁到右侧抽屉；资产页打开覆盖/配方/脚本审查，执行记录页打开失败断言建议。
+- 采纳 operation 提案后，引擎复制同 operation 的确定性 base case，生成新 `API-AI-*` case，不修改原 case。
+- 采纳失败断言后，复制目标 case 并追加去重后的 assertion，生成新的 case 版本。
+- 采纳 recipe 后，派生资产新增 `fixtures.json`、`test_data.json`，并更新 `.env.example`；secret 只写空值。
+- 应用后自动生成新的 artifact revision 并按需下载新 zip，同时重新执行 AST、语法、危险调用与密钥门禁。
+- 原始资产、源 case、源断言和原始 zip 保持不变；同一 AI 建议只能应用一次。
+- Playwright 实测：抽屉从右侧打开，operation 提案生成 `v2`，recipe 生成 `v3`；`v1`、`v2` 均保留。
 
 ---
 
@@ -559,6 +570,7 @@ V2.3 合并原 V2.3 自动化资产与 V2.4 工作事项。走查链路为：
 | v2.3 浏览器 | 资产生成、JUnit 上传、失败跟进、Markdown 编辑/预览、站内提醒通过；390px `scrollWidth=clientWidth=390` |
 | v2.3 自动化受控 AI | 四类任务、人工采纳/驳回、来源越界丢弃、配方密钥/代码拒绝、配方下载通过；全量 435 passed |
 | v2.3 页签抖动 | DOM 实例 marker 保持，`automation → runs → items` 切换时滚动位置与 URL query 保持 |
+| v2.3.2 自动派生 | operation 自动补充 case、assertion 副本、fixture/test_data 文件、新 zip 与静态门禁通过；全量 438 passed |
 
 界面证据见 `docs/review/`（本地走查截图，不入库）。
 

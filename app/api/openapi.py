@@ -30,6 +30,9 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "artifact_id": "自动化资产 ID。",
     "run_id": "执行记录 ID。",
     "work_item_id": "工作事项 ID。",
+    "review_id": "自动化受控 AI 建议 ID。",
+    "finding_id": "单条 AI 建议 ID。",
+    "kind": "自动化 AI 任务类型：operation_gap / failure_assertion / fixture_recipe / script_review。",
     "operation_id": "OpenAPI operation ID。",
     "filename": "文档附件文件名。",
     "fmt": "导出格式注册名，例如 excel / json / csv / xmind / testlink。",
@@ -57,6 +60,8 @@ _RESOURCE_PATH_NAMES = {
     "artifact_id",
     "run_id",
     "work_item_id",
+    "review_id",
+    "finding_id",
     "operation_id",
     "filename",
     "fmt",
@@ -68,6 +73,7 @@ _BINARY_200_PATHS = {
     ("POST", "/api/v1/export"),
     ("GET", "/api/v1/export/{suite_id}/{fmt}"),
     ("GET", "/api/v1/automation/artifacts/{artifact_id}/download"),
+    ("GET", "/api/v1/automation/ai/reviews/{review_id}/recipe"),
 }
 
 _REPORT_EXPORT_PATH = "/api/v1/report/reports/{report_id}/export"
@@ -189,6 +195,12 @@ def _enrich_responses(
     if path == "/api/v1/api-specs/{spec_id}/review":
         _add_error(operation, "409", "同一接口规范已有复核任务执行中，或已完成复核。")
         _add_error(operation, "503", "大模型服务尚未配置或不可用。")
+
+    if path == "/api/v1/automation/ai/reviews":
+        _add_error(operation, "409", "同类自动化 AI 建议任务正在执行。")
+        _add_error(operation, "503", "大模型服务尚未配置或不可用。")
+    if path.startswith("/api/v1/automation/ai/reviews/{review_id}"):
+        _add_error(operation, "409", "建议仍在运行或已完成，状态不允许当前人工决定。")
 
     if path == "/api/v1/automation/artifacts/{artifact_id}":
         _add_error(operation, "409", "资产已关联执行记录，不能直接删除。")

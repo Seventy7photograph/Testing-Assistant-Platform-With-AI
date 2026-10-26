@@ -90,12 +90,60 @@ PROMPT_API_CASE_REVIEW = PromptSpec(
     ),
 )
 
+PROMPT_AUTOMATION_OPERATION_GAP = PromptSpec(
+    prompt_id="automation.operation_gap",
+    version="2.3.1",
+    task="automation_operation_gap",
+    input_boundary="未覆盖 operation 的结构摘要与允许引用的 source_ref；不含密钥、完整请求体或执行数据",
+    temperature=0.1,
+    change_log=(
+        "2.3.1 自动化资产受控增强：只建议人工补充的接口测试场景，不生成或改写脚本",
+    ),
+)
+
+PROMPT_AUTOMATION_FAILURE_ASSERTION = PromptSpec(
+    prompt_id="automation.failure_assertion",
+    version="2.3.1",
+    task="automation_failure_assertion",
+    input_boundary="失败执行摘要、已有接口用例断言与允许引用的 source_ref；不含凭据和完整响应体",
+    temperature=0.1,
+    change_log=(
+        "2.3.1 自动化失败归纳：只生成待人工确认的断言提案",
+    ),
+)
+
+PROMPT_AUTOMATION_FIXTURE_RECIPE = PromptSpec(
+    prompt_id="automation.fixture_recipe",
+    version="2.3.1",
+    task="automation_fixture_recipe",
+    input_boundary="接口用例请求结构、环境变量占位符与脱敏后的数据摘要；不得包含真实密钥",
+    temperature=0.2,
+    change_log=(
+        "2.3.1 测试数据配方：输出环境变量、fixture 与测试数据建议，不输出可执行 Python",
+    ),
+)
+
+PROMPT_AUTOMATION_SCRIPT_REVIEW = PromptSpec(
+    prompt_id="automation.script_review",
+    version="2.3.1",
+    task="automation_script_review",
+    input_boundary="受控生成项目的 Python 文件与文件清单；只读审查，不回写资产",
+    temperature=0.1,
+    change_log=(
+        "2.3.1 自动化脚本只读审查：检查可维护性、断言完整性、数据与环境变量风险",
+    ),
+)
+
 ALL_PROMPTS: tuple[PromptSpec, ...] = (
     PROMPT_REQUIREMENT_EXTRACTION,
     PROMPT_SCENARIO_ENRICHMENT,
     PROMPT_GENERATION_REVIEW,
     PROMPT_REPORT_SUMMARY,
     PROMPT_API_CASE_REVIEW,
+    PROMPT_AUTOMATION_OPERATION_GAP,
+    PROMPT_AUTOMATION_FAILURE_ASSERTION,
+    PROMPT_AUTOMATION_FIXTURE_RECIPE,
+    PROMPT_AUTOMATION_SCRIPT_REVIEW,
 )
 
 PROMPTS_BY_ID = {spec.prompt_id: spec for spec in ALL_PROMPTS}

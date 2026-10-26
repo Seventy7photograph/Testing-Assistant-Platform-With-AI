@@ -58,7 +58,7 @@ const groups: NavGroup[] = [
   {
     caption: "平台设置",
     items: [
-      { nav: "settings", to: "/settings", label: "大模型与阈值", hint: "两条 AI 链路共用", icon: "sliders" },
+      { nav: "settings", to: "/settings", label: "大模型与阈值", hint: "所有模型任务共用", icon: "sliders" },
     ],
   },
 ];

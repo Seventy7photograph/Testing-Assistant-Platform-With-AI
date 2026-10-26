@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883.svg)](https://vuejs.org/)
-[![Version](https://img.shields.io/badge/version-v2.3.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v2.3.1-blue.svg)](CHANGELOG.md)
 
 > 面向测试工程师的**一体化本地 / 内网工作台**：把「需求文档 → 测试用例」与「测试执行数据 → 测试报告」
 > 两条日常高频链路，收进同一个控制台、同一套配置、同一份存储。
@@ -15,6 +15,8 @@
 > 全站带操作提示与动效。
 > **未配置大模型 API Key 时自动降级为纯规则引擎，链路依然端到端可用。**
 >
+> V2.3.1：自动化资产增加受控 AI 建议、失败断言提案、fixture 配方与只读脚本审查；
+> 所有建议必须人工决定，不自动改写资产。
 > V2.3：OpenAPI 接口用例 → 受控 `pytest + httpx` 资产 → JUnit 结果回收 → 失败跟进事项与到期提醒；
 > 自动化、执行记录与工作收件箱统一收进「交付工作台」。
 > V2.2：OpenAPI 3 JSON / YAML → operation / 契约断言 → Postman Collection 2.1，接口资产与需求用例共用追溯体系。
@@ -42,7 +44,7 @@
 | 文档上传与解析 | `.docx` / `.pdf` / `.xlsx` / `.txt` / `.md` / `.csv` / `.json` / 图片（`.png` `.jpg` `.webp` `.bmp` `.tif`），兼容 GBK 等中文编码；粘贴文本同样作为 `.txt` 文档入库并可追溯 |
 | 图片识别（多模态 OCR） | 文档内嵌图 / 扫描件整页 / 直接上传的截图 → 文字。**主模型不必支持图片**：识别走独立通道（多模态模型 → 本地 OCR → 云端 OCR 依次降级），识别结果回填到正文的图片位置，模型推断部分单独成段、不参与字段约束抽取 |
 | 需求结构化 | LLM 结构化抽取 + 规则引擎解析双路，LLM 缺失 / 失败自动降级并显式告警 |
-| Prompt 可信工程 | 五个任务独立 Prompt ID / 版本 / 输入边界；证据归一化校验、失败关闭、单次修复、注入告警与固定对抗样本 |
+| Prompt 可信工程 | 九个任务独立 Prompt ID / 版本 / 输入边界；证据归一化校验、失败关闭、单次修复、注入告警与固定对抗样本 |
 | 测试设计 | 六种方法：等价类划分、边界值分析（min-1/min/min+1/max-1/max/max+1）、场景法、**判定表**（条件桩 → 动作桩 → 无关项合并）、**因果图**（因/果/异或·包含·屏蔽约束 → 判定表）、**正交实验**（因子水平 → 两两覆盖表） |
 | 生成阶段大模型参与 | 三档可调：**仅场景法补充**（默认）/ **复核规则产出**（六种方法都覆盖，只给意见、不改写用例）/ **复核 + 补充用例**（补充项标「[LLM补充] · 需复核」）。按需求条数计费，受调用次数上限约束 |
 | 用例优化 | 两层去重（精确指纹 + 跨方法语义重叠，合并关联需求并记录覆盖方法）、优先级排序、按方法自动编号（TC-EQ / BV / DT / CE / OR / SC） |
@@ -81,13 +83,14 @@
 | 工作收件箱 | note / task 共用本地模型，支持 Markdown、状态、优先级、截止与提醒、标签、置顶、关联执行记录；今日/近期/逾期/收件箱/完成视图与关键词筛选 |
 | 提醒 | 页面打开时每 30 秒轮询到期事项；站内通知始终可用，浏览器系统通知需显式授权；`reminded_at` 在服务端去重，页面关闭后不承诺后台提醒 |
 | 交付工作台 | 一个页面切换自动化资产、执行记录、工作事项；失败运行可一键创建带 `test_run` 关联的跟进事项，也可把运行数据送入报告工作台 |
+| 自动化受控 AI（本地增强） | 四类任务：未覆盖 operation 建议、失败断言提案、fixture/测试数据配方、现有脚本只读审查；模型只能产出待人工决定的建议，不能写入 `AutomationArtifact`、`cases.json` 或确定性断言 |
 
 ### 1.5 平台能力
 
 | 能力 | 说明 |
 | --- | --- |
 | 统一总览 | 首页仪表盘汇总 AI 工作流状态、最近文档 / 用例集 / 报告、自动化资产、执行记录与今日/逾期事项 |
-| 统一配置 | 两条 AI 链路**共用同一份大模型配置**（`.env` 基线 + 界面运行时覆盖），保存即生效、可一键恢复；图片识别通道独立配置，且可复用大模型的 Key 与端点 |
+| 统一配置 | 所有模型任务**共用同一份大模型配置**（`.env` 基线 + 界面运行时覆盖），保存即生效、可一键恢复；图片识别通道独立配置，且可复用大模型的 Key 与端点 |
 | 持久化可选 | `STORAGE_BACKEND=json`（默认，一对象一文件、零依赖）或 `sqlite`（SQLAlchemy 单文件库）；两者接口一致，业务层零改动切换，并提供一次性迁移与回滚脚本 |
 | 双主题与密度 | 默认「冰川蓝 + 白」，顶部一键切换**深色护眼模式**；标准 / 紧凑 / 宽松三档显示密度 |
 | 批量操作 | 文档库、用例集、报告存档均支持多选与**批量删除**（服务端一次最多 200 条，自动去重） |
@@ -167,7 +170,7 @@ Testing-Assistant-Platform With AI/
 ├── output/                           # 离线脚本产物（不入库）
 ├── DESIGN.md / PRODUCT.md            # 设计世界与产品定义（前端改动的依据）
 ├── CHANGELOG.md                      # 更新日志
-├── docs/qa-v2.3.0-risk-matrix.md     # v2.3.0 风险矩阵与测试映射
+├── docs/qa-v2.3.1-risk-matrix.md     # v2.3.1 风险矩阵与测试映射
 ├── OPTIMIZATION.md                   # 资深测试工程师视角的体验与缺陷修复记录
 └── run.py                            # 本地启动入口
 ```
@@ -331,6 +334,12 @@ node tools/smoke-ui.mjs   # 自动起后端 + Playwright：校验方法清单一
 | GET | `/automation/runs/{run_id}/report-source` | 取得可送入报告工作台的执行数据 |
 | POST | `/automation/runs/{run_id}/follow-up` | 从失败运行创建关联 `test_run` 的跟进事项 |
 | GET | `/automation/events` | 按 `run_id` / `artifact_id` 检索结构化事件 |
+| POST | `/automation/ai/reviews` | 创建受控 AI 建议：`operation_gap` / `failure_assertion` / `fixture_recipe` / `script_review` |
+| GET | `/automation/ai/reviews` | 查询自动化 AI 建议，可按规范、资产、运行或任务类型过滤 |
+| GET | `/automation/ai/reviews/{review_id}` | 建议详情、来源、Prompt 元信息与失败告警 |
+| PUT | `/automation/ai/reviews/{review_id}/findings/{finding_id}` | 人工采纳或驳回单条建议 |
+| PUT | `/automation/ai/reviews/{review_id}/decision` | 人工采纳或驳回整份配方建议 |
+| GET | `/automation/ai/reviews/{review_id}/recipe` | 下载脱敏后的 fixture / 测试数据配方 JSON |
 | GET | `/work-items` | 工作事项列表；支持 view / q / status / priority / tag |
 | POST | `/work-items` | 创建 note/task |
 | GET / PUT / DELETE | `/work-items/{work_item_id}` | 详情 / 更新 / 删除 |
@@ -347,6 +356,8 @@ node tools/smoke-ui.mjs   # 自动起后端 + Playwright：校验方法清单一
 - 环境变量使用显式占位符，`.env.example` 不包含真实凭据；日志不记录 Authorization、Cookie 或 Token。
 - JUnit 未知 `case_id` 进入未匹配列表而不是丢弃；畸形 XML 返回 422，不创建半条运行记录。
 - 工作事项只保存在本地，不自动进入 AI、RAG 或 Agent 上下文；提醒依赖页面打开时轮询。
+- 自动化 AI 建议不会自动应用。operation 建议必须使用对应 operation 的 `source_ref`，失败断言必须指向对应 case；
+  配方拒绝明文密钥、可执行代码和越界 `case_id`，只读审查不能读取被安全门禁拒绝的资产。
 
 ### 测试报告链路（前缀 `/report`）
 
@@ -396,7 +407,7 @@ HTTP 路由 (app/api/routes)
 | 图片识别 | `ImageTextExtractor` | `app/vision/registry.py` | 新增视觉模型 / OCR 服务只需实现子类并注册，解析器与主干不动 |
 | 外部集成 | `ExternalSyncAdapter` | `app/integrations/base.py` | 抽象已定义，占位调用返回 501 |
 
-### 5.3 配置优先级（两条 AI 链路共用）
+### 5.3 配置优先级（所有模型任务共用）
 
 ```
 界面运行时覆盖 (storage/data/llm_config.json)
@@ -410,9 +421,9 @@ HTTP 路由 (app/api/routes)
 - OpenAPI / Postman 的默认服务地址由 `PUBLIC_BASE_URL` 控制，默认 `http://127.0.0.1:8000`。
 - 版本号以代码 `app/__init__.py` 为唯一来源，`.env` 中的 `APP_VERSION` 不会覆盖它。
 
-### 5.4 Prompt 可信工程（V2.2）
+### 5.4 Prompt 可信工程（V2.3.1）
 
-五个模型任务分别使用独立 Prompt，不允许抽取、复核、补缺、报告归纳、接口复核混用同一套指令：
+九个模型任务分别使用独立 Prompt，不允许抽取、复核、补缺、报告归纳、接口复核和自动化增强混用同一套指令：
 
 | Prompt ID | 任务 | 输入边界 | 温度 |
 | --- | --- | --- | --- |
@@ -421,6 +432,10 @@ HTTP 路由 (app/api/routes)
 | `design.generation_review` | 生成复核 | 单条需求与规则用例摘要（最多 4000 字） | 0.1 |
 | `report.summarize` | 报告归纳 | 确定性指标与原始执行数据，原始数据视为不可信文本 | `REPORT_TEMPERATURE`（默认 0.3） |
 | `api.case_review` | 接口用例复核 | 规范化 operation、确定性接口用例摘要与允许引用的 source_ref，不含密钥与完整请求体 | 0.1 |
+| `automation.operation_gap` | 未覆盖 operation 建议 | operation 结构摘要、未覆盖清单与允许 source_ref | 0.1 |
+| `automation.failure_assertion` | 失败断言提案 | 失败摘要、已有断言与对应 case 的 source_ref | 0.1 |
+| `automation.fixture_recipe` | fixture / 测试数据配方 | 脱敏后的请求结构、环境变量名与 case_id；不发送请求值 | 0.2 |
+| `automation.script_review` | 自动化脚本只读审查 | 已通过安全校验的受控项目文件与文件清单 | 0.1 |
 
 证据闸门会先做 NFKC、空白、标点和 OCR 换行归一化，再判断 `evidence_quotes` 是否真实出现在原文；
 字段名还必须能在证据或结构化需求中定位。校验结果按 `verified / inferred / rejected` 记录：
@@ -616,6 +631,11 @@ Key 填百炼的 `sk-...`，然后「保存配置」→ 点「拉取」。百炼
 **Q16：工作事项提醒可靠吗？会进入 AI 吗？**
 页面打开时每 30 秒轮询一次，到期提醒通过 `reminded_at` 去重；浏览器系统通知需要显式授权。
 页面关闭后不承诺后台提醒。工作事项正文默认仅本地可见，不进入 AI、RAG 或 Agent 上下文。
+
+**Q17：自动化脚本里的 AI 会直接改代码吗？**
+不会。自动化的四类 AI 任务只生成待人工决定的建议、断言提案、数据配方或审查意见。
+采纳只改变建议状态，不会自动写回 `AutomationArtifact`、`cases.json` 或现有断言；
+被安全门禁拒绝的资产也不会发送给模型做源码审查。
 
 ---
 

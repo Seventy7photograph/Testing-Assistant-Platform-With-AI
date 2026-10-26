@@ -25,6 +25,7 @@ from app.core.exceptions import AppError, NotFoundError
 from app.core.logging import get_logger
 from app.schemas.document import DocumentRecord
 from app.schemas.api_testing import ApiCaseSpec, ApiSpec
+from app.schemas.automation_ai import AutomationAIReview
 from app.schemas.execution import AutomationArtifact, JobEvent, TestRun
 from app.schemas.requirement import RequirementDoc
 from app.schemas.testcase import TestCaseSuite
@@ -207,6 +208,12 @@ class Repository:
         self.work_items: JsonObjectStore[WorkItem] = JsonObjectStore(
             base / "work_items", WorkItem, id_attr="work_item_id", label="工作事项"
         )
+        self.automation_ai_reviews: JsonObjectStore[AutomationAIReview] = JsonObjectStore(
+            base / "automation_ai_reviews",
+            AutomationAIReview,
+            id_attr="review_id",
+            label="自动化 AI 建议",
+        )
 
     def _build_sql_collections(self) -> None:
         # 延迟导入：只用 JSON 后端时不必依赖 SQLAlchemy。
@@ -244,6 +251,13 @@ class Repository:
         self.work_items = SqlObjectStore(
             self.engine, WorkItem, kind="work_items", id_attr="work_item_id", label="工作事项"
         )
+        self.automation_ai_reviews = SqlObjectStore(
+            self.engine,
+            AutomationAIReview,
+            kind="automation_ai_reviews",
+            id_attr="review_id",
+            label="自动化 AI 建议",
+        )
         self._warn_if_json_left_behind()
 
     def _warn_if_json_left_behind(self) -> None:
@@ -262,6 +276,7 @@ class Repository:
                 or self.test_runs.count()
                 or self.job_events.count()
                 or self.work_items.count()
+                or self.automation_ai_reviews.count()
             ):
                 return
         except Exception:  # noqa: BLE001 - 统计失败不影响主流程
@@ -279,6 +294,7 @@ class Repository:
                 "test_runs",
                 "job_events",
                 "work_items",
+                "automation_ai_reviews",
             )
             if any((legacy / folder).glob("*.json"))
         ]

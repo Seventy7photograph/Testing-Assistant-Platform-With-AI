@@ -643,6 +643,104 @@ export interface JobEvent {
   created_at: string;
 }
 
+export type AutomationAIKind =
+  | "operation_gap"
+  | "failure_assertion"
+  | "fixture_recipe"
+  | "script_review";
+
+export interface AIAssertionProposal {
+  kind: "status" | "header" | "json";
+  path: string;
+  operator: string;
+  expected: unknown;
+  description: string;
+  source_ref: string;
+}
+
+export interface AutomationAIFinding {
+  finding_id: string;
+  category:
+    | "operation_coverage"
+    | "failure_assertion"
+    | "fixture_recipe"
+    | "script_review";
+  severity: "info" | "warning";
+  operation_id: string | null;
+  case_id: string | null;
+  target: string;
+  issue: string;
+  suggestion: string;
+  rationale: string;
+  source_ref: string;
+  claim_status: "inferred";
+  disposition: "pending" | "accepted" | "rejected";
+  proposed_assertion: AIAssertionProposal | null;
+}
+
+export interface FixtureEnvironmentVariable {
+  name: string;
+  description: string;
+  secret: boolean;
+  placeholder: string;
+}
+
+export interface FixtureDefinition {
+  name: string;
+  purpose: string;
+  setup: string[];
+  data: Record<string, unknown>;
+}
+
+export interface TestDataRow {
+  case_id: string;
+  title: string;
+  data: Record<string, unknown>;
+  notes: string;
+}
+
+export interface AutomationFixtureRecipe {
+  summary: string;
+  environment_variables: FixtureEnvironmentVariable[];
+  fixtures: FixtureDefinition[];
+  test_data: TestDataRow[];
+  preconditions: string[];
+  execution_notes: string[];
+  warnings: string[];
+}
+
+export interface AutomationAIMeta {
+  requested: boolean;
+  used: boolean;
+  status: "running" | "completed" | "failed";
+  provider: string;
+  model: string;
+  prompt_id: string;
+  prompt_version: string;
+  temperature: number | null;
+  llm_calls: number;
+  elapsed_ms: number;
+  warnings: string[];
+}
+
+export interface AutomationAIReview {
+  review_id: string;
+  kind: AutomationAIKind;
+  spec_id: string;
+  artifact_id: string | null;
+  run_id: string | null;
+  focus: string;
+  status: "running" | "completed" | "failed";
+  summary: string;
+  findings: AutomationAIFinding[];
+  recipe: AutomationFixtureRecipe | null;
+  decision: "pending" | "accepted" | "rejected";
+  context: Record<string, unknown>;
+  meta: AutomationAIMeta;
+  created_at: string;
+  updated_at: string;
+}
+
 export type WorkItemType = "note" | "task";
 export type WorkItemStatus = "inbox" | "todo" | "doing" | "done" | "archived";
 export type WorkItemPriority = "P0" | "P1" | "P2" | "P3";

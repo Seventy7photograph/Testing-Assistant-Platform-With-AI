@@ -14,6 +14,7 @@ import type {
   WorkItemPriority,
 } from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
+import AutomationAIReviewPanel from "@/components/AutomationAIReviewPanel.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorNote from "@/components/ErrorNote.vue";
 import MarkdownBody from "@/components/MarkdownBody.vue";
@@ -437,7 +438,9 @@ async function requestNotifications() {
 
 function switchTab(tab: TabKey) {
   activeTab.value = tab;
-  void router.replace({ query: { ...route.query, tab } });
+  const url = new URL(window.location.href);
+  url.searchParams.set("tab", tab);
+  window.history.replaceState(window.history.state, "", url);
 }
 
 function splitTags(raw: string): string[] {
@@ -549,6 +552,7 @@ function viewLabel(view: string): string {
     <nav class="tabs" aria-label="交付工作台视图">
       <button
         type="button"
+        data-testid="tab-automation"
         :class="{ 'tabs__item--on': activeTab === 'automation' }"
         @click="switchTab('automation')"
       >
@@ -557,6 +561,7 @@ function viewLabel(view: string): string {
       </button>
       <button
         type="button"
+        data-testid="tab-runs"
         :class="{ 'tabs__item--on': activeTab === 'runs' }"
         @click="switchTab('runs')"
       >
@@ -578,7 +583,7 @@ function viewLabel(view: string): string {
     </nav>
 
     <!-- 自动化资产 -->
-    <section v-if="activeTab === 'automation'" class="workspace-grid">
+    <section v-if="activeTab === 'automation'" class="workspace-grid workspace__stage">
       <div class="panel">
         <header class="panel__head">
           <div>
@@ -668,6 +673,11 @@ function viewLabel(view: string): string {
             </el-button>
           </template>
         </div>
+        <AutomationAIReviewPanel
+          v-if="selectedSpecId && selectedArtifact"
+          :spec-id="selectedSpecId"
+          :artifact-id="selectedArtifact.artifact_id"
+        />
       </div>
 
       <div class="panel">
@@ -716,7 +726,7 @@ function viewLabel(view: string): string {
     </section>
 
     <!-- 执行记录 -->
-    <section v-if="activeTab === 'runs'" class="workspace-grid workspace-grid--runs">
+    <section v-if="activeTab === 'runs'" class="workspace-grid workspace-grid--runs workspace__stage">
       <div class="panel">
         <header class="panel__head">
           <div>
@@ -897,6 +907,13 @@ function viewLabel(view: string): string {
             </div>
             <p v-else class="muted">当前运行没有可显示的事件。</p>
           </div>
+          <AutomationAIReviewPanel
+            v-if="selectedRun.spec_id || selectedSpecId"
+            :spec-id="selectedRun.spec_id || selectedSpecId"
+            :artifact-id="selectedRun.artifact_id || selectedArtifactId"
+            :run-id="selectedRun.run_id"
+            :kinds="['failure_assertion']"
+          />
         </template>
         <EmptyState
           v-else
@@ -908,7 +925,7 @@ function viewLabel(view: string): string {
     </section>
 
     <!-- 工作事项 -->
-    <section v-if="activeTab === 'items'" class="items-layout">
+    <section v-if="activeTab === 'items'" class="items-layout workspace__stage">
       <div class="panel quick-panel">
         <header class="panel__head">
           <div>
@@ -1186,6 +1203,10 @@ function viewLabel(view: string): string {
 <style scoped>
 .workspace {
   animation: drift-in var(--dur-slow) var(--ease) both;
+}
+
+.workspace__stage {
+  min-height: 540px;
 }
 
 .command-band {

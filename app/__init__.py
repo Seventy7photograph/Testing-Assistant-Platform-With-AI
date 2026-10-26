@@ -6,5 +6,5 @@
   3. 接口资产：OpenAPI 3 → operation / 契约断言 → 接口用例 → Postman Collection
 """
 
-__version__ = "2.3.0"
+__version__ = "2.3.1"
 __all__ = ["__version__"]

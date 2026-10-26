@@ -12,6 +12,7 @@
   ／ 2026-10-22（第五轮 v2.1.0：Prompt 证据门禁、可信状态与前端体验收口）
   ／ 2026-10-22（v2.1.1 补丁：粘贴文本入库与吸底栏跨路由残留）
   ／ 2026-10-26（第六轮 v2.3.0：自动化交付、JUnit 回收、工作收件箱与提醒）
+  ／ 2026-10-27（v2.3.1：自动化受控 AI、页签切换抖动修复）
 
 ---
 
@@ -463,7 +464,7 @@ Prompt 评测脚本、三个离线脚本、前端构建与 Playwright 冒烟。
 
 ---
 
-## 六、第六轮走查（v2.3.0）
+## 六、第六轮走查（v2.3.0 → v2.3.1）
 
 ### 6.1 走查范围与发现
 
@@ -487,9 +488,19 @@ V2.3 合并原 V2.3 自动化资产与 V2.4 工作事项。走查链路为：
 
 ### 6.2 风险与证据
 
-风险矩阵与失败模式分析见 [`docs/qa-v2.3.0-risk-matrix.md`](docs/qa-v2.3.0-risk-matrix.md)。
+风险矩阵与失败模式分析见 [`docs/qa-v2.3.1-risk-matrix.md`](docs/qa-v2.3.1-risk-matrix.md)。
 最高风险集中在生成代码安全、密钥泄漏、JUnit 映射、提醒去重和双存储一致性；
 对应测试覆盖生成器、validator、真实 pytest 运行、JUnit fixture、API、JSON/SQLite 与 Playwright。
+
+### 6.3 自动化受控 AI 与页签抖动复核
+
+- 新增四类受控 AI 任务：未覆盖 operation 建议、失败断言提案、fixture/测试数据配方、现有脚本只读审查。
+- 模型输出进入 `automation_ai_reviews`，只能人工采纳/驳回；采纳不改写资产、`cases.json` 或断言。
+- operation 建议使用 operation 级 source 白名单，失败断言使用 case 级 source 白名单；
+  越界建议丢弃，配方另做密钥与可执行代码扫描，被拒绝资产不进入源码审查。
+- 配方仅接收脱敏后的请求结构与字段类型，不发送实际请求值，可下载为 JSON 配方供人工使用。
+- 页签抖动的根因是 `router.replace()` 改变 `fullPath`，使 RouterView 依据 fullPath 重建并触发回顶。
+  改为本地 `activeTab` 切换 + `history.replaceState()` 后，组件实例、DOM marker、滚动位置和 URL 均保持。
 
 ---
 
@@ -546,6 +557,8 @@ V2.3 合并原 V2.3 自动化资产与 V2.4 工作事项。走查链路为：
 | v2.3 JUnit 回收 | 失败/错误/跳过/通过 dialect 解析；API 导入 1 匹配 + 1 未匹配，运行详情与 `JobEvent` 可追溯 |
 | v2.3 工作事项 | 快速记录、保存、完成、标签/优先级/视图过滤、提醒去重通过；JSON/SQLite 重开均可读回 |
 | v2.3 浏览器 | 资产生成、JUnit 上传、失败跟进、Markdown 编辑/预览、站内提醒通过；390px `scrollWidth=clientWidth=390` |
+| v2.3 自动化受控 AI | 四类任务、人工采纳/驳回、来源越界丢弃、配方密钥/代码拒绝、配方下载通过；全量 435 passed |
+| v2.3 页签抖动 | DOM 实例 marker 保持，`automation → runs → items` 切换时滚动位置与 URL query 保持 |
 
 界面证据见 `docs/review/`（本地走查截图，不入库）。
 

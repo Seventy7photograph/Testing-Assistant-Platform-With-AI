@@ -11,6 +11,8 @@ import type {
   ApiSpecSummary,
   AutomationArtifact,
   AutomationArtifactSummary,
+  AutomationAIKind,
+  AutomationAIReview,
   BatchDeleteResult,
   CoverageReport,
   DocumentSummary,
@@ -172,6 +174,45 @@ export const api = {
       ...(query.runId ? { run_id: query.runId } : {}),
       ...(query.artifactId ? { artifact_id: query.artifactId } : {}),
     }),
+  automationAIReviews: (
+    query: {
+      specId?: string;
+      artifactId?: string;
+      runId?: string;
+      kind?: AutomationAIKind;
+      limit?: number;
+    } = {},
+  ) =>
+    get<AutomationAIReview[]>("/automation/ai/reviews", {
+      limit: query.limit ?? 30,
+      ...(query.specId ? { spec_id: query.specId } : {}),
+      ...(query.artifactId ? { artifact_id: query.artifactId } : {}),
+      ...(query.runId ? { run_id: query.runId } : {}),
+      ...(query.kind ? { kind: query.kind } : {}),
+    }),
+  createAutomationAIReview: (payload: {
+    kind: AutomationAIKind;
+    spec_id: string;
+    artifact_id?: string | null;
+    run_id?: string | null;
+    focus?: string;
+  }) => post<AutomationAIReview>("/automation/ai/reviews", payload),
+  decideAutomationAIFinding: (
+    reviewId: string,
+    findingId: string,
+    disposition: "accepted" | "rejected",
+  ) =>
+    put<AutomationAIReview>(
+      `/automation/ai/reviews/${encodeURIComponent(reviewId)}/findings/${encodeURIComponent(findingId)}`,
+      { disposition },
+    ),
+  decideAutomationAIReview: (reviewId: string, decision: "accepted" | "rejected") =>
+    put<AutomationAIReview>(
+      `/automation/ai/reviews/${encodeURIComponent(reviewId)}/decision`,
+      { decision },
+    ),
+  downloadAutomationAIRecipe: (reviewId: string) =>
+    downloadFile(`/automation/ai/reviews/${encodeURIComponent(reviewId)}/recipe`),
 
   /* ---------- 工作事项（V2.3） ---------- */
   workItems: (

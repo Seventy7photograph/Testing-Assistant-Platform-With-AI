@@ -49,6 +49,8 @@ const {
   liveFormat,
   liveWarnings,
   startedAt,
+  lastCompletedSignature,
+  controller,
 } = storeToRefs(session);
 
 const samples = ref<SampleDataset[]>([]);
@@ -59,7 +61,6 @@ const metricsLoading = ref(false);
 const dataRevision = ref(0);
 const metricsRevision = ref(-1);
 let metricsTimer: number | undefined;
-let controller: AbortController | null = null;
 let lastPayload = "";
 const clock = ref(Date.now());
 let clockTimer: number | undefined;
@@ -87,7 +88,35 @@ const formatNote = computed(() => {
   };
 });
 
-const canGenerate = computed(() => testData.value.trim().length > 0 && !generating.value);
+const reportSignature = computed(() =>
+  JSON.stringify({
+    testData: testData.value,
+    instruction: instruction.value,
+    model: model.value.trim(),
+    useStream: useStream.value,
+    archive: archive.value,
+  }),
+);
+const alreadyGenerated = computed(
+  () =>
+    Boolean(report.value || reportId.value) &&
+    lastCompletedSignature.value === reportSignature.value,
+);
+const canGenerate = computed(
+  () =>
+    testData.value.trim().length > 0 &&
+    !generating.value &&
+    !alreadyGenerated.value,
+);
+const generateLabel = computed(() =>
+  generating.value
+    ? "生成中…"
+    : alreadyGenerated.value
+      ? "报告已生成"
+      : report.value
+        ? "重新生成报告"
+        : "生成报告",
+);
 
 const llmNote = computed(() =>
   health.llmReady
@@ -125,7 +154,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.clearTimeout(metricsTimer);
   if (clockTimer) window.clearInterval(clockTimer);
-  controller?.abort();
+  if (generating.value) {
+    session.cancel();
+  }
 });
 
 watch(testData, () => {
@@ -175,22 +206,14 @@ function applySample(id: string): void {
 }
 
 function clearAll(): void {
+  session.reset();
   testData.value = "";
-  report.value = "";
-  reportMeta.value = null;
-  reportId.value = null;
-  warnings.value = [];
-  liveMetrics.value = null;
-  liveDefects.value = [];
-  failure.value = null;
   lastPayload = "";
   metricsRevision.value = -1;
 }
 
 function stop(): void {
-  controller?.abort();
-  controller = null;
-  session.finish();
+  session.cancel();
   notice.warning("已停止生成", "已生成的部分会保留在下方正文里。");
 }
 
@@ -200,7 +223,7 @@ function primaryAction(): void {
 }
 
 async function generate(): Promise<void> {
-  if (!canGenerate.value) return;
+  if (!canGenerate.value || generating.value) return;
   if (!health.llmReady) {
     notice.error("报告链路需要大模型", "当前未配置 API Key，请先前往「大模型与阈值」配置。", {
       label: "去配置",
@@ -209,7 +232,8 @@ async function generate(): Promise<void> {
     return;
   }
 
-  session.start();
+  const signature = reportSignature.value;
+  const token = session.start();
   clock.value = Date.now();
   report.value = "";
   reportMeta.value = null;
@@ -224,6 +248,7 @@ async function generate(): Promise<void> {
   };
 
   if (!useStream.value) {
+    let success = false;
     try {
       const result = await api.analyzeReport(payload);
       report.value = result.report;
@@ -236,6 +261,7 @@ async function generate(): Promise<void> {
         createdAt: result.created_at,
       };
       if (result.metrics) liveMetrics.value = result.metrics;
+      success = true;
       notice.push("success", "报告已生成", result.id ? "已写入本地存档。" : "未归档。", {
         label: "查看报告",
         run: () =>
@@ -246,13 +272,13 @@ async function generate(): Promise<void> {
     } catch (err) {
       failure.value = { message: (err as Error).message, code: "" };
     } finally {
-      session.finish();
+      session.finish(token, success, signature);
     }
     return;
   }
 
-  controller = new AbortController();
   let buffer = "";
+  let success = false;
   await streamAnalyze(
     payload,
     {
@@ -274,6 +300,7 @@ async function generate(): Promise<void> {
         report.value = buffer;
       },
       onDone: (info) => {
+        success = true;
         reportMeta.value = {
           model: String(info.model ?? ""),
           provider: String(info.provider ?? ""),
@@ -287,10 +314,9 @@ async function generate(): Promise<void> {
         failure.value = { message: detail, code: "" };
       },
     },
-    controller.signal,
+    controller.value?.signal,
   );
-  controller = null;
-  session.finish();
+  session.finish(token, success, signature);
 }
 
 async function download(format: string): Promise<void> {
@@ -389,7 +415,7 @@ const verdictPartial = computed(() => liveMetrics.value);
 
           <div class="actions">
             <el-button v-if="!generating" type="primary" :disabled="!canGenerate" @click="generate">
-              <AppIcon name="sparkle" :size="15" /> 生成报告
+              <AppIcon name="sparkle" :size="15" /> {{ generateLabel }}
             </el-button>
             <el-button v-else type="danger" plain @click="stop">
               <AppIcon name="stop" :size="14" /> 停止
@@ -578,7 +604,7 @@ const verdictPartial = computed(() => liveMetrics.value);
     </div>
 
     <StickyActionBar
-      :label="generating ? '停止生成' : '生成报告'"
+      :label="generating ? '停止生成' : generateLabel"
       :summary="stickySummary"
       :disabled="!generating && !canGenerate"
       @primary="primaryAction"

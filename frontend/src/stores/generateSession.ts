@@ -9,6 +9,8 @@ export interface SessionFailure {
   code: string;
 }
 
+export type GeneratePhase = "idle" | "running" | "success" | "failed";
+
 export const useGenerateSession = defineStore("generate-session", () => {
   const mode = ref<"text" | "upload">("text");
   const text = ref("");
@@ -27,21 +29,35 @@ export const useGenerateSession = defineStore("generate-session", () => {
   const result = ref<GenerateResult | null>(null);
   const failure = ref<SessionFailure | null>(null);
   const startedAt = ref<number | null>(null);
+  const phase = ref<GeneratePhase>("idle");
+  const lastCompletedSignature = ref<string | null>(null);
+  const runToken = ref(0);
 
   function start() {
+    runToken.value += 1;
     generating.value = true;
     startedAt.value = Date.now();
     failure.value = null;
+    phase.value = "running";
+    lastCompletedSignature.value = null;
+    return runToken.value;
   }
 
-  function finish() {
+  function finish(token: number, success = false, signature = "") {
+    if (token !== runToken.value) return false;
     generating.value = false;
+    phase.value = success ? "success" : failure.value ? "failed" : "idle";
+    if (success) lastCompletedSignature.value = signature;
+    return true;
   }
 
   function resetResult() {
+    runToken.value += 1;
     result.value = null;
     failure.value = null;
     startedAt.value = null;
+    phase.value = "idle";
+    lastCompletedSignature.value = null;
   }
 
   return {
@@ -62,6 +78,9 @@ export const useGenerateSession = defineStore("generate-session", () => {
     result,
     failure,
     startedAt,
+    phase,
+    lastCompletedSignature,
+    runToken,
     start,
     finish,
     resetResult,

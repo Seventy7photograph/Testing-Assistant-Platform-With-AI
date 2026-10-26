@@ -105,8 +105,19 @@ export async function del<T>(url: string): Promise<T> {
 }
 
 export async function upload<T>(url: string, file: File): Promise<T> {
+  return uploadWithFields<T>(url, file);
+}
+
+export async function uploadWithFields<T>(
+  url: string,
+  file: File,
+  fields: Record<string, string> = {},
+): Promise<T> {
   const form = new FormData();
   form.append("file", file, file.name);
+  for (const [key, value] of Object.entries(fields)) {
+    form.append(key, value);
+  }
   try {
     const res = await http.post<ApiResponse<T>>(url, form, {
       headers: { "Content-Type": "multipart/form-data" },

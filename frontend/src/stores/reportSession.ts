@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, shallowRef } from "vue";
 
 import type { Defect, ReportMetrics } from "@/api";
 
@@ -9,6 +9,8 @@ export interface ReportMeta {
   elapsed: number;
   createdAt: string;
 }
+
+export type ReportPhase = "idle" | "running" | "success" | "failed";
 
 export const useReportSession = defineStore("report-session", () => {
   const testData = ref("");
@@ -28,15 +30,59 @@ export const useReportSession = defineStore("report-session", () => {
   const liveFormat = ref<"json" | "text" | "empty">("empty");
   const liveWarnings = ref<string[]>([]);
   const startedAt = ref<number | null>(null);
+  const phase = ref<ReportPhase>("idle");
+  const lastCompletedSignature = ref<string | null>(null);
+  const controller = shallowRef<AbortController | null>(null);
+  const runToken = ref(0);
 
   function start() {
+    controller.value?.abort();
+    controller.value = new AbortController();
+    runToken.value += 1;
     generating.value = true;
     startedAt.value = Date.now();
     failure.value = null;
+    phase.value = "running";
+    lastCompletedSignature.value = null;
+    return runToken.value;
   }
 
-  function finish() {
+  function finish(token: number, success = false, signature = "") {
+    if (token !== runToken.value) return false;
     generating.value = false;
+    phase.value = success ? "success" : failure.value ? "failed" : "idle";
+    if (success) lastCompletedSignature.value = signature;
+    controller.value = null;
+    return true;
+  }
+
+  function cancel() {
+    controller.value?.abort();
+    controller.value = null;
+    runToken.value += 1;
+    generating.value = false;
+    startedAt.value = null;
+    phase.value = "idle";
+  }
+
+  function reset() {
+    controller.value?.abort();
+    controller.value = null;
+    runToken.value += 1;
+    generating.value = false;
+    report.value = "";
+    reportMeta.value = null;
+    reportId.value = null;
+    warnings.value = [];
+    failure.value = null;
+    liveMetrics.value = null;
+    liveDefects.value = [];
+    liveVersion.value = null;
+    liveFormat.value = "empty";
+    liveWarnings.value = [];
+    startedAt.value = null;
+    phase.value = "idle";
+    lastCompletedSignature.value = null;
   }
 
   return {
@@ -57,7 +103,13 @@ export const useReportSession = defineStore("report-session", () => {
     liveFormat,
     liveWarnings,
     startedAt,
+    phase,
+    lastCompletedSignature,
+    controller,
+    runToken,
     start,
     finish,
+    cancel,
+    reset,
   };
 });

@@ -121,6 +121,17 @@ export const router = createRouter({
       },
     },
     {
+      path: "/workspace",
+      name: "workspace",
+      component: () => import("@/views/ExecutionWorkspaceView.vue"),
+      meta: {
+        nav: "workspace",
+        title: "交付工作台",
+        domain: "case",
+        hint: "自动化资产 · 执行记录 · 工作事项",
+      },
+    },
+    {
       path: "/settings",
       name: "settings",
       component: () => import("@/views/SettingsView.vue"),

@@ -29,6 +29,7 @@ import {
   engineTitle,
   formatDuration,
   methodLabel,
+  methodOrderIndex,
 } from "@/utils/labels";
 
 defineOptions({ name: "GenerateView" });
@@ -56,6 +57,7 @@ const {
   result,
   failure,
   startedAt,
+  lastCompletedSignature,
 } = storeToRefs(session);
 
 /**
@@ -88,7 +90,9 @@ const otherFormats = computed(() =>
 );
 
 const methodList = computed(() =>
-  health.methods.map((item) => ({ ...item, note: METHOD_NOTES[item.name] ?? "" })),
+  [...health.methods]
+    .sort((left, right) => methodOrderIndex(left.name) - methodOrderIndex(right.name))
+    .map((item) => ({ ...item, note: METHOD_NOTES[item.name] ?? "" })),
 );
 
 const acceptAttr = computed(() =>
@@ -97,11 +101,39 @@ const acceptAttr = computed(() =>
     .join(","),
 );
 
+const generationSignature = computed(() =>
+  JSON.stringify({
+    mode: mode.value,
+    text: mode.value === "text" ? text.value : null,
+    docId: mode.value === "upload" ? docId.value : null,
+    title: title.value.trim(),
+    methods: [...methods.value].sort(),
+    useLlm: useLlm.value,
+    useLlmInDesign: useLlmInDesign.value,
+    llmDesignMode: llmDesignMode.value,
+    maxItems: maxItems.value,
+    maxCases: maxCases.value,
+  }),
+);
+const alreadyGenerated = computed(
+  () =>
+    Boolean(result.value) &&
+    lastCompletedSignature.value === generationSignature.value,
+);
 const canGenerate = computed(() => {
-  if (generating.value || methods.value.length === 0) return false;
+  if (generating.value || alreadyGenerated.value || methods.value.length === 0) return false;
   if (mode.value === "upload") return Boolean(docId.value);
   return text.value.trim().length > 0;
 });
+const generateLabel = computed(() =>
+  generating.value
+    ? "生成中…"
+    : alreadyGenerated.value
+      ? "已生成当前版本"
+      : result.value
+        ? "生成新版本"
+        : "生成用例集",
+);
 
 const sourceLabel = computed(() => {
   if (mode.value === "upload") return docInfo.value?.filename ?? "未选择文档";
@@ -190,7 +222,7 @@ function reset() {
 }
 
 async function generate(): Promise<void> {
-  if (!canGenerate.value) return;
+  if (!canGenerate.value || generating.value) return;
   // 只有大模型真的可用时才拦一次：未配置 Key 时界面别处已经写明「会走规则引擎」，
   // 这里再弹一个「会消耗额度」的确认框，既与实际行为矛盾，也多一次无意义的点击。
   if (useLlm.value && health.llmReady) {
@@ -203,9 +235,11 @@ async function generate(): Promise<void> {
     if (!confirmed) return;
   }
 
-  session.start();
+  const signature = generationSignature.value;
+  const token = session.start();
   clock.value = Date.now();
   result.value = null;
+  let success = false;
   try {
     const common = {
       methods: methods.value,
@@ -221,6 +255,7 @@ async function generate(): Promise<void> {
         : { text: text.value, title: title.value.trim() || "未命名需求", ...common };
     const data = await api.generate(payload);
     result.value = data;
+    success = true;
     notice.push("success", "用例集已生成", `共 ${data.suite.stats.total} 条 · 用时 ${formatDuration(data.suite.generation_meta.elapsed_ms)}`, {
       label: "查看结果",
       run: () => void router.push(`/suites/${data.suite.suite_id}`),
@@ -228,7 +263,7 @@ async function generate(): Promise<void> {
   } catch (err) {
     failure.value = { message: (err as Error).message, code: "" };
   } finally {
-    session.finish();
+    session.finish(token, success, signature);
   }
 }
 
@@ -435,7 +470,7 @@ async function exportSuite(format: string): Promise<void> {
           <div class="actions">
             <el-button type="primary" :loading="generating" :disabled="!canGenerate" @click="generate">
               <AppIcon v-if="!generating" name="sparkle" :size="15" />
-              {{ generating ? "生成中…" : "生成用例集" }}
+              {{ generateLabel }}
             </el-button>
             <el-button :disabled="generating" @click="reset">清空结果</el-button>
             <div class="spacer" />
@@ -644,7 +679,7 @@ async function exportSuite(format: string): Promise<void> {
     </div>
 
     <StickyActionBar
-      label="生成用例集"
+      :label="generating ? '生成中…' : generateLabel"
       :summary="stickySummary"
       :disabled="!canGenerate"
       :busy="generating"

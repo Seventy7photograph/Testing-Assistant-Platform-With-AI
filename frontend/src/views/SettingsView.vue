@@ -16,24 +16,31 @@ import FieldHint from "@/components/FieldHint.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import Tip from "@/components/Tip.vue";
 import { confirmAction } from "@/composables/useFeedback";
+import { useActionSession } from "@/stores/actionSession";
 import { useHealthStore } from "@/stores/health";
 import { useNoticeStore } from "@/stores/notice";
 import { formatDuration } from "@/utils/labels";
 
 const health = useHealthStore();
 const notice = useNoticeStore();
+const actions = useActionSession();
 
 const config = ref<LLMConfigInfo | null>(null);
 const vision = ref<VisionConfigInfo | null>(null);
 const thresholds = ref<ThresholdView | null>(null);
 const loading = ref(true);
 const error = ref("");
-const saving = ref(false);
-const testing = ref(false);
+const saving = computed(() => actions.isRunning("settings.llm.save"));
+const testing = computed(() => actions.isRunning("settings.llm.test"));
+const resettingConfig = computed(() => actions.isRunning("settings.llm.reset"));
+const clearingKey = computed(() => actions.isRunning("settings.llm.clear-key"));
 const testResult = ref<LLMTestResult | null>(null);
 
-const visionSaving = ref(false);
-const visionTesting = ref(false);
+const visionSaving = computed(() => actions.isRunning("settings.vision.save"));
+const visionTesting = computed(() => actions.isRunning("settings.vision.test"));
+const visionResetting = computed(() => actions.isRunning("settings.vision.reset"));
+const thresholdSaving = computed(() => actions.isRunning("settings.thresholds.save"));
+const thresholdResetting = computed(() => actions.isRunning("settings.thresholds.reset"));
 const visionResult = ref<VisionTestResult | null>(null);
 const visionProvider = ref("auto");
 const visionMode = ref("text");
@@ -66,7 +73,7 @@ const maxTokens = ref(2048);
 
 const remoteModels = ref<LLMModelOption[]>([]);
 const modelsNote = ref("");
-const loadingModels = ref(false);
+const loadingModels = computed(() => actions.isRunning("settings.models"));
 /** 已成功拉取过的「厂商|端点」组合，避免 watcher 把同一个请求重复发出去。 */
 let lastModelsKey = "";
 let inflightModelsKey = "";
@@ -121,8 +128,8 @@ async function refreshModels(force = false): Promise<void> {
   if (!name) return;
   const key = `${name}|${endpoint}`;
   if (!force && (key === lastModelsKey || key === inflightModelsKey)) return;
+  if (!actions.begin("settings.models", key)) return;
   inflightModelsKey = key;
-  loadingModels.value = true;
   try {
     const list = await api.llmModels(name, endpoint);
     remoteModels.value = list.models;
@@ -133,7 +140,7 @@ async function refreshModels(force = false): Promise<void> {
     modelsNote.value = "拉取远端模型失败，已回退内置列表。";
   } finally {
     if (inflightModelsKey === key) inflightModelsKey = "";
-    loadingModels.value = false;
+    actions.end("settings.models");
   }
 }
 
@@ -233,7 +240,7 @@ function visionPayload() {
 }
 
 async function saveVision(): Promise<void> {
-  visionSaving.value = true;
+  if (!actions.begin("settings.vision.save")) return;
   try {
     applyVision(await api.saveVisionConfig(visionPayload()));
     await health.load(true);
@@ -241,7 +248,7 @@ async function saveVision(): Promise<void> {
   } catch (err) {
     notice.error("保存失败", (err as Error).message);
   } finally {
-    visionSaving.value = false;
+    actions.end("settings.vision.save");
   }
 }
 
@@ -253,17 +260,20 @@ async function resetVision(): Promise<void> {
     danger: true,
   });
   if (!confirmed) return;
+  if (!actions.begin("settings.vision.reset")) return;
   try {
     applyVision(await api.resetVisionConfig());
     await health.load(true);
     notice.success("已恢复图片识别基线");
   } catch (err) {
     notice.error("恢复失败", (err as Error).message);
+  } finally {
+    actions.end("settings.vision.reset");
   }
 }
 
 async function testVision(): Promise<void> {
-  visionTesting.value = true;
+  if (!actions.begin("settings.vision.test")) return;
   visionResult.value = null;
   try {
     visionResult.value = await api.testVisionConfig();
@@ -281,7 +291,7 @@ async function testVision(): Promise<void> {
       sample: "",
     };
   } finally {
-    visionTesting.value = false;
+    actions.end("settings.vision.test");
   }
 }
 
@@ -299,7 +309,7 @@ function payload() {
 }
 
 async function testConnection(): Promise<void> {
-  testing.value = true;
+  if (!actions.begin("settings.llm.test")) return;
   testResult.value = null;
   try {
     testResult.value = await api.testLlmConfig(payload());
@@ -313,12 +323,12 @@ async function testConnection(): Promise<void> {
       reply: "",
     };
   } finally {
-    testing.value = false;
+    actions.end("settings.llm.test");
   }
 }
 
 async function save(): Promise<void> {
-  saving.value = true;
+  if (!actions.begin("settings.llm.save")) return;
   try {
     const info = await api.saveLlmConfig(payload());
     applyConfig(info);
@@ -329,7 +339,7 @@ async function save(): Promise<void> {
   } catch (err) {
     notice.error("保存失败", (err as Error).message);
   } finally {
-    saving.value = false;
+    actions.end("settings.llm.save");
   }
 }
 
@@ -341,6 +351,7 @@ async function resetConfig(): Promise<void> {
     danger: true,
   });
   if (!confirmed) return;
+  if (!actions.begin("settings.llm.reset")) return;
   try {
     const info = await api.resetLlmConfig();
     applyConfig(info);
@@ -349,6 +360,8 @@ async function resetConfig(): Promise<void> {
     notice.success("已恢复 .env 配置");
   } catch (err) {
     notice.error("恢复失败", (err as Error).message);
+  } finally {
+    actions.end("settings.llm.reset");
   }
 }
 
@@ -360,6 +373,7 @@ async function clearKey(): Promise<void> {
     danger: true,
   });
   if (!confirmed) return;
+  if (!actions.begin("settings.llm.clear-key")) return;
   try {
     const info = await api.saveLlmConfig({ api_key: "" });
     applyConfig(info);
@@ -367,11 +381,14 @@ async function clearKey(): Promise<void> {
     notice.success("已清除界面保存的密钥");
   } catch (err) {
     notice.error("清除失败", (err as Error).message);
+  } finally {
+    actions.end("settings.llm.clear-key");
   }
 }
 
 async function saveThresholds(): Promise<void> {
   if (!thresholds.value) return;
+  if (!actions.begin("settings.thresholds.save")) return;
   const values: Record<string, number> = {};
   Object.entries(percentFields.value).forEach(([key, value]) => {
     values[key] = Math.min(Math.max(value / 100, 0), 1);
@@ -384,6 +401,8 @@ async function saveThresholds(): Promise<void> {
     notice.success("判定阈值已保存");
   } catch (err) {
     notice.error("保存失败", (err as Error).message);
+  } finally {
+    actions.end("settings.thresholds.save");
   }
 }
 
@@ -395,6 +414,7 @@ async function resetThresholds(): Promise<void> {
     danger: true,
   });
   if (!confirmed) return;
+  if (!actions.begin("settings.thresholds.reset")) return;
   try {
     thresholds.value = await api.resetThresholds();
     percentFields.value = Object.fromEntries(
@@ -403,6 +423,8 @@ async function resetThresholds(): Promise<void> {
     notice.success("已恢复阈值默认值");
   } catch (err) {
     notice.error("恢复失败", (err as Error).message);
+  } finally {
+    actions.end("settings.thresholds.reset");
   }
 }
 
@@ -493,7 +515,7 @@ const sourceLabel = (key: string): string =>
                   : "关闭开关表示保持现有密钥不变，保存其他项时不会覆盖它。"
               }}
             </FieldHint>
-            <el-button v-if="apiKeyConfigured" size="small" text @click="clearKey">清除已保存的密钥</el-button>
+            <el-button v-if="apiKeyConfigured" size="small" text :loading="clearingKey" @click="clearKey">清除已保存的密钥</el-button>
           </label>
         </div>
 
@@ -529,7 +551,7 @@ const sourceLabel = (key: string): string =>
           <el-button :loading="testing" @click="testConnection">
             <AppIcon name="play" :size="14" /> 测试连通性
           </el-button>
-          <el-button @click="resetConfig">恢复 .env</el-button>
+          <el-button :loading="resettingConfig" @click="resetConfig">恢复 .env</el-button>
           <div class="spacer" />
           <span v-if="overridden.length" class="chip chip--ghost mono">覆盖项：{{ overridden.join(" / ") }}</span>
         </div>
@@ -667,7 +689,7 @@ const sourceLabel = (key: string): string =>
           <el-button :loading="visionTesting" @click="testVision">
             <AppIcon name="play" :size="14" /> 测试识别
           </el-button>
-          <el-button @click="resetVision">恢复基线</el-button>
+          <el-button :loading="visionResetting" @click="resetVision">恢复基线</el-button>
           <div class="spacer" />
           <span v-if="vision.overridden_fields.length" class="chip chip--ghost mono">
             覆盖项：{{ vision.overridden_fields.length }} 项
@@ -697,7 +719,7 @@ const sourceLabel = (key: string): string =>
         icon="target"
       >
         <template #actions>
-          <el-button size="small" @click="resetThresholds">恢复默认</el-button>
+          <el-button size="small" :loading="thresholdResetting" @click="resetThresholds">恢复默认</el-button>
         </template>
 
         <div class="grid grid--4">
@@ -724,7 +746,7 @@ const sourceLabel = (key: string): string =>
 
         <hr class="rule" />
         <div class="actions">
-          <el-button type="primary" @click="saveThresholds">保存阈值</el-button>
+          <el-button type="primary" :loading="thresholdSaving" @click="saveThresholds">保存阈值</el-button>
         </div>
       </SectionCard>
     </template>

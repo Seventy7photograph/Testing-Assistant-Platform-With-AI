@@ -5,6 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import AppIcon from "@/components/AppIcon.vue";
 import { useHealthStore } from "@/stores/health";
 import { useUiStore } from "@/stores/ui";
+import { useWorkItemsStore } from "@/stores/workItems";
 
 interface NavItem {
   nav: string;
@@ -43,6 +44,18 @@ const groups: NavGroup[] = [
     ],
   },
   {
+    caption: "交付闭环",
+    items: [
+      {
+        nav: "workspace",
+        to: "/workspace",
+        label: "交付工作台",
+        hint: "自动化 · 执行 · 事项",
+        icon: "route",
+      },
+    ],
+  },
+  {
     caption: "平台设置",
     items: [
       { nav: "settings", to: "/settings", label: "大模型与阈值", hint: "两条 AI 链路共用", icon: "sliders" },
@@ -54,6 +67,7 @@ const route = useRoute();
 const router = useRouter();
 const ui = useUiStore();
 const health = useHealthStore();
+const workItems = useWorkItemsStore();
 
 const activeNav = computed(() => String(route.meta.nav ?? ""));
 const collapsed = computed(() => ui.railCollapsed);
@@ -123,6 +137,13 @@ function go(to: string) {
               <span class="nav__text">
                 <span class="nav__label">{{ item.label }}</span>
                 <span class="nav__hint">{{ item.hint }}</span>
+              </span>
+              <span
+                v-if="item.nav === 'workspace' && workItems.attention"
+                class="nav__count mono"
+                :title="`${workItems.attention} 条今日或逾期事项`"
+              >
+                {{ workItems.attention > 99 ? "99+" : workItems.attention }}
               </span>
             </a>
           </li>
@@ -382,6 +403,25 @@ function go(to: string) {
   font-size: 10.5px;
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+.nav__count {
+  min-width: 20px;
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  background: var(--fail-wash);
+  color: var(--fail);
+  font-size: 9px;
+  text-align: center;
+}
+
+.rail[data-collapsed="1"] .nav__count {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  min-width: 15px;
+  padding-inline: 3px;
 }
 
 .rail[data-collapsed="1"] .nav__text {

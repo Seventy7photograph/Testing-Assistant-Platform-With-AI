@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
 
@@ -12,6 +12,7 @@ import FieldHint from "@/components/FieldHint.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import Tip from "@/components/Tip.vue";
 import { confirmAction } from "@/composables/useFeedback";
+import { useActionSession } from "@/stores/actionSession";
 import { useHealthStore } from "@/stores/health";
 import { useNoticeStore } from "@/stores/notice";
 import { displayExtensions, engineLabel, engineTitle, formatBytes, formatRelative } from "@/utils/labels";
@@ -19,20 +20,22 @@ import { displayExtensions, engineLabel, engineTitle, formatBytes, formatRelativ
 const router = useRouter();
 const health = useHealthStore();
 const notice = useNoticeStore();
+const actions = useActionSession();
 
 const documents = ref<DocumentSummary[]>([]);
 const loading = ref(true);
 const error = ref("");
-const uploading = ref(false);
-const parsing = ref("");
-const downloading = ref("");
-const recognizing = ref("");
+const uploading = computed(() => actions.isRunning("documents.upload"));
+const parsing = computed(() => actions.detail("documents.parse"));
+const downloading = computed(() => actions.detail("documents.download"));
+const recognizing = computed(() => actions.detail("documents.recognize"));
 const keyword = ref("");
 const preview = ref<DocumentSummary | null>(null);
+let viewAlive = true;
 
 const tableRef = ref<{ clearSelection: () => void } | null>(null);
 const checked = ref<DocumentSummary[]>([]);
-const batchDeleting = ref(false);
+const batchDeleting = computed(() => actions.isRunning("documents.batch-delete"));
 
 const useLlm = ref(true);
 const maxItems = ref(8);
@@ -56,6 +59,10 @@ onMounted(() => {
   void load();
 });
 
+onBeforeUnmount(() => {
+  viewAlive = false;
+});
+
 async function load(): Promise<void> {
   loading.value = true;
   error.value = "";
@@ -70,15 +77,15 @@ async function load(): Promise<void> {
 
 async function onFileChange(file: UploadFile): Promise<void> {
   if (!file.raw) return;
-  uploading.value = true;
+  if (!actions.begin("documents.upload", file.name)) return;
   try {
     const doc = await api.uploadDocument(file.raw);
     notice.success("文档已上传", `${doc.filename} · ${doc.char_count} 字`);
-    await load();
+    if (viewAlive) await load();
   } catch (err) {
     notice.error("上传失败", (err as Error).message);
   } finally {
-    uploading.value = false;
+    actions.end("documents.upload");
   }
 }
 
@@ -93,7 +100,7 @@ async function parse(row: DocumentSummary): Promise<void> {
     });
     if (!confirmed) return;
   }
-  parsing.value = row.doc_id;
+  if (!actions.begin("documents.parse", row.doc_id)) return;
   try {
     await api.parseRequirement({
       doc_id: row.doc_id,
@@ -102,16 +109,16 @@ async function parse(row: DocumentSummary): Promise<void> {
       max_items: maxItems.value,
     });
     notice.success("需求解析完成", "正在打开结构化需求…");
-    await router.push(`/documents/${row.doc_id}/requirement`);
+    if (viewAlive) await router.push(`/documents/${row.doc_id}/requirement`);
   } catch (err) {
     notice.error("解析失败", (err as Error).message);
   } finally {
-    parsing.value = "";
+    actions.end("documents.parse");
   }
 }
 
 async function download(row: DocumentSummary): Promise<void> {
-  downloading.value = row.doc_id;
+  if (!actions.begin("documents.download", row.doc_id)) return;
   try {
     const file = await api.downloadDocument(row.doc_id);
     saveBlob(file.blob, file.filename || row.filename);
@@ -119,7 +126,7 @@ async function download(row: DocumentSummary): Promise<void> {
   } catch (err) {
     notice.error("下载失败", (err as Error).message);
   } finally {
-    downloading.value = "";
+    actions.end("documents.download");
   }
 }
 
@@ -145,7 +152,7 @@ function imageUrl(docId: string, filename: string): string {
 }
 
 async function recognizeImages(row: DocumentSummary): Promise<void> {
-  recognizing.value = row.doc_id;
+  if (!actions.begin("documents.recognize", row.doc_id)) return;
   try {
     const updated = await api.recognizeDocumentImages(row.doc_id);
     const failed = updated.image_count - updated.image_recognized;
@@ -157,12 +164,12 @@ async function recognizeImages(row: DocumentSummary): Promise<void> {
     } else {
       notice.info("没有识别出内容", "打开文档预览查看每张图片的具体原因。");
     }
-    if (preview.value?.doc_id === row.doc_id) preview.value = updated;
-    await load();
+    if (viewAlive && preview.value?.doc_id === row.doc_id) preview.value = updated;
+    if (viewAlive) await load();
   } catch (err) {
     notice.error("图片识别失败", (err as Error).message);
   } finally {
-    recognizing.value = "";
+    actions.end("documents.recognize");
   }
 }
 
@@ -188,7 +195,7 @@ async function remove(row: DocumentSummary): Promise<void> {
   try {
     await api.deleteDocument(row.doc_id);
     notice.success("已删除", row.filename);
-    await load();
+    if (viewAlive) await load();
   } catch (err) {
     notice.error("删除失败", (err as Error).message);
   }
@@ -214,7 +221,7 @@ async function removeSelected(): Promise<void> {
     danger: true,
   });
   if (!confirmed) return;
-  batchDeleting.value = true;
+  if (!actions.begin("documents.batch-delete")) return;
   try {
     const result = await api.batchDeleteDocuments(ids);
     if (result.missing.length) {
@@ -226,11 +233,11 @@ async function removeSelected(): Promise<void> {
       notice.success(`已删除 ${result.deleted} 份文档`);
     }
     clearSelection();
-    await load();
+    if (viewAlive) await load();
   } catch (err) {
     notice.error("批量删除失败", (err as Error).message);
   } finally {
-    batchDeleting.value = false;
+    actions.end("documents.batch-delete");
   }
 }
 </script>

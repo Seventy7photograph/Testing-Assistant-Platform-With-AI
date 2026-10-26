@@ -4,6 +4,60 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)：`MAJOR.MINOR.PATCH`。
 
+## [2.3.0] - 2026-10-26 · 自动化交付与工作收件箱
+
+主题：把接口用例变成可审查的自动化资产，把 JUnit 结果接回可追溯运行记录，
+再从失败直接创建带上下文的跟进事项与提醒。原计划的 V2.3 与 V2.4 合并为本次 v2.3.0。
+
+### Added
+
+- **自动化资产**：从指定 OpenAPI 规范与可选 `case_ids` 生成版本化 `pytest + httpx` zip，
+  固定包含 `pytest.ini`、`requirements.txt`、`.env.example`、`conftest.py`、`cases.json`、
+  `tests/test_api_cases.py` 与 README；案例数据以 JSON 承载，不把模型输出拼成 Python 源码。
+- **静态安全门禁**：生成后执行 AST、`compile()`、禁止导入/调用与疑似密钥扫描；
+  未通过校验的资产保留追溯记录但禁止下载，平台不自动执行下载项目。
+- **JUnit 回收**：解析 pytest JUnit XML 的 passed / failed / error / skipped、耗时、
+  stdout / stderr 与 `case_id` 属性/marker；未知 case 保留在 `unmatched_cases`，畸形 XML 失败关闭。
+- **执行与事件追溯**：新增 `TestRun`、`CaseResult`、`JobEvent`；运行保存来源资产、来源哈希、
+  匹配结果与原始 XML，事件可按 `run_id` / `artifact_id` 检索，敏感字段不写入事件消息。
+- **工作收件箱**：新增本地 `WorkItem`，支持 note/task、Markdown、状态、优先级、截止/提醒、
+  标签、置顶和资源关联；提供今日、近期、逾期、收件箱、全部、已完成视图与筛选。
+- **到期提醒**：页面打开时轮询，站内通知与可选浏览器系统通知；服务端通过 `reminded_at`
+  幂等去重，页面关闭后明确不承诺后台提醒。
+- **交付工作台**：统一管理自动化资产、执行记录与工作事项；失败运行一键创建关联事项，
+  运行数据可送入报告工作台，总览、侧边栏与命令面板均增加入口。
+- **QA 证据**：新增 v2.3.0 风险矩阵、JUnit / 生成器 / 双存储 / 提醒回归，以及真实运行生成项目的测试。
+
+### Changed
+
+- 原 V2.3 与 V2.4 合并为 v2.3.0；V2.4 不再单独发版，后续 V3 起点前移。
+- 新增持久化集合统一接入 JSON 与 SQLite：`automation_artifacts`、`test_runs`、`job_events`、`work_items`。
+- 工作事项时间按 `Asia/Shanghai` 解释；Windows 缺少 tzdata 时使用固定 UTC+8 兜底。
+- 版本号统一升级为 `2.3.0`，XMind 创建者版本同步。
+
+### Fixed
+
+- 生成用例与测试报告新增跨路由任务阶段、输入指纹和运行令牌：
+  离开页面再返回仍保持“生成中”；同一输入完成后禁用重复提交，修改输入后才允许再次生成。
+- 报告流式生成的 `AbortController` 提升到 Pinia 会话；停止或卸载会失效当前运行令牌，
+  迟到的旧请求结果不会覆盖新会话。
+- 文档上传/解析/下载/图片识别、模型配置保存与连通性测试、图片识别配置、阈值保存以及
+  OpenAPI 导入统一接入全局动作会话，跨路由保持运行状态并阻止重复提交。
+- 文档解析与 OpenAPI 导入在页面已离开时不再执行迟到跳转，避免任务完成后抢走当前页面。
+- 生成页设计方法改为按使用频率排序：边界值、等价类、场景法、判定表、因果图、正交实验；
+  需求页的方法选择保持同一顺序，默认勾选集合不变。
+
+### Verification
+
+- 后端全量 `pytest`：430 passed。
+- v2.3 新增 12 项定向回归：生成器/validator、JUnit 方言、API 闭环、真实 pytest 运行、
+  工作事项 CRUD、提醒去重与 JSON/SQLite 双存储。
+- 前端 `vue-tsc --noEmit` 与 `npm run build`：通过；静态产物同步到 `app/static/`。
+- 三个离线门禁：`demo_offline.py`、`demo_report_offline.py`、`acceptance_check.py` 全部通过。
+- Playwright：资产生成与校验、JUnit 导入（1 匹配 + 1 未匹配）、失败跟进事项、
+  工作事项保存/完成、到期提醒、桌面与 390px 移动端通过；移动端无横向溢出。
+- 系统 OpenAPI：新增自动化下载、JUnit 上传、工作事项与错误响应契约；自身规范复导入无响应 schema 缺口。
+
 ## [2.2.0] - 2026-10-23 · 接口测试资产（OpenAPI → 契约用例 → Postman）
 
 主题：把 OpenAPI 3 规范变成可追溯、可审查、可交付的接口测试资产。接口路径、参数、
@@ -516,5 +570,6 @@
 - 使用 JSON 文件存储，不适合多实例并发部署。
 - PDF 仅支持文本型，暂不做 OCR。
 
-[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.2.0...v2.3.0
 [1.0.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/releases/tag/v1.0.0

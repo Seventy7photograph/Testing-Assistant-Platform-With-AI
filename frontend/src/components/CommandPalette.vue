@@ -31,6 +31,7 @@ const pages: Entry[] = [
   { label: "用例集", hint: "浏览 · 统计 · 导出", icon: "cases", to: "/suites", group: "页面" },
   { label: "报告工作台", hint: "执行数据 → 指标 → AI 报告", icon: "chart", to: "/report", group: "页面" },
   { label: "报告存档", hint: "趋势 · 检索 · 对比", icon: "archive", to: "/report/archive", group: "页面" },
+  { label: "交付工作台", hint: "自动化资产 · 执行记录 · 工作事项", icon: "route", to: "/workspace", group: "页面" },
   { label: "大模型与阈值", hint: "两条 AI 链路共用配置", icon: "sliders", to: "/settings", group: "页面" },
 ];
 

@@ -65,13 +65,18 @@ export const METHOD_SHORT: Record<string, string> = {
 };
 
 export const METHOD_ORDER: DesignMethod[] = [
-  "equivalence",
   "boundary",
+  "equivalence",
   "scenario",
   "decision_table",
   "cause_effect",
   "orthogonal",
 ];
+
+export function methodOrderIndex(name: string): number {
+  const index = METHOD_ORDER.indexOf(name as DesignMethod);
+  return index === -1 ? METHOD_ORDER.length : index;
+}
 
 export const CLAIM_STATUS_LABELS: Record<string, string> = {
   verified: "原文证据已核验",
@@ -125,8 +130,8 @@ export const DEFAULT_METHODS: DesignMethod[] = ["equivalence", "boundary", "scen
  * 同一事实存两处，必然会有一处过期。
  */
 export const FALLBACK_METHODS: MethodInfo[] = [
-  { name: "equivalence", label: "等价类划分", implemented: true, description: "" },
   { name: "boundary", label: "边界值分析", implemented: true, description: "" },
+  { name: "equivalence", label: "等价类划分", implemented: true, description: "" },
   { name: "scenario", label: "场景法", implemented: true, description: "" },
   { name: "decision_table", label: "判定表", implemented: true, description: "" },
   { name: "cause_effect", label: "因果图", implemented: true, description: "" },

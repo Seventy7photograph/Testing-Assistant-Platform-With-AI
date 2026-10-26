@@ -15,6 +15,7 @@ from app.report import store as report_store
 from app.report.config import verdict_thresholds
 from app.report.llm import llm_settings
 from app.schemas.api import ApiResponse, ok
+from app.services.work_item_service import WorkItemService
 
 router = APIRouter(tags=["总览"])
 
@@ -30,6 +31,7 @@ async def overview(
     # 只统计能追溯到源文档的解析结果：孤儿解析结果在界面里没有入口，
     # 计入总览只会变成一个既看不到也删不掉的数字。
     requirements_count = repository.count_linked_requirements()
+    work_summary = WorkItemService(settings, repository).summary()
 
     try:
         reports, reports_total = report_store.list_reports(limit=6, offset=0)
@@ -61,6 +63,10 @@ async def overview(
             "suites": repository.suites.count(),
             "cases": repository.count_cases(),
             "reports": reports_total,
+            "automation_artifacts": repository.automation_artifacts.count(),
+            "test_runs": repository.test_runs.count(),
+            "work_items_open": work_summary.open_tasks,
+            "work_items_overdue": work_summary.overdue,
         },
         "report": {
             "llm_configured": report_settings.configured,
@@ -70,6 +76,10 @@ async def overview(
             "documents": [item.model_dump(mode="json") for item in documents],
             "suites": [item.summary().model_dump(mode="json") for item in suites],
             "reports": reports,
+            "work_items": [
+                item.model_dump(mode="json") for item in work_summary.recent_tasks
+            ],
+            "work_summary": work_summary.model_dump(mode="json"),
         },
         "capabilities": {
             "methods": engine.available_methods(),

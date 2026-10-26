@@ -1,6 +1,6 @@
-# v2.3.1 QA Risk Matrix
+# v2.3.2 QA Risk Matrix
 
-> Scope: V2.3.1 controlled automation AI, V2.3 asset generation, JUnit ingestion,
+> Scope: V2.3.2 controlled AI apply engine and side drawer, V2.3 asset generation, JUnit ingestion,
 > structured events, work items, reminders, delivery workspace, storage and release.
 > Method: risk-based testing (`Impact × Probability`); score ≥ 10 receives failure-mode analysis.
 > This curated suite does not claim a statistical failure rate.
@@ -20,6 +20,7 @@
 | R-09 | AI suggestion crosses operation/case/source boundary or contains executable recipe | 4 | 3 | 12 | HIGH | source-ownership tests, invalid finding drop tests, recipe secret/code rejection |
 | R-10 | Rejected artifact source code is sent to the model | 5 | 2 | 10 | HIGH | rejected-artifact script review API test |
 | R-11 | Delivery workspace remounts or scrolls on tab switch | 2 | 4 | 8 | MEDIUM | DOM-instance marker, scroll-position measurement, route query check |
+| R-12 | AI apply mutates source asset/case or creates a stale/unsafe zip | 5 | 3 | 15 | CRITICAL | source snapshot tests, derived revision tests, new-case/assertion tests, zip content and static validation |
 
 ## Failure Mode Analysis
 
@@ -87,6 +88,14 @@
 - **Current mitigation:** Script review requires `artifact.status == validated`.
 - **Coverage gap addressed:** Rejected artifact review returns an actionable error and does not call the provider.
 
+### R-12: AI apply mutates source or bypasses validation
+
+- **Trigger:** Apply writes into the source artifact/case, reuses an old zip, or skips validation after recipe injection.
+- **Blast radius:** Original executable assets and historical run mapping become unreproducible; unsafe generated files may be downloaded.
+- **Detection:** Compare source artifacts/cases before and after; assert parent/source review IDs; inspect new zip entries and validation status.
+- **Current mitigation:** Immutable source, copied `API-AI-*` cases, new artifact revision, full validator pass, review frozen after apply.
+- **Coverage gap addressed:** Unit/API tests verify operation-case apply, assertion-copy apply, recipe file creation, zip contents and one-time application.
+
 ## Coverage Alignment
 
 | Zone | Required coverage | Implemented for v2.3 |
@@ -128,8 +137,9 @@ The release is go only when:
 
 | Gate | Result |
 | --- | --- |
-| Full backend suite | 435 collected / 435 passed |
-| Controlled AI tests | 5 passed: operation gap, cross-source rejection, failure assertion, recipe safety, API decisions/download |
+| Full backend suite | 438 collected / 438 passed |
+| Controlled AI tests | 8 passed: operation gap, cross-source rejection, failure assertion, recipe safety, API decisions/download, apply derivation and new zip |
 | Frontend | TypeScript + production build passed |
 | Workspace tabs | DOM instance marker preserved; scroll position and `tab` query preserved across all three tabs |
 | Responsive | AI panels and review records remain within 390 px viewport |
+| Controlled apply | Original v1 preserved; operation apply created v2; recipe apply created v3 with 9 files and new zip |

@@ -211,6 +211,10 @@ export const api = {
       `/automation/ai/reviews/${encodeURIComponent(reviewId)}/decision`,
       { decision },
     ),
+  applyAutomationAIReview: (reviewId: string) =>
+    post<AutomationArtifact>(
+      `/automation/ai/reviews/${encodeURIComponent(reviewId)}/apply`,
+    ),
   downloadAutomationAIRecipe: (reviewId: string) =>
     downloadFile(`/automation/ai/reviews/${encodeURIComponent(reviewId)}/recipe`),
 

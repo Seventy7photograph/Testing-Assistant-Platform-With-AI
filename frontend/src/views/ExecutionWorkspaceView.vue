@@ -5,6 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { api, saveBlob } from "@/api";
 import type {
   ApiSpecSummary,
+  AutomationAIKind,
   AutomationArtifact,
   AutomationArtifactSummary,
   JobEvent,
@@ -14,7 +15,7 @@ import type {
   WorkItemPriority,
 } from "@/api";
 import AppIcon from "@/components/AppIcon.vue";
-import AutomationAIReviewPanel from "@/components/AutomationAIReviewPanel.vue";
+import AutomationAIDrawer from "@/components/AutomationAIDrawer.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorNote from "@/components/ErrorNote.vue";
 import MarkdownBody from "@/components/MarkdownBody.vue";
@@ -32,6 +33,12 @@ const reportSession = useReportSession();
 const workStore = useWorkItemsStore();
 
 const activeTab = ref<TabKey>("automation");
+const aiDrawerOpen = ref(false);
+const aiDrawerKinds = ref<AutomationAIKind[]>([
+  "operation_gap",
+  "fixture_recipe",
+  "script_review",
+]);
 const loading = ref(false);
 const busy = ref("");
 const error = ref("");
@@ -97,6 +104,20 @@ const itemResultLabel = computed(() => {
   if (saveState.value === "saved") return "已保存";
   if (saveState.value === "failed") return "保存失败";
   return "未修改";
+});
+
+const aiDrawerSpecId = computed(() => {
+  if (activeTab.value === "runs" && selectedRun.value) {
+    return selectedRun.value.spec_id || selectedSpecId.value;
+  }
+  return selectedSpecId.value;
+});
+
+const aiDrawerArtifactId = computed(() => {
+  if (activeTab.value === "runs" && selectedRun.value) {
+    return selectedRun.value.artifact_id || selectedArtifactId.value;
+  }
+  return selectedArtifactId.value;
 });
 
 const activeFilterLabel = computed(() => {
@@ -443,6 +464,19 @@ function switchTab(tab: TabKey) {
   window.history.replaceState(window.history.state, "", url);
 }
 
+function openAIDrawer(kinds: AutomationAIKind[]) {
+  aiDrawerKinds.value = kinds;
+  aiDrawerOpen.value = true;
+}
+
+function handleAIApplied(artifact: AutomationArtifact) {
+  selectedArtifactId.value = artifact.artifact_id;
+  selectedArtifact.value = artifact;
+  aiDrawerOpen.value = false;
+  switchTab("automation");
+  void refreshArtifacts();
+}
+
 function splitTags(raw: string): string[] {
   return raw
     .split(/[,，、\s]+/)
@@ -518,7 +552,7 @@ function viewLabel(view: string): string {
 
     <section class="command-band">
       <div class="command-band__intro">
-        <p class="calib">DELIVERY LOOP · V2.3</p>
+        <p class="calib">DELIVERY LOOP · V2.3.2</p>
         <h2>从接口用例到下一步行动</h2>
         <p>
           生成受控脚本、回收 JUnit、把失败变成带上下文的事项。所有数据留在本地，
@@ -590,7 +624,19 @@ function viewLabel(view: string): string {
             <h3>生成可靠性脚本</h3>
             <p>固定模板输出 pytest + httpx；平台不会执行下载项目。</p>
           </div>
-          <span class="chip chip--glacier">受控生成</span>
+          <div class="row row--wrap">
+            <span class="chip chip--glacier">受控生成</span>
+            <button
+              type="button"
+              class="ai-trigger"
+              :disabled="!selectedArtifact"
+              data-testid="open-ai-drawer"
+              @click="openAIDrawer(['operation_gap', 'fixture_recipe', 'script_review'])"
+            >
+              <AppIcon name="sparkle" :size="14" />
+              AI 增强
+            </button>
+          </div>
         </header>
         <div class="panel__body stack--tight">
           <label class="field">
@@ -640,6 +686,9 @@ function viewLabel(view: string): string {
                 <p class="muted mono">
                   {{ selectedArtifact.artifact_id }} · v{{ selectedArtifact.revision }}
                 </p>
+                <p v-if="selectedArtifact.parent_artifact_id" class="muted mono">
+                  派生自 {{ selectedArtifact.parent_artifact_id }}
+                </p>
               </div>
               <div class="spacer"></div>
               <span
@@ -656,6 +705,12 @@ function viewLabel(view: string): string {
                 <span class="mono">{{ file.content.length.toLocaleString() }} chars</span>
               </div>
             </div>
+            <ul v-if="selectedArtifact.change_summary.length" class="change-summary">
+              <li v-for="change in selectedArtifact.change_summary" :key="change">
+                <AppIcon name="check" :size="13" />
+                {{ change }}
+              </li>
+            </ul>
             <ul v-if="selectedArtifact.validation_errors.length" class="issue-list">
               <li v-for="issue in selectedArtifact.validation_errors" :key="`${issue.path}-${issue.code}`">
                 <strong>{{ issue.code }}</strong>
@@ -673,11 +728,6 @@ function viewLabel(view: string): string {
             </el-button>
           </template>
         </div>
-        <AutomationAIReviewPanel
-          v-if="selectedSpecId && selectedArtifact"
-          :spec-id="selectedSpecId"
-          :artifact-id="selectedArtifact.artifact_id"
-        />
       </div>
 
       <div class="panel">
@@ -704,7 +754,7 @@ function viewLabel(view: string): string {
               <strong>{{ artifact.spec_title || artifact.spec_id }}</strong>
               <span>
                 {{ artifact.case_count }} 条用例 · {{ artifact.operation_count }} 个 operation ·
-                {{ artifact.file_count }} 个文件
+                {{ artifact.file_count }} 个文件{{ artifact.parent_artifact_id ? " · AI 派生" : "" }}
               </span>
             </span>
             <span
@@ -867,6 +917,10 @@ function viewLabel(view: string): string {
               <AppIcon name="chart" :size="16" />
               送入报告工作台
             </el-button>
+            <el-button data-testid="run-ai-drawer" @click="openAIDrawer(['failure_assertion'])">
+              <AppIcon name="sparkle" :size="16" />
+              AI 断言建议
+            </el-button>
           </div>
           <ul v-if="selectedRun.warnings.length" class="notice-list">
             <li v-for="warning in selectedRun.warnings" :key="warning">{{ warning }}</li>
@@ -907,13 +961,6 @@ function viewLabel(view: string): string {
             </div>
             <p v-else class="muted">当前运行没有可显示的事件。</p>
           </div>
-          <AutomationAIReviewPanel
-            v-if="selectedRun.spec_id || selectedSpecId"
-            :spec-id="selectedRun.spec_id || selectedSpecId"
-            :artifact-id="selectedRun.artifact_id || selectedArtifactId"
-            :run-id="selectedRun.run_id"
-            :kinds="['failure_assertion']"
-          />
         </template>
         <EmptyState
           v-else
@@ -1197,6 +1244,20 @@ function viewLabel(view: string): string {
         </aside>
       </div>
     </section>
+
+    <AutomationAIDrawer
+      v-model:open="aiDrawerOpen"
+      :spec-id="aiDrawerSpecId"
+      :artifact-id="aiDrawerArtifactId"
+      :run-id="activeTab === 'runs' ? selectedRunId : ''"
+      :kinds="aiDrawerKinds"
+      :context-label="
+        activeTab === 'runs'
+          ? '基于当前失败运行生成断言建议，人工采纳后可派生新资产版本'
+          : '建议、配方与脚本审查均在独立抽屉中处理，原资产版本保持不变'
+      "
+      @applied="handleAIApplied"
+    />
   </div>
 </template>
 
@@ -1207,6 +1268,31 @@ function viewLabel(view: string): string {
 
 .workspace__stage {
   min-height: 540px;
+}
+
+.ai-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--glacier-tint);
+  border-radius: var(--radius-pill);
+  background: var(--ice-0);
+  color: var(--glacier-deep);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.ai-trigger:hover {
+  background: var(--glacier-wash);
+}
+
+.ai-trigger:disabled {
+  border-color: var(--ice-3);
+  color: var(--ink-3);
+  cursor: default;
 }
 
 .command-band {
@@ -1446,6 +1532,25 @@ function viewLabel(view: string): string {
 
 .file-row span {
   color: var(--ink-3);
+}
+
+.change-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  list-style: none;
+  border-left: 2px solid var(--pass);
+  background: var(--pass-wash);
+  color: var(--pass);
+  font-size: 10.5px;
+}
+
+.change-summary li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .issue-list,

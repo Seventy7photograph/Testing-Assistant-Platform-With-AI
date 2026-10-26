@@ -1,4 +1,4 @@
-"""V2.3.1 自动化资产受控 AI 建议服务。
+"""V2.3.2 自动化资产受控 AI 建议与应用服务。
 
 模型只产出待人工确认的建议、断言提案、数据配方与只读审查意见。
 本服务不会改写 AutomationArtifact、cases.json、确定性断言或生成器模板。
@@ -13,7 +13,8 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from app.automation.validators import SECRET_PATTERNS
+from app.automation.pytest_generator import build_pytest_artifact
+from app.automation.validators import SECRET_PATTERNS, validate_generated_files
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BadRequestError, ConflictError, LLMNotConfiguredError, NotFoundError
 from app.core.logging import get_logger, sanitize_log_text
@@ -33,8 +34,9 @@ from app.llm.prompts import (
     build_automation_script_review_messages,
 )
 from app.repository import Repository, get_repository
-from app.schemas.api_testing import ApiCaseSpec, ApiOperation, ApiSpec
+from app.schemas.api_testing import ApiAssertion, ApiCaseSpec, ApiOperation, ApiSpec
 from app.schemas.automation_ai import (
+    AIApiCaseProposal,
     AIAssertionProposal,
     AutomationAIFinding,
     AutomationAIKind,
@@ -45,7 +47,7 @@ from app.schemas.automation_ai import (
     FixtureEnvironmentVariable,
     ReviewDecision,
 )
-from app.schemas.execution import AutomationArtifact, TestRun
+from app.schemas.execution import AutomationArtifact, GeneratedFile, TestRun
 from app.services.execution_service import ExecutionService
 
 logger = get_logger(__name__)
@@ -197,6 +199,8 @@ class AutomationAIService:
         review = self.get_review(review_id)
         if review.status != "completed":
             raise ConflictError("只有已完成的 AI 建议才能人工采纳或驳回。")
+        if review.applied_artifact_id:
+            raise ConflictError("该建议已经生成派生资产，不能再修改决定。")
         finding = next((item for item in review.findings if item.finding_id == finding_id), None)
         if finding is None:
             raise NotFoundError(f"AI 建议项不存在：{finding_id}")
@@ -214,11 +218,123 @@ class AutomationAIService:
         review = self.get_review(review_id)
         if review.status != "completed":
             raise ConflictError("只有已完成的 AI 建议才能人工采纳或驳回。")
+        if review.applied_artifact_id:
+            raise ConflictError("该建议已经生成派生资产，不能再修改决定。")
         review.decision = decision
         review.updated_at = now_iso()
         self.repository.automation_ai_reviews.save(review)
         self._event("automation.ai_review.decision", "completed", review)
         return review
+
+    def apply_review(self, review_id: str) -> AutomationArtifact:
+        """把已采纳建议应用到派生版本，原资产与源 case 保持不可变。"""
+        review = self.get_review(review_id)
+        if review.status != "completed":
+            raise ConflictError("只有已完成的 AI 建议才能生成新资产版本。")
+        if review.applied_artifact_id:
+            raise ConflictError(
+                "该 AI 建议已经生成过派生资产。",
+                detail={"applied_artifact_id": review.applied_artifact_id},
+            )
+        if review.kind == "script_review":
+            raise BadRequestError("脚本只读审查不能自动生成新资产，请人工修改生成模板后重新生成。")
+        if not review.artifact_id:
+            raise BadRequestError("该 AI 建议没有关联自动化资产。")
+        source_artifact = self._artifact_for_spec(review.artifact_id, review.spec_id)
+        if source_artifact is None:
+            raise NotFoundError(f"自动化资产不存在：{review.artifact_id}")
+        if source_artifact.status != "validated":
+            raise BadRequestError("源自动化资产未通过安全校验，不能派生新版本。")
+
+        spec = self.repository.api_specs.get(review.spec_id)
+        all_cases = {item.case_id: item for item in self._cases_for_spec(review.spec_id)}
+        selected_cases: list[ApiCaseSpec] = []
+        for case_id in source_artifact.case_ids:
+            case = all_cases.get(case_id) or self.repository.api_cases.try_get(case_id)
+            if case is not None:
+                selected_cases.append(case)
+        if not selected_cases:
+            raise BadRequestError("源自动化资产没有可读取的接口用例。")
+
+        changes: list[str] = []
+        if review.kind == "operation_gap":
+            accepted = [
+                item
+                for item in review.findings
+                if item.disposition == "accepted" and item.proposed_case is not None
+            ]
+            if not accepted:
+                raise BadRequestError("没有已采纳且结构完整的 case 提案可应用。")
+            for finding in accepted:
+                proposal = finding.proposed_case
+                assert proposal is not None
+                base = self._resolve_base_case(proposal, all_cases)
+                new_case = self._new_case_from_proposal(base, proposal)
+                self.repository.api_cases.save(new_case)
+                selected_cases.append(new_case)
+                all_cases[new_case.case_id] = new_case
+                changes.append(f"新增 AI case：{new_case.title}")
+        elif review.kind == "failure_assertion":
+            accepted = [
+                item
+                for item in review.findings
+                if item.disposition == "accepted" and item.proposed_assertion is not None
+            ]
+            if not accepted:
+                raise BadRequestError("没有已采纳且结构完整的 assertion 提案可应用。")
+            groups: dict[str, list[AIAssertionProposal]] = {}
+            for finding in accepted:
+                assert finding.proposed_assertion is not None
+                if finding.case_id:
+                    groups.setdefault(finding.case_id, []).append(finding.proposed_assertion)
+            replacement: dict[str, ApiCaseSpec] = {}
+            for case_id, assertions in groups.items():
+                base = all_cases.get(case_id)
+                if base is None:
+                    continue
+                new_case = self._copy_case_with_assertions(base, assertions)
+                self.repository.api_cases.save(new_case)
+                replacement[case_id] = new_case
+                changes.append(f"派生断言版本：{base.case_id} → {new_case.case_id}")
+            if not replacement:
+                raise BadRequestError("已采纳断言没有匹配到当前规范中的 case。")
+            selected_cases = [
+                replacement.get(case.case_id, case) for case in selected_cases
+            ]
+        else:
+            if review.decision != "accepted" or review.recipe is None:
+                raise BadRequestError("请先采纳数据配方，再生成新资产版本。")
+
+        artifact = build_pytest_artifact(
+            spec,
+            selected_cases,
+            artifact_id=new_id("AUTO-"),
+            revision=self.repository.next_artifact_revision(spec.spec_id),
+        )
+        artifact.parent_artifact_id = source_artifact.artifact_id
+        artifact.source_review_id = review.review_id
+        artifact.change_summary = changes
+
+        if review.kind == "fixture_recipe" and review.recipe is not None:
+            artifact.files = self._merge_recipe_into_files(artifact.files, review)
+            artifact.change_summary = [
+                "生成 fixtures.json",
+                "生成 test_data.json",
+                "更新 .env.example",
+            ]
+
+        validation = validate_generated_files(artifact.files)
+        artifact.validation_errors = validation.errors
+        artifact.warnings.extend(validation.warnings)
+        artifact.status = "validated" if validation.ok else "rejected"
+        self.repository.automation_artifacts.save(artifact)
+
+        review.applied_artifact_id = artifact.artifact_id
+        review.applied_at = now_iso()
+        review.updated_at = review.applied_at
+        self.repository.automation_ai_reviews.save(review)
+        self._event("automation.ai_apply", artifact.status, review)
+        return artifact
 
     def recipe_download(self, review_id: str) -> tuple[bytes, str]:
         review = self.get_review(review_id)
@@ -576,22 +692,53 @@ class AutomationAIService:
         if not issue:
             raise ValueError("issue 不能为空。")
         proposed = None
+        allowed_assertion_sources = prepared.allowed_sources
         if kind == "failure_assertion" and isinstance(raw.get("proposed_assertion"), dict):
-            proposal_raw = raw["proposed_assertion"]
-            proposal_ref = str(proposal_raw.get("source_ref") or source_ref).strip()
-            if proposal_ref not in prepared.case_sources.get(case_id or "", set()):
-                raise ValueError("断言提案的 source_ref 不合法。")
-            operator = str(proposal_raw.get("operator") or "").strip()
-            if operator not in {"equals", "exists", "type", "in", "gte", "lte"}:
-                raise ValueError("断言提案的 operator 不合法。")
-            proposed = AIAssertionProposal(
-                kind=str(proposal_raw.get("kind") or "json"),
-                path=truncate(str(proposal_raw.get("path") or ""), 300),
-                operator=operator,
-                expected=proposal_raw.get("expected"),
-                description=truncate(str(proposal_raw.get("description") or ""), 1000),
-                source_ref=proposal_ref,
+            allowed_assertion_sources = prepared.case_sources.get(case_id or "", set())
+            proposed = self._parse_assertion_proposal(
+                raw["proposed_assertion"],
+                allowed_assertion_sources,
+                source_ref,
             )
+        proposed_case = None
+        if kind == "operation_gap" and isinstance(raw.get("proposed_case"), dict):
+            case_raw = dict(raw["proposed_case"])
+            case_operation_id = str(case_raw.get("operation_id") or "").strip()
+            if case_operation_id != operation_id:
+                raise ValueError("proposed_case 的 operation_id 与 finding 不一致。")
+            case_source_ref = str(case_raw.get("source_ref") or source_ref).strip()
+            operation_sources = prepared.operation_sources.get(operation_id, set())
+            if case_source_ref not in operation_sources:
+                raise ValueError("proposed_case 的 source_ref 不属于当前 operation。")
+            assertions = case_raw.get("assertions") or []
+            if not isinstance(assertions, list):
+                raise ValueError("proposed_case.assertions 必须是数组。")
+            parsed_assertions = [
+                self._parse_assertion_proposal(item, operation_sources, case_source_ref)
+                for item in assertions[:12]
+                if isinstance(item, dict)
+            ]
+            base_case_id = str(case_raw.get("base_case_id") or "").strip()
+            proposed_case = AIApiCaseProposal(
+                base_case_id=base_case_id,
+                operation_id=case_operation_id,
+                title=truncate(str(case_raw.get("title") or "").strip(), 300),
+                category=str(case_raw.get("category") or "positive"),
+                priority=str(case_raw.get("priority") or "P2"),
+                request=case_raw.get("request") if isinstance(case_raw.get("request"), dict) else None,
+                assertions=parsed_assertions,
+                preconditions=[
+                    truncate(str(item), 500)
+                    for item in (case_raw.get("preconditions") or [])[:20]
+                ],
+                tags=[
+                    truncate(str(item), 100)
+                    for item in (case_raw.get("tags") or [])[:20]
+                ],
+                source_ref=case_source_ref,
+            )
+            if not proposed_case.title:
+                raise ValueError("proposed_case.title 不能为空。")
         return AutomationAIFinding(
             finding_id=new_id("AIF-"),
             category={
@@ -609,6 +756,28 @@ class AutomationAIService:
             source_ref=source_ref,
             claim_status="inferred",
             proposed_assertion=proposed,
+            proposed_case=proposed_case,
+        )
+
+    @staticmethod
+    def _parse_assertion_proposal(
+        raw: dict[str, Any],
+        allowed_sources: set[str],
+        default_source_ref: str,
+    ) -> AIAssertionProposal:
+        proposal_ref = str(raw.get("source_ref") or default_source_ref).strip()
+        if proposal_ref not in allowed_sources:
+            raise ValueError("断言提案的 source_ref 不合法。")
+        operator = str(raw.get("operator") or "").strip()
+        if operator not in {"equals", "exists", "type", "in", "gte", "lte"}:
+            raise ValueError("断言提案的 operator 不合法。")
+        return AIAssertionProposal(
+            kind=str(raw.get("kind") or "json"),
+            path=truncate(str(raw.get("path") or ""), 300),
+            operator=operator,
+            expected=raw.get("expected"),
+            description=truncate(str(raw.get("description") or ""), 1000),
+            source_ref=proposal_ref,
         )
 
     def _validate_recipe(
@@ -696,6 +865,171 @@ class AutomationAIService:
                 detail={"artifact_id": artifact_id, "spec_id": spec_id},
             )
         return artifact
+
+    @staticmethod
+    def _resolve_base_case(
+        proposal: AIApiCaseProposal,
+        cases: dict[str, ApiCaseSpec],
+    ) -> ApiCaseSpec:
+        if proposal.base_case_id:
+            base = cases.get(proposal.base_case_id)
+            if base is None:
+                raise BadRequestError(
+                    "case 提案引用的 base_case_id 不存在。",
+                    detail={"base_case_id": proposal.base_case_id},
+                )
+            if base.operation_id != proposal.operation_id:
+                raise BadRequestError("case 提案与 base case 的 operation 不一致。")
+            return base
+        candidates = [
+            item for item in cases.values()
+            if item.operation_id == proposal.operation_id
+        ]
+        if not candidates:
+            raise BadRequestError(
+                "case 提案找不到同 operation 的确定性 base case。",
+                detail={"operation_id": proposal.operation_id},
+            )
+        candidates.sort(key=lambda item: (item.category != "positive", item.case_id))
+        return candidates[0]
+
+    def _new_case_from_proposal(
+        self,
+        base: ApiCaseSpec,
+        proposal: AIApiCaseProposal,
+    ) -> ApiCaseSpec:
+        new_case = base.model_copy(deep=True)
+        new_case.case_id = new_id("API-AI-")
+        new_case.title = proposal.title
+        new_case.category = proposal.category
+        new_case.priority = proposal.priority
+        new_case.source_ref = proposal.source_ref
+        new_case.created_at = now_iso()
+        execution = new_case.execution.model_copy(deep=True)
+        if proposal.request is not None:
+            fields = proposal.request.model_fields_set
+            if "query" in fields and proposal.request.query is not None:
+                execution.query = _string_mapping(proposal.request.query)
+            if "path_params" in fields and proposal.request.path_params is not None:
+                execution.path_params = _string_mapping(proposal.request.path_params)
+            if "headers" in fields and proposal.request.headers is not None:
+                execution.headers = _string_mapping(proposal.request.headers)
+            if "cookies" in fields and proposal.request.cookies is not None:
+                execution.cookies = _string_mapping(proposal.request.cookies)
+            if "body" in fields:
+                execution.body = proposal.request.body
+        new_case.execution = execution
+        _append_unique_assertions(new_case, self._to_api_assertions(proposal.assertions))
+        new_case.preconditions = list(
+            dict.fromkeys([*new_case.preconditions, *proposal.preconditions, "AI 建议经人工采纳"])
+        )
+        new_case.tags = list(
+            dict.fromkeys([*new_case.tags, *proposal.tags, "AI补充", "人工已采纳"])
+        )
+        new_case.warnings = list(
+            dict.fromkeys([
+                *new_case.warnings,
+                f"由受控 AI 建议派生，来源 case={base.case_id}",
+            ])
+        )
+        return new_case
+
+    def _copy_case_with_assertions(
+        self,
+        base: ApiCaseSpec,
+        assertions: list[AIAssertionProposal],
+    ) -> ApiCaseSpec:
+        new_case = base.model_copy(deep=True)
+        new_case.case_id = new_id("API-AI-")
+        new_case.created_at = now_iso()
+        _append_unique_assertions(new_case, self._to_api_assertions(assertions))
+        new_case.tags = list(
+            dict.fromkeys([*new_case.tags, "AI断言补充", "人工已采纳"])
+        )
+        new_case.warnings = list(
+            dict.fromkeys([
+                *new_case.warnings,
+                f"断言由受控 AI 建议派生，来源 case={base.case_id}",
+            ])
+        )
+        return new_case
+
+    @staticmethod
+    def _to_api_assertions(
+        proposals: list[AIAssertionProposal],
+    ) -> list[ApiAssertion]:
+        return [
+            ApiAssertion(
+                kind=item.kind,
+                path=item.path,
+                operator=item.operator,
+                expected=item.expected,
+                description=item.description,
+                source_ref=item.source_ref,
+                status="defined",
+            )
+            for item in proposals
+        ]
+
+    def _merge_recipe_into_files(
+        self,
+        files: list[GeneratedFile],
+        review: AutomationAIReview,
+    ) -> list[GeneratedFile]:
+        assert review.recipe is not None
+        recipe = review.recipe
+        replacements = {
+            "fixtures.json": dump_json(
+                {
+                    "fixtures": [item.model_dump(mode="json") for item in recipe.fixtures],
+                    "preconditions": recipe.preconditions,
+                    "warnings": recipe.warnings,
+                }
+            ),
+            "test_data.json": dump_json(
+                {
+                    "test_data": [item.model_dump(mode="json") for item in recipe.test_data],
+                    "execution_notes": recipe.execution_notes,
+                }
+            ),
+        }
+        merged: list[GeneratedFile] = []
+        seen = set()
+        for item in files:
+            if item.path == ".env.example":
+                merged.append(
+                    item.model_copy(
+                        update={
+                            "content": _merge_env_example(item.content, recipe),
+                        }
+                    )
+                )
+                seen.add(item.path)
+            elif item.path in replacements:
+                merged.append(
+                    item.model_copy(
+                        update={
+                            "content": replacements[item.path],
+                            "media_type": "application/json",
+                        }
+                    )
+                )
+                seen.add(item.path)
+            else:
+                merged.append(item)
+        if ".env.example" not in seen:
+            merged.append(
+                GeneratedFile(
+                    path=".env.example",
+                    content=_merge_env_example("", recipe),
+                )
+            )
+        for path, content in replacements.items():
+            if path not in seen:
+                merged.append(
+                    GeneratedFile(path=path, content=content, media_type="application/json")
+                )
+        return merged
 
     def _event(self, action: str, status: str, review: AutomationAIReview) -> None:
         ExecutionService(self.settings, self.repository).add_event(
@@ -821,6 +1155,53 @@ def _value_shape(value: Any, depth: int = 0) -> Any:
     if isinstance(value, dict):
         return {str(key): _value_shape(item, depth + 1) for key, item in list(value.items())[:50]}
     return type(value).__name__
+
+
+def _string_mapping(raw: dict[str, Any]) -> dict[str, str]:
+    return {str(key): str(value) for key, value in raw.items()}
+
+
+def _append_unique_assertions(case: ApiCaseSpec, additions: list[ApiAssertion]) -> None:
+    existing = {
+        (
+            item.kind,
+            item.path,
+            item.operator,
+            dump_json(item.expected, indent=None),
+            item.status,
+        )
+        for item in case.assertions
+    }
+    for item in additions:
+        key = (
+            item.kind,
+            item.path,
+            item.operator,
+            dump_json(item.expected, indent=None),
+            item.status,
+        )
+        if key in existing:
+            continue
+        existing.add(key)
+        case.assertions.append(item)
+
+
+def _merge_env_example(content: str, recipe: AutomationFixtureRecipe) -> str:
+    lines = [line.rstrip() for line in content.splitlines()]
+    existing_names = {
+        line.split("=", 1)[0].strip()
+        for line in lines
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+    additions = ["", "# Applied from an accepted AI fixture recipe. Never commit real credentials."]
+    for item in recipe.environment_variables:
+        if item.name in existing_names:
+            continue
+        additions.append(f"# {item.name}: {item.description}{' (secret)' if item.secret else ''}")
+        value = "" if item.secret else item.placeholder
+        additions.append(f"{item.name}={value}")
+        existing_names.add(item.name)
+    return "\n".join([*lines, *additions]).strip() + "\n"
 
 
 __all__ = ["AutomationAIService"]

@@ -1,12 +1,15 @@
-"""自动化受控 AI 增强：边界、人工决策与四类输出。"""
+"""V2.3.2 自动化受控 AI 增强、应用引擎与派生资产回归。"""
 from __future__ import annotations
 
+import json
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
 from app.core.config import Settings
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, ConflictError
 from app.core.utils import new_id, now_iso
 from app.llm.fake_provider import FakeProvider
 from app.llm.prompts import (
@@ -96,6 +99,48 @@ async def test_operation_gap_and_script_review_are_readonly(tmp_path: Path) -> N
     )
     assert accepted.findings[0].disposition == "accepted"
     assert repository.automation_artifacts.get(artifact.artifact_id).model_dump(mode="json") == artifact_before
+
+
+@pytest.mark.asyncio
+async def test_apply_operation_gap_creates_new_case_and_asset_version(tmp_path: Path) -> None:
+    settings, repository, spec, positive, artifact = _setup(tmp_path)
+    service = AutomationAIService(settings, repository)
+    source_before = artifact.model_dump(mode="json")
+    source_case_before = positive.model_dump(mode="json")
+
+    review = await service.create_review(
+        AutomationAIRequest(
+            kind="operation_gap",
+            spec_id=spec.spec_id,
+            artifact_id=artifact.artifact_id,
+        ),
+        FakeProvider(settings),
+    )
+    assert review.findings[0].proposed_case is not None
+    service.set_finding_disposition(
+        review.review_id,
+        review.findings[0].finding_id,
+        "accepted",
+    )
+    derived = service.apply_review(review.review_id)
+
+    assert derived.revision == artifact.revision + 1
+    assert derived.parent_artifact_id == artifact.artifact_id
+    assert derived.source_review_id == review.review_id
+    assert derived.status == "validated"
+    assert len(derived.case_ids) == 2
+    new_case_ids = [item for item in derived.case_ids if item != positive.case_id]
+    assert len(new_case_ids) == 1
+    new_case = repository.api_cases.get(new_case_ids[0])
+    assert new_case.operation_id == "createPet"
+    assert "AI补充" in new_case.tags
+    assert repository.automation_artifacts.get(artifact.artifact_id).model_dump(mode="json") == source_before
+    assert repository.api_cases.get(positive.case_id).model_dump(mode="json") == source_case_before
+    cases_file = next(item for item in derived.files if item.path == "cases.json")
+    assert new_case.case_id in cases_file.content
+    assert service.get_review(review.review_id).applied_artifact_id == derived.artifact_id
+    with pytest.raises(ConflictError, match="已经生成"):
+        service.apply_review(review.review_id)
 
 
 @pytest.mark.asyncio
@@ -213,6 +258,85 @@ async def test_failure_assertion_proposal_requires_manual_decision(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_apply_failure_assertion_to_derived_case_only(tmp_path: Path) -> None:
+    settings, repository, spec, positive, artifact = _setup(tmp_path)
+    source_ref = next(
+        (item.source_ref for item in positive.assertions if item.source_ref),
+        positive.source_ref,
+    )
+    run = TestRun(
+        run_id=new_id("RUN-"),
+        artifact_id=artifact.artifact_id,
+        spec_id=spec.spec_id,
+        source_file="junit.xml",
+        total=1,
+        failed=1,
+        matched=1,
+        cases=[
+            CaseResult(
+                case_id=positive.case_id,
+                name=positive.title,
+                status="failed",
+                message="expected 200, got 500",
+                operation_id=positive.operation_id,
+            )
+        ],
+    )
+    repository.test_runs.save(run)
+    service = AutomationAIService(settings, repository)
+    provider = FakeProvider(
+        settings,
+        scripted={
+            TASK_AUTOMATION_FAILURE_ASSERTION: {
+                "summary": "补充错误码断言",
+                "findings": [
+                    {
+                        "severity": "warning",
+                        "case_id": positive.case_id,
+                        "operation_id": positive.operation_id,
+                        "target": "$.code",
+                        "issue": "错误响应缺诊断码断言",
+                        "suggestion": "人工确认后补充",
+                        "rationale": "失败只显示状态码差异",
+                        "source_ref": source_ref,
+                        "claim_status": "inferred",
+                        "proposed_assertion": {
+                            "kind": "json",
+                            "path": "$.code",
+                            "operator": "exists",
+                            "expected": True,
+                            "description": "错误响应含错误码",
+                            "source_ref": source_ref,
+                        },
+                    }
+                ],
+            }
+        },
+    )
+    review = await service.create_review(
+        AutomationAIRequest(
+            kind="failure_assertion",
+            spec_id=spec.spec_id,
+            artifact_id=artifact.artifact_id,
+            run_id=run.run_id,
+        ),
+        provider,
+    )
+    service.set_finding_disposition(
+        review.review_id,
+        review.findings[0].finding_id,
+        "accepted",
+    )
+    derived = service.apply_review(review.review_id)
+    new_case_id = next(item for item in derived.case_ids if item != positive.case_id)
+    new_case = repository.api_cases.get(new_case_id)
+    assert any(item.path == "$.code" and item.operator == "exists" for item in new_case.assertions)
+    assert all(item.path != "$.code" for item in repository.api_cases.get(positive.case_id).assertions)
+    assert new_case.case_id != positive.case_id
+    assert derived.status == "validated"
+
+
+@pytest.mark.asyncio
 async def test_fixture_recipe_is_structured_and_rejects_plaintext_secret(tmp_path: Path) -> None:
     settings, repository, spec, positive, artifact = _setup(tmp_path)
     service = AutomationAIService(settings, repository)
@@ -316,6 +440,39 @@ async def test_fixture_recipe_is_structured_and_rejects_plaintext_secret(tmp_pat
         )
 
 
+@pytest.mark.asyncio
+async def test_apply_recipe_generates_fixture_files_and_keeps_source_unchanged(tmp_path: Path) -> None:
+    settings, repository, spec, _positive, artifact = _setup(tmp_path)
+    service = AutomationAIService(settings, repository)
+    source_files = {item.path: item.content for item in artifact.files}
+    review = await service.create_review(
+        AutomationAIRequest(
+            kind="fixture_recipe",
+            spec_id=spec.spec_id,
+            artifact_id=artifact.artifact_id,
+        ),
+        FakeProvider(settings),
+    )
+    service.set_review_decision(review.review_id, "accepted")
+    derived = service.apply_review(review.review_id)
+    files = {item.path: item.content for item in derived.files}
+    assert derived.status == "validated"
+    assert derived.parent_artifact_id == artifact.artifact_id
+    assert "fixtures.json" in files
+    assert "test_data.json" in files
+    assert "AUTH_TOKEN=" in files[".env.example"]
+    assert "BASE_URL=" in files[".env.example"]
+    assert json.loads(files["fixtures.json"])["fixtures"]
+    assert json.loads(files["test_data.json"])["test_data"]
+    assert "fixtures.json" not in source_files
+    assert repository.automation_artifacts.get(artifact.artifact_id).model_dump(mode="json") == artifact.model_dump(mode="json")
+    content, filename = ExecutionService(settings, repository).artifact_download(derived.artifact_id)
+    assert filename.endswith(".zip")
+    with ZipFile(BytesIO(content)) as archive:
+        assert "fixtures.json" in archive.namelist()
+        assert "test_data.json" in archive.namelist()
+
+
 def test_automation_ai_routes_and_recipe_download(client) -> None:
     imported = client.post(
         f"{API}/api-specs/import",
@@ -349,6 +506,14 @@ def test_automation_ai_routes_and_recipe_download(client) -> None:
     )
     assert decided.status_code == 200
     assert decided.json()["data"]["findings"][0]["disposition"] == "accepted"
+    applied = client.post(
+        f"{API}/automation/ai/reviews/{gap_data['review_id']}/apply"
+    )
+    assert applied.status_code == 200, applied.text
+    derived = applied.json()["data"]
+    assert derived["parent_artifact_id"] == artifact["artifact_id"]
+    assert derived["revision"] == artifact["revision"] + 1
+    assert derived["status"] == "validated"
 
     fixture = client.post(
         f"{API}/automation/ai/reviews",

@@ -4,6 +4,39 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)：`MAJOR.MINOR.PATCH`。
 
+## [2.3.2] - 2026-10-27 · 受控 AI 自动派生版本与侧边抽屉
+
+### Added
+
+- **受控应用引擎**：人工采纳后可将 AI 建议应用为新的自动化资产版本，原资产、原 case 和原断言保持不变。
+- **自动补充 ApiCaseSpec**：operation 提案通过 `base_case_id` 或同 operation 确定性 case 派生新 case，
+  生成 `API-AI-*` 编号，并记录 AI 来源、人工采纳和 source_ref。
+- **自动增加 assertion JSON**：已采纳失败断言会复制目标 case、追加断言并生成新 case 版本；
+  相同断言自动去重，不直接修改原 case。
+- **自动生成 fixture 文件**：采纳数据配方后，派生资产新增 `fixtures.json` 与 `test_data.json`，
+  并更新 `.env.example`；secret 变量只保留空值占位。
+- **新版本 zip**：每次应用产生新的 artifact revision，下载接口按需生成对应 zip。
+- **应用后门禁**：新版本重新执行 Python AST、语法编译、危险导入/调用与密钥扫描；
+  未通过时资产状态为 `rejected`，禁止下载。
+- **来源链**：资产记录 `parent_artifact_id`、`source_review_id` 与 `change_summary`；
+  AI 建议记录 `applied_artifact_id` 与 `applied_at`，同一建议只能应用一次。
+- **AI 侧边抽屉**：自动化增强从页面内联区域迁移到右侧抽屉；资产页与执行记录页分别按上下文打开，
+  应用成功后自动选中新资产版本。
+
+### Constraints
+
+- 脚本只读审查仍不自动应用，必须人工修改模板或代码后重新生成。
+- 不原地修改原版本；每次应用只产生新的 `v2`、`v3` 等版本。
+- 应用后的建议冻结，不能再更改采纳状态。
+
+### Verification
+
+- 全量 `pytest`：438 passed。
+- 自动化受控 AI/应用定向回归：8 passed。
+- 前端 `vue-tsc --noEmit` 与生产 Vite build：通过。
+- Playwright：右侧抽屉、operation 提案派生 `v2`、recipe 派生 `v3`、
+  `fixtures.json`/`test_data.json` 生成、原 `v1` 保留、390px 无横向溢出。
+
 ## [2.3.1] - 2026-10-27 · 自动化受控 AI 与工作台切换修复
 
 ### Added
@@ -602,7 +635,8 @@
 - 使用 JSON 文件存储，不适合多实例并发部署。
 - PDF 仅支持文本型，暂不做 OCR。
 
-[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.2...HEAD
+[2.3.2]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.2.0...v2.3.0
 [1.0.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/releases/tag/v1.0.0

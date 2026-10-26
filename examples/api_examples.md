@@ -374,6 +374,22 @@ Invoke-RestMethod -Method Put `
   -Body '{"disposition":"accepted"}'
 ```
 
+将已采纳建议应用为新资产版本：
+
+```powershell
+$derived = Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/automation/ai/reviews/$($review.data.review_id)/apply"
+
+$derived.data | Select-Object artifact_id,revision,status,parent_artifact_id,change_summary
+```
+
+应用规则：
+
+- 原资产和源 case 不修改，只创建新的 `v2`、`v3`。
+- operation 提案生成新的 `API-AI-*` case；失败断言复制目标 case 后追加 assertion。
+- recipe 在派生资产中写入 `fixtures.json`、`test_data.json` 并更新 `.env.example`。
+- 新资产重新执行 AST、语法、危险调用和密钥扫描；失败时标记 `rejected` 并禁止下载。
+
 生成并下载 fixture / 测试数据配方：
 
 ```powershell

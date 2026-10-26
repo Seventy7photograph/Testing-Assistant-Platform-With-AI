@@ -185,6 +185,16 @@ _FAKE_AUTOMATION_OPERATION_GAP: dict[str, Any] = {
             "rationale": "OpenAPI 响应包含 id 与 name。",
             "source_ref": "paths./pets.post",
             "claim_status": "inferred",
+            "proposed_case": {
+                "operation_id": "createPet",
+                "title": "创建宠物后校验响应标识",
+                "category": "positive",
+                "priority": "P2",
+                "assertions": [],
+                "preconditions": [],
+                "tags": ["AI补充"],
+                "source_ref": "paths./pets.post",
+            },
         }
     ],
 }
@@ -298,6 +308,16 @@ def _dynamic_automation_payload(marker: str, messages: list[LLMMessage]) -> dict
                         "rationale": "该 operation 出现在未覆盖清单中。",
                         "source_ref": source_ref,
                         "claim_status": "inferred",
+                        "proposed_case": {
+                            "operation_id": operation_id,
+                            "title": "补充 operation 成功路径与错误响应",
+                            "category": "contract",
+                            "priority": "P2",
+                            "assertions": [],
+                            "preconditions": [],
+                            "tags": ["AI补充"],
+                            "source_ref": source_ref,
+                        },
                     }
                 ],
             }

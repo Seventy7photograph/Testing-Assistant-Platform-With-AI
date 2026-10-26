@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883.svg)](https://vuejs.org/)
-[![Version](https://img.shields.io/badge/version-v2.3.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v2.3.2-blue.svg)](CHANGELOG.md)
 
 > 面向测试工程师的**一体化本地 / 内网工作台**：把「需求文档 → 测试用例」与「测试执行数据 → 测试报告」
 > 两条日常高频链路，收进同一个控制台、同一套配置、同一份存储。
@@ -15,8 +15,8 @@
 > 全站带操作提示与动效。
 > **未配置大模型 API Key 时自动降级为纯规则引擎，链路依然端到端可用。**
 >
-> V2.3.1：自动化资产增加受控 AI 建议、失败断言提案、fixture 配方与只读脚本审查；
-> 所有建议必须人工决定，不自动改写资产。
+> V2.3.2：受控 AI 建议可在人工采纳后自动派生新的 case、断言、fixture/test data 与新资产版本；
+> 原资产保持不可变，应用结果重新执行静态门禁。
 > V2.3：OpenAPI 接口用例 → 受控 `pytest + httpx` 资产 → JUnit 结果回收 → 失败跟进事项与到期提醒；
 > 自动化、执行记录与工作收件箱统一收进「交付工作台」。
 > V2.2：OpenAPI 3 JSON / YAML → operation / 契约断言 → Postman Collection 2.1，接口资产与需求用例共用追溯体系。
@@ -83,7 +83,7 @@
 | 工作收件箱 | note / task 共用本地模型，支持 Markdown、状态、优先级、截止与提醒、标签、置顶、关联执行记录；今日/近期/逾期/收件箱/完成视图与关键词筛选 |
 | 提醒 | 页面打开时每 30 秒轮询到期事项；站内通知始终可用，浏览器系统通知需显式授权；`reminded_at` 在服务端去重，页面关闭后不承诺后台提醒 |
 | 交付工作台 | 一个页面切换自动化资产、执行记录、工作事项；失败运行可一键创建带 `test_run` 关联的跟进事项，也可把运行数据送入报告工作台 |
-| 自动化受控 AI（本地增强） | 四类任务：未覆盖 operation 建议、失败断言提案、fixture/测试数据配方、现有脚本只读审查；模型只能产出待人工决定的建议，不能写入 `AutomationArtifact`、`cases.json` 或确定性断言 |
+| 自动化受控 AI（V2.3.2） | 四类任务：未覆盖 operation 建议、失败断言提案、fixture/测试数据配方、现有脚本只读审查；人工采纳后可派生新 case/断言/配方文件与新的资产版本，但不修改原版本 |
 
 ### 1.5 平台能力
 
@@ -170,7 +170,7 @@ Testing-Assistant-Platform With AI/
 ├── output/                           # 离线脚本产物（不入库）
 ├── DESIGN.md / PRODUCT.md            # 设计世界与产品定义（前端改动的依据）
 ├── CHANGELOG.md                      # 更新日志
-├── docs/qa-v2.3.1-risk-matrix.md     # v2.3.1 风险矩阵与测试映射
+├── docs/qa-v2.3.2-risk-matrix.md     # v2.3.2 风险矩阵与测试映射
 ├── OPTIMIZATION.md                   # 资深测试工程师视角的体验与缺陷修复记录
 └── run.py                            # 本地启动入口
 ```
@@ -339,6 +339,7 @@ node tools/smoke-ui.mjs   # 自动起后端 + Playwright：校验方法清单一
 | GET | `/automation/ai/reviews/{review_id}` | 建议详情、来源、Prompt 元信息与失败告警 |
 | PUT | `/automation/ai/reviews/{review_id}/findings/{finding_id}` | 人工采纳或驳回单条建议 |
 | PUT | `/automation/ai/reviews/{review_id}/decision` | 人工采纳或驳回整份配方建议 |
+| POST | `/automation/ai/reviews/{review_id}/apply` | 将已采纳建议应用为新的 case/断言/配方文件与新资产版本，并重新执行静态门禁 |
 | GET | `/automation/ai/reviews/{review_id}/recipe` | 下载脱敏后的 fixture / 测试数据配方 JSON |
 | GET | `/work-items` | 工作事项列表；支持 view / q / status / priority / tag |
 | POST | `/work-items` | 创建 note/task |
@@ -356,8 +357,11 @@ node tools/smoke-ui.mjs   # 自动起后端 + Playwright：校验方法清单一
 - 环境变量使用显式占位符，`.env.example` 不包含真实凭据；日志不记录 Authorization、Cookie 或 Token。
 - JUnit 未知 `case_id` 进入未匹配列表而不是丢弃；畸形 XML 返回 422，不创建半条运行记录。
 - 工作事项只保存在本地，不自动进入 AI、RAG 或 Agent 上下文；提醒依赖页面打开时轮询。
-- 自动化 AI 建议不会自动应用。operation 建议必须使用对应 operation 的 `source_ref`，失败断言必须指向对应 case；
+- 自动化 AI 建议不会自动应用，必须由使用者显式采纳后触发“生成新版本”。
+  operation 建议必须使用对应 operation 的 `source_ref`，失败断言必须指向对应 case；
   配方拒绝明文密钥、可执行代码和越界 `case_id`，只读审查不能读取被安全门禁拒绝的资产。
+- 应用操作永不修改源资产和源 case：新增 case 使用 `API-AI-*`；断言变更复制目标 case；
+  recipe 只写入派生资产。派生资产重新跑 AST/语法/密钥门禁，并记录父资产、来源建议与变更摘要。
 
 ### 测试报告链路（前缀 `/report`）
 
@@ -421,7 +425,7 @@ HTTP 路由 (app/api/routes)
 - OpenAPI / Postman 的默认服务地址由 `PUBLIC_BASE_URL` 控制，默认 `http://127.0.0.1:8000`。
 - 版本号以代码 `app/__init__.py` 为唯一来源，`.env` 中的 `APP_VERSION` 不会覆盖它。
 
-### 5.4 Prompt 可信工程（V2.3.1）
+### 5.4 Prompt 可信工程（V2.3.2）
 
 九个模型任务分别使用独立 Prompt，不允许抽取、复核、补缺、报告归纳、接口复核和自动化增强混用同一套指令：
 
@@ -633,9 +637,9 @@ Key 填百炼的 `sk-...`，然后「保存配置」→ 点「拉取」。百炼
 页面关闭后不承诺后台提醒。工作事项正文默认仅本地可见，不进入 AI、RAG 或 Agent 上下文。
 
 **Q17：自动化脚本里的 AI 会直接改代码吗？**
-不会。自动化的四类 AI 任务只生成待人工决定的建议、断言提案、数据配方或审查意见。
-采纳只改变建议状态，不会自动写回 `AutomationArtifact`、`cases.json` 或现有断言；
-被安全门禁拒绝的资产也不会发送给模型做源码审查。
+不会直接改原文件。自动化的四类 AI 任务先生成待人工决定的建议；采纳后点击“应用并生成新版本”，
+系统才会复制 case/追加断言、写入 recipe 文件并产生新的资产 revision。原资产保持不变，
+新版本必须重新通过静态门禁；脚本只读审查永远不自动应用。
 
 ---
 

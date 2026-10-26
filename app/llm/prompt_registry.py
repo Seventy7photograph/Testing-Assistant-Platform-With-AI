@@ -92,12 +92,13 @@ PROMPT_API_CASE_REVIEW = PromptSpec(
 
 PROMPT_AUTOMATION_OPERATION_GAP = PromptSpec(
     prompt_id="automation.operation_gap",
-    version="2.3.1",
+    version="2.3.2",
     task="automation_operation_gap",
     input_boundary="未覆盖 operation 的结构摘要与允许引用的 source_ref；不含密钥、完整请求体或执行数据",
     temperature=0.1,
     change_log=(
         "2.3.1 自动化资产受控增强：只建议人工补充的接口测试场景，不生成或改写脚本",
+        "2.3.2 增加结构化 proposed_case，供人工采纳后派生新的 ApiCaseSpec 版本",
     ),
 )
 

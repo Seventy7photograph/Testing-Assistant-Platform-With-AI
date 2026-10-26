@@ -571,6 +571,8 @@ export interface AutomationArtifactSummary {
   artifact_id: string;
   spec_id: string;
   spec_title: string;
+  parent_artifact_id: string | null;
+  source_review_id: string | null;
   revision: number;
   framework: string;
   template_version: string;
@@ -581,6 +583,7 @@ export interface AutomationArtifactSummary {
   status: "validated" | "rejected";
   validation_errors: ValidationIssue[];
   warnings: string[];
+  change_summary: string[];
   created_at: string;
 }
 
@@ -658,6 +661,27 @@ export interface AIAssertionProposal {
   source_ref: string;
 }
 
+export interface AIRequestProposal {
+  query: Record<string, unknown> | null;
+  path_params: Record<string, unknown> | null;
+  headers: Record<string, unknown> | null;
+  cookies: Record<string, unknown> | null;
+  body: unknown;
+}
+
+export interface AIApiCaseProposal {
+  base_case_id: string;
+  operation_id: string;
+  title: string;
+  category: "positive" | "negative" | "boundary" | "security" | "contract";
+  priority: WorkItemPriority;
+  request: AIRequestProposal | null;
+  assertions: AIAssertionProposal[];
+  preconditions: string[];
+  tags: string[];
+  source_ref: string;
+}
+
 export interface AutomationAIFinding {
   finding_id: string;
   category:
@@ -676,6 +700,7 @@ export interface AutomationAIFinding {
   claim_status: "inferred";
   disposition: "pending" | "accepted" | "rejected";
   proposed_assertion: AIAssertionProposal | null;
+  proposed_case: AIApiCaseProposal | null;
 }
 
 export interface FixtureEnvironmentVariable {
@@ -737,6 +762,8 @@ export interface AutomationAIReview {
   decision: "pending" | "accepted" | "rejected";
   context: Record<string, unknown>;
   meta: AutomationAIMeta;
+  applied_artifact_id: string | null;
+  applied_at: string | null;
   created_at: string;
   updated_at: string;
 }

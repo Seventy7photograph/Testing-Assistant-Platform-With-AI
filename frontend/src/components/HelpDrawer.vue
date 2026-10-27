@@ -2,143 +2,16 @@
 import { computed } from "vue";
 
 import AppIcon from "@/components/AppIcon.vue";
+import { helpTopics, type HelpTopic } from "@/content/helpTopics";
 import { useHealthStore } from "@/stores/health";
 import { useUiStore } from "@/stores/ui";
 
 const ui = useUiStore();
 const health = useHealthStore();
 
-interface Topic {
-  title: string;
-  intro: string;
-  points: { label: string; text: string }[];
-  steps?: string[];
-}
-
-/** 每个页面的使用说明与口径。提示是产品的一部分，不是补丁。 */
-const topics: Record<string, Topic> = {
-  dashboard: {
-    title: "总览",
-    intro: "所有模型任务共用同一份配置，素材、生成与交付状态集中在这里。",
-    points: [
-      { label: "刻度", text: "数字全部来自服务端实际存储，不是估算值。" },
-      { label: "降级", text: "未配置大模型时，用例链路仍可用；报告链路会在生成前明确提示。" },
-    ],
-    steps: ["先看推理引擎是否就绪", "从「用例生成」或「报告工作台」开始一条链路"],
-  },
-  generate: {
-    title: "用例生成",
-    intro: "一条流水线：需求文档 → 结构化需求 → 用例集。可以只用规则引擎跑，也可以让大模型增强。",
-    points: [
-      { label: "两阶段口径", text: "「解析用 LLM」与「生成用 LLM」是两件事，结果页会分开显示。" },
-      { label: "单条需求上限", text: "上限 60 条，用来抑制边界值爆炸；超出会被截断并给出告警。" },
-      { label: "去重", text: "两层去重：精确指纹 + 跨方法语义重叠。被合并的用例会在「覆盖方法」列留下痕迹。" },
-    ],
-    steps: ["上传或粘贴需求", "选择设计方法", "生成", "在用例集里导出（Excel / CSV / XMind / TestLink XML / JSON）"],
-  },
-  documents: {
-    title: "文档与需求",
-    intro: "上传的原文、解析出的结构化需求都放在这里，可以随时回溯与删除。",
-    points: [
-      { label: "编码", text: "自动识别 UTF-8 / GBK 等中文编码，兼容 Windows 导出的 Word。" },
-      { label: "表格", text: "Word 原生表格与 Markdown 表格会保留列结构；纯空格对齐的表格可能识别失败并给出告警。" },
-    ],
-  },
-  suites: {
-    title: "用例集",
-    intro: "每次生成都会落一份用例集，带完整统计口径，可随时导出。",
-    points: [
-      { label: "覆盖方法", text: "跨方法合并后的用例会记录它覆盖到的全部方法，因此各项之和可以大于用例总数。" },
-      { label: "导出", text: "Excel 四个 Sheet：用例明细 / 用例统计 / 需求追溯 / 生成信息。" },
-    ],
-  },
-  apis: {
-    title: "接口资产",
-    intro: "导入 OpenAPI 3 规范，按 operation 查看来源、缺口与契约用例，再导出可直接导入的 Postman Collection。",
-    points: [
-      { label: "只信规范", text: "路径、参数、schema 断言只来自规范化 OpenAPI；缺失约束会标为待补充，不编造边界。" },
-      { label: "引用", text: "支持本地 $ref 展开与循环检测；外部引用会明确报错，不会静默丢掉 operation。" },
-      { label: "凭据", text: "导出只保留 {{baseUrl}}、{{authToken}} 等占位符，不写入真实 Token / API Key。" },
-    ],
-    steps: ["上传 OpenAPI JSON / YAML", "打开规范查看 operation", "展开用例核对断言", "导出 Postman 2.1"],
-  },
-  report: {
-    title: "报告工作台",
-    intro: "指标由代码算，判断由模型写。左侧送检、右侧读数，生成过程是流式的。",
-    points: [
-      { label: "权威口径", text: "通过率、执行率、缺陷分布由服务端确定性计算，模型只引用不重算。" },
-      { label: "读不出来就是读不出来", text: "纯文本或结构不完整的输入会返回「无法计算指标」并说明原因，不会凭空补数。" },
-      { label: "判定闸门", text: "未关闭 P0 直接判「不建议发版」；未标注状态的缺陷一律按未关闭计入。" },
-    ],
-    steps: ["粘贴执行数据（JSON 或文本）", "可选：补充分析要求", "生成报告", "导出或归档"],
-  },
-  archive: {
-    title: "报告存档",
-    intro: "每份报告都落在本地 SQLite，可检索、可对比、可导出。",
-    points: [
-      { label: "趋势", text: "曲线只取最近若干轮，判读线跟随你配置的阈值。" },
-      { label: "留痕", text: "存的是正文 + 指标快照 + 原始输入，删除后不可恢复。" },
-    ],
-  },
-  automation: {
-    title: "自动化资产",
-    intro: "把接口用例生成可审查的 pytest 资产。",
-    points: [
-      { label: "版本", text: "同一规范重新生成会产生新版本，原版本保留。" },
-      { label: "门禁", text: "未通过语法、危险调用或密钥扫描的资产不可下载。" },
-    ],
-  },
-  executions: {
-    title: "执行记录",
-    intro: "回收 JUnit 结果，并把失败送入报告或工作事项。",
-    points: [
-      { label: "未匹配", text: "未知 case_id 会保留在未匹配结果中。" },
-      { label: "报告", text: "运行数据可直接送入报告工作台。" },
-    ],
-  },
-  "work-items": {
-    title: "工作事项",
-    intro: "记录待办、跟进和提醒。",
-    points: [
-      { label: "隐私", text: "工作事项不进入知识索引或助手上下文。" },
-      { label: "提醒", text: "提醒只在页面打开时生效。" },
-    ],
-  },
-  projects: {
-    title: "项目",
-    intro: "项目和审计按项目边界隔离。",
-    points: [{ label: "隔离", text: "文档、用例、执行、报告和知识均跟随当前项目。" }],
-  },
-  integrations: {
-    title: "外部连接",
-    intro: "连接 Jira 或禅道，双向同步需求与用例。",
-    points: [{ label: "凭据", text: "Token 仅从环境变量读取。" }],
-  },
-  jobs: {
-    title: "运行任务",
-    intro: "查看受控执行、任务状态和助手工具调用。",
-    points: [{ label: "审计", text: "任务事件与工具调用均带项目和 trace ID。" }],
-  },
-  knowledge: {
-    title: "知识索引",
-    intro: "管理项目知识检索与模型路由。",
-    points: [
-      { label: "引用", text: "检索结果保留来源、版本和行定位。" },
-      { label: "边界", text: "当前状态由确定性工具提供，不经知识库推断。" },
-    ],
-  },
-  settings: {
-    title: "模型设置",
-    intro: "所有模型任务共用同一份大模型配置；判定阈值只作用于报告的发版结论。",
-    points: [
-      { label: "优先级", text: "界面保存的覆盖 > .env 基线。可以逐项恢复，也可以一键回到 .env。" },
-      { label: "密钥", text: "只回显掩码，不落明文到日志；填写后无需重启即可生效。" },
-      { label: "阈值", text: "失败率 / 阻塞率上限、执行率下限、趋势判读线，逐项可回退。" },
-    ],
-  },
-};
-
-const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
+const topic = computed<HelpTopic>(
+  () => helpTopics[ui.helpTopic] ?? helpTopics.dashboard,
+);
 </script>
 
 <template>
@@ -146,13 +19,13 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
     v-model="ui.helpOpen"
     :title="`使用说明 · ${topic.title}`"
     direction="rtl"
-    size="420px"
+    size="440px"
   >
     <div class="help stack">
       <p class="help__intro">{{ topic.intro }}</p>
 
       <div class="help__block">
-        <p class="label">要点</p>
+        <p class="label">功能与口径</p>
         <ul class="help__points">
           <li v-for="point in topic.points" :key="point.label">
             <span class="help__chip">{{ point.label }}</span>
@@ -196,6 +69,7 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
 
 <style scoped>
 .help__intro {
+  margin: 0;
   font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--ink-2);
@@ -208,12 +82,12 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
 }
 
 .help__points {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .help__points li {
@@ -225,14 +99,16 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
 
 .help__chip {
   display: inline-block;
+  min-width: 34px;
   padding: 1px 8px;
   border-radius: var(--radius-pill);
   background: var(--glacier-wash);
   color: var(--glacier-deep);
   font-size: var(--fs-2xs);
   font-weight: 600;
-  white-space: nowrap;
   line-height: 1.7;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .help__text {
@@ -242,12 +118,12 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
 }
 
 .help__steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .help__steps li {
@@ -258,16 +134,16 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
 }
 
 .help__no {
+  padding-top: 2px;
   color: var(--glacier-deep);
   font-size: var(--fs-xs);
-  padding-top: 2px;
 }
 
 .help__engine {
-  padding: var(--s4);
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: var(--s4);
   color: var(--ink-2);
 }
 
@@ -288,5 +164,11 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
   font-size: var(--fs-xs);
   line-height: 1.65;
   color: var(--ink-2);
+}
+
+@media (max-width: 640px) {
+  .help__chip {
+    min-width: 32px;
+  }
 }
 </style>

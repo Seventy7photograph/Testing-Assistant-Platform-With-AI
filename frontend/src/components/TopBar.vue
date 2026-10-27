@@ -146,7 +146,7 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
       type="button"
       class="icon-btn help-btn"
       title="使用说明与口径"
-      @click="ui.openHelp(String(route.meta.nav ?? ''))"
+      @click="ui.openHelp(String(route.name ?? route.meta.nav ?? ''))"
     >
       <AppIcon name="help" :size="17" />
       <span class="sr-only">帮助</span>

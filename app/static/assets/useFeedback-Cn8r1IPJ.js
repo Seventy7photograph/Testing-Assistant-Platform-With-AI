@@ -1,0 +1,1 @@
+import{R as e}from"./index-DY-FD9g5.js";async function t(t){try{return await e.confirm(t.message,t.title,{confirmButtonText:t.confirmText??`确认执行`,cancelButtonText:t.cancelText??`取消`,type:t.danger?`warning`:`info`,confirmButtonClass:t.danger?`el-button--danger`:void 0,draggable:!0,closeOnClickModal:!1,customClass:`tap-confirm`}),!0}catch{return!1}}export{t};

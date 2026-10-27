@@ -37,6 +37,7 @@ async def health(settings: SettingsDep, llm: LLMDep, engine: DesignEngineDep) ->
         limits={
             "max_cases_per_requirement": effective.max_cases_per_requirement,
             "max_upload_size_mb": effective.max_upload_size_mb,
+            "execution_max_cases": min(max(effective.execution_max_cases, 1), 2_000),
         },
     )
     return ok(info)

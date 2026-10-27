@@ -184,7 +184,7 @@ export const api = {
     headers?: Record<string, string>;
     base_url?: string;
     idempotency_key?: string;
-  }) => post<{ job: Job; run: TestRun }>("/execution/http", payload),
+  }) => post<{ job: Job; run: TestRun }>("/execution/http", payload, undefined, 660_000),
   apiEnvironments: () => get<ApiEnvironmentProfile[]>("/execution/environments"),
   createApiEnvironment: (payload: {
     name: string;

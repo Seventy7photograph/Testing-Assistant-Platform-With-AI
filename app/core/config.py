@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     execution_timeout_seconds: float = 20.0
     execution_max_concurrency: int = 4
     execution_max_response_bytes: int = 1_000_000
-    execution_max_cases: int = 200
+    execution_max_cases: int = 2_000
 
     # ---------- 知识库与只读助手（v3.0 合并原 V3.1） ----------
     knowledge_chunk_size: int = 800

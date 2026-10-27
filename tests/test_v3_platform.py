@@ -285,6 +285,14 @@ class TestModelRouting:
 
 
 class TestControlledExecution:
+    def test_execution_contract_accepts_large_case_batches(self) -> None:
+        request = HttpExecutionRequest(
+            artifact_id="AUTO-large",
+            case_ids=[f"CASE-{index}" for index in range(413)],
+        )
+        assert len(request.case_ids) == 413
+        assert Settings().execution_max_cases == 2_000
+
     def test_executor_runs_only_imported_case_and_records_job(self) -> None:
         with TemporaryDirectory() as directory:
             settings = _settings(Path(directory), execution_max_cases=20)

@@ -124,7 +124,7 @@ python run.py
 | `EXECUTION_TIMEOUT_SECONDS` | `20` | 单请求超时 |
 | `EXECUTION_MAX_CONCURRENCY` | `4` | 最大并发 |
 | `EXECUTION_MAX_RESPONSE_BYTES` | `1000000` | 单响应体上限 |
-| `EXECUTION_MAX_CASES` | `200` | 单次执行用例上限 |
+| `EXECUTION_MAX_CASES` | `2000` | 单次执行用例上限，运行时最多按 2000 条保护 |
 
 ## 外部连接
 

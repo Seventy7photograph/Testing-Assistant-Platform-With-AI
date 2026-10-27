@@ -92,9 +92,10 @@ class ControlledHttpExecutor:
                 "请求包含不属于该资产的接口用例。",
                 detail={"case_ids": extras[:50]},
             )
-        if len(allowed_ids) > self.settings.execution_max_cases:
+        case_limit = max(1, min(self.settings.execution_max_cases, 2_000))
+        if len(allowed_ids) > case_limit:
             raise BadRequestError(
-                f"单次最多执行 {self.settings.execution_max_cases} 条接口用例。",
+                f"单次最多执行 {case_limit} 条接口用例。",
                 detail={"requested": len(allowed_ids)},
             )
         case_map = {

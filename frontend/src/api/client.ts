@@ -118,9 +118,13 @@ export async function post<T>(
   url: string,
   body?: unknown,
   params?: Record<string, unknown>,
+  timeoutMs?: number,
 ): Promise<T> {
   try {
-    const res = await http.post<ApiResponse<T>>(url, body, { params });
+    const res = await http.post<ApiResponse<T>>(url, body, {
+      params,
+      ...(timeoutMs ? { timeout: timeoutMs } : {}),
+    });
     return unwrap(res.data);
   } catch (err) {
     throw normalize(err);

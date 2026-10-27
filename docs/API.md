@@ -225,7 +225,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/api-specs/import" `
 ```
 
 `case_ids=[]` 时必须显式设置 `allow_all_cases=true`。缺少路径或请求变量的用例会记为
-`skipped`，不会发送包含 `{{变量}}` 的请求。
+`skipped`，不会发送包含 `{{变量}}` 的请求。单次最多执行 2000 条，并继续受并发、
+单请求超时和响应体上限保护。
 
 ## 受控 AI 建议
 

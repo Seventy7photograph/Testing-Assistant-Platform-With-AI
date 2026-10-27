@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import { api } from "@/api";
 import type {
   AgentRun,
+  ApiEnvironmentProfile,
   Job,
   KnowledgeIndexStats,
   ModelRouteInfo,
@@ -42,6 +43,11 @@ const {
   artifactId,
   caseIds,
   runAllConfirmed,
+  environmentId,
+  environmentName,
+  environmentBaseUrl,
+  environmentVariables,
+  environmentHeaders,
   environment,
   executionPhase,
   executionStartedAt,
@@ -58,12 +64,14 @@ const message = ref("");
 const context = ref<ProjectContextInfo | null>(null);
 const jobs = ref<Job[]>([]);
 const schedules = ref<Schedule[]>([]);
+const apiEnvironments = ref<ApiEnvironmentProfile[]>([]);
 const agentRuns = ref<AgentRun[]>([]);
 const toolCalls = ref<ToolCall[]>([]);
 const knowledge = ref<KnowledgeIndexStats | null>(null);
 const routes = ref<ModelRouteInfo[]>([]);
 const historyExpanded = ref(false);
 const scheduleBusy = ref(false);
+const environmentBusy = ref(false);
 const scheduleForm = reactive({
   name: "",
   job_kind: "execution.http",
@@ -122,6 +130,7 @@ async function loadAll() {
     api.toolCalls("", 100),
     api.knowledgeStats(),
     api.routing(),
+    api.apiEnvironments(),
   ]);
   if (results[0].status === "fulfilled") context.value = results[0].value;
   if (results[1].status === "fulfilled") jobs.value = results[1].value;
@@ -130,6 +139,7 @@ async function loadAll() {
   if (results[4].status === "fulfilled") toolCalls.value = results[4].value;
   if (results[5].status === "fulfilled") knowledge.value = results[5].value;
   if (results[6].status === "fulfilled") routes.value = results[6].value.routes;
+  if (results[7].status === "fulfilled") apiEnvironments.value = results[7].value;
   const failed = results.find((item) => item.status === "rejected");
   if (failed?.status === "rejected") {
     setFeedback((failed.reason as Error).message, true);
@@ -239,6 +249,8 @@ async function execute() {
       artifact_id: selectedArtifact,
       case_ids: selectedIds,
       environment: env,
+      environment_id: environmentId.value,
+      base_url: environmentBaseUrl.value.trim(),
       allow_all_cases: runAllConfirmed.value,
       idempotency_key: `ui-${selectedArtifact}-${requestKey}`,
     });
@@ -253,6 +265,57 @@ async function execute() {
     const errorMessage = (err as Error).message;
     draft.finishExecution(revision, null, errorMessage);
     setFeedback(`执行失败：${errorMessage}`, true);
+  }
+}
+
+function parseStringRecord(raw: string, label: string): Record<string, string> {
+  const parsed = raw.trim() ? JSON.parse(raw) : {};
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+    throw new Error(`${label}必须是 JSON 对象。`);
+  }
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+  );
+}
+
+function selectEnvironment(nextId: string) {
+  environmentId.value = nextId;
+  const profile = apiEnvironments.value.find((item) => item.environment_id === nextId);
+  if (!profile) return;
+  environmentName.value = profile.name;
+  environmentBaseUrl.value = profile.base_url;
+  environmentVariables.value = JSON.stringify(profile.variables, null, 2);
+  environmentHeaders.value = JSON.stringify(profile.headers, null, 2);
+}
+
+function newEnvironmentDraft() {
+  environmentId.value = "";
+  environmentName.value = "";
+  environmentBaseUrl.value = "http://127.0.0.1:8000";
+  environmentVariables.value = "{}";
+  environmentHeaders.value = "{}";
+}
+
+async function saveEnvironment() {
+  if (environmentBusy.value || !environmentName.value.trim()) return;
+  environmentBusy.value = true;
+  try {
+    const payload = {
+      name: environmentName.value.trim(),
+      base_url: environmentBaseUrl.value.trim(),
+      variables: parseStringRecord(environmentVariables.value, "公共变量"),
+      headers: parseStringRecord(environmentHeaders.value, "Header 模板"),
+    };
+    const saved = environmentId.value
+      ? await api.updateApiEnvironment(environmentId.value, payload)
+      : await api.createApiEnvironment(payload);
+    environmentId.value = saved.environment_id;
+    apiEnvironments.value = await api.apiEnvironments();
+    setFeedback(`接口测试环境已保存：${saved.name}`);
+  } catch (err) {
+    setFeedback(`保存环境失败：${(err as Error).message}`, true);
+  } finally {
+    environmentBusy.value = false;
   }
 }
 
@@ -461,6 +524,60 @@ onMounted(async () => {
       <div class="split">
         <form class="form" @submit.prevent="execute">
           <h3>受控 HTTP 执行</h3>
+          <details class="environment-profile">
+            <summary>
+              环境配置
+              <span class="mono">{{ environmentId || "临时环境" }}</span>
+            </summary>
+            <div class="environment-profile__body">
+              <label>
+                已保存环境
+                <select v-model="environmentId" @change="selectEnvironment(environmentId)">
+                  <option value="">临时环境</option>
+                  <option
+                    v-for="item in apiEnvironments"
+                    :key="item.environment_id"
+                    :value="item.environment_id"
+                  >
+                    {{ item.name }} · {{ item.base_url || "未设置 Base URL" }}
+                  </option>
+                </select>
+              </label>
+              <div class="environment-profile__actions">
+                <button type="button" class="btn" @click="newEnvironmentDraft">
+                  新建环境
+                </button>
+              </div>
+              <label>
+                环境名称
+                <input v-model="environmentName" placeholder="测试环境 / 预发布环境" maxlength="100" />
+              </label>
+              <label>
+                Base URL
+                <input v-model="environmentBaseUrl" placeholder="https://api.example.test" />
+              </label>
+              <label>
+                公共变量 JSON
+                <textarea v-model="environmentVariables" class="code-area" rows="4" />
+              </label>
+              <label>
+                Header 模板 JSON
+                <textarea v-model="environmentHeaders" class="code-area" rows="4" />
+              </label>
+              <p class="hint">
+                Header 中可使用 <code v-pre>{{变量名}}</code>；Authorization、Cookie、X-API-Key
+                不允许保存明文，请在运行时变量中临时注入。
+              </p>
+              <button
+                type="button"
+                class="btn"
+                :disabled="environmentBusy || !environmentName.trim()"
+                @click="saveEnvironment"
+              >
+                {{ environmentBusy ? "保存中…" : environmentId ? "更新环境" : "保存环境" }}
+              </button>
+            </div>
+          </details>
           <label>
             自动化资产 ID
             <input
@@ -530,6 +647,11 @@ onMounted(async () => {
               <span>通过 {{ executionResult.run.passed }}</span>
               <span>失败 {{ executionResult.run.failed }}</span>
               <span>错误 {{ executionResult.run.errors }}</span>
+              <RouterLink
+                :to="{ path: '/executions', query: { run: executionResult.run.run_id } }"
+              >
+                查看逐用例结果
+              </RouterLink>
             </div>
             <p
               v-if="executionPhase === 'idle'"
@@ -838,6 +960,55 @@ h3 {
   font-size: 10px;
 }
 
+.environment-profile {
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: var(--ice-1);
+}
+
+.environment-profile summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 9px 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.environment-profile summary .mono {
+  color: var(--ink-3);
+  font-size: 9px;
+}
+
+.environment-profile__body {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: var(--s3);
+  padding: 0 10px 10px;
+  border-top: 1px solid var(--ice-3);
+}
+
+.environment-profile__body label:first-of-type,
+.environment-profile__body label:nth-of-type(3),
+.environment-profile__body label:nth-of-type(4),
+.environment-profile__body .hint,
+.environment-profile__body > .btn {
+  grid-column: 1 / -1;
+}
+
+.environment-profile__body > label,
+.environment-profile__body > .hint,
+.environment-profile__body > .btn {
+  margin-top: var(--s2);
+}
+
+.environment-profile__actions {
+  display: flex;
+  align-items: end;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -951,6 +1122,15 @@ h3 {
 
 .execution-meta code {
   font-family: var(--font-mono);
+}
+
+.execution-meta a {
+  color: var(--glacier-deep);
+  text-decoration: none;
+}
+
+.execution-meta a:hover {
+  text-decoration: underline;
 }
 
 .execution-spinner {
@@ -1216,6 +1396,9 @@ textarea {
     width: 100%;
   }
   .schedule-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .environment-profile__body {
     grid-template-columns: minmax(0, 1fr);
   }
 }

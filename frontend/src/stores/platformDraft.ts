@@ -26,6 +26,11 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
   const artifactId = ref("");
   const caseIds = ref("");
   const runAllConfirmed = ref(false);
+  const environmentId = ref("");
+  const environmentName = ref("");
+  const environmentBaseUrl = ref("http://127.0.0.1:8000");
+  const environmentVariables = ref("{}");
+  const environmentHeaders = ref("{}");
   const environment = ref(DEFAULT_ENVIRONMENT);
   const executionPhase = ref<ExecutionPhase>("idle");
   const executionStartedAt = ref("");
@@ -54,6 +59,11 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
     artifactId.value = "";
     caseIds.value = "";
     runAllConfirmed.value = false;
+    environmentId.value = "";
+    environmentName.value = "";
+    environmentBaseUrl.value = "http://127.0.0.1:8000";
+    environmentVariables.value = "{}";
+    environmentHeaders.value = "{}";
     environment.value = DEFAULT_ENVIRONMENT;
     executionPhase.value = "idle";
     executionStartedAt.value = "";
@@ -113,6 +123,11 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
     artifactId,
     caseIds,
     runAllConfirmed,
+    environmentId,
+    environmentName,
+    environmentBaseUrl,
+    environmentVariables,
+    environmentHeaders,
     environment,
     executionPhase,
     executionStartedAt,

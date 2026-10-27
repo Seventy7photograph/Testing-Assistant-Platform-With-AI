@@ -23,8 +23,9 @@ from app.schemas.api_testing import ApiAssertion, ApiCaseSpec
 from app.schemas.execution import AutomationCreateRequest
 from app.schemas.jobs import JobCreate
 from app.schemas.platform import ProjectCreate, ProjectQuota, ProjectUpdate
-from app.schemas.platform_execution import HttpExecutionRequest
+from app.schemas.platform_execution import ApiEnvironmentCreate, HttpExecutionRequest
 from app.services.api_service import ApiService
+from app.services.api_environment_service import ApiEnvironmentService
 from app.services.execution_service import ExecutionService
 from app.services.project_service import ProjectService
 
@@ -317,9 +318,17 @@ paths:
                 AutomationCreateRequest(spec_id=imported.spec.spec_id)
             )
             positive = next(item for item in imported.cases if item.category == "positive")
+            environment = ApiEnvironmentService(settings, repository).create(
+                ApiEnvironmentCreate(
+                    name="受控执行测试环境",
+                    base_url="https://api.example.test",
+                    headers={"X-Tenant": "{{tenant}}"},
+                )
+            )
 
             def handler(request: httpx.Request) -> httpx.Response:
                 assert request.url == "https://api.example.test/ok"
+                assert request.headers["x-tenant"] == "qa"
                 return httpx.Response(200, json={"status": "ok"})
 
             executor = ControlledHttpExecutor(
@@ -332,6 +341,8 @@ paths:
                     HttpExecutionRequest(
                         artifact_id=artifact.artifact_id,
                         case_ids=[positive.case_id],
+                        environment_id=environment.environment_id,
+                        secret_values={"tenant": "qa"},
                     )
                 )
             )
@@ -350,6 +361,20 @@ paths:
             assert case_list.cases[0].title
             assert case_list.cases[0].method == "GET"
             assert "baseUrl" in case_list.cases[0].required_variables
+
+    def test_environment_rejects_plaintext_sensitive_headers(self) -> None:
+        with TemporaryDirectory() as directory:
+            settings = _settings(Path(directory))
+            repository = Repository(settings)
+            service = ApiEnvironmentService(settings, repository)
+            with pytest.raises(BadRequestError):
+                service.create(
+                    ApiEnvironmentCreate(
+                        name="不安全环境",
+                        base_url="https://api.example.test",
+                        headers={"Authorization": "Bearer plaintext"},
+                    )
+                )
 
     def test_same_artifact_cannot_execute_concurrently(self) -> None:
         with TemporaryDirectory() as directory:
@@ -390,6 +415,16 @@ paths:
         assert _assert_json(assertion, []) == []
         assert _assert_json(assertion, [None]) == []
         assert _assert_json(assertion, ["alice"]) == []
+
+    def test_matches_assertion_uses_full_regex(self) -> None:
+        assertion = ApiAssertion(
+            kind="json",
+            path="$.version",
+            operator="matches",
+            expected=r"\d+\.\d+\.\d+",
+        )
+        assert _assert_json(assertion, ["1.2.3"]) == []
+        assert _assert_json(assertion, ["1.2"]) == ["正则不匹配"]
 
     def test_job_idempotency_and_schedule_definitions(self) -> None:
         with TemporaryDirectory() as directory:

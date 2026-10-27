@@ -1418,6 +1418,17 @@ export interface AssistantStatus {
   max_output_tokens: number;
 }
 
+export interface ApiEnvironmentProfile {
+  environment_id: string;
+  project_id: string;
+  name: string;
+  base_url: string;
+  variables: Record<string, string>;
+  headers: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ToolCatalogItem {
   name: string;
   description: string;

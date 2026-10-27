@@ -21,6 +21,7 @@ from app.schemas.api_testing import ApiAssertion, ApiCaseSpec
 from app.schemas.execution import CaseResult, TestRun
 from app.schemas.jobs import Job
 from app.schemas.platform_execution import HttpExecutionRequest, HttpExecutionResponse
+from app.services.api_environment_service import ApiEnvironmentService
 from app.services.execution_service import ExecutionService
 from app.services.job_service import JobService
 
@@ -106,7 +107,24 @@ class ControlledHttpExecutor:
             raise BadRequestError("部分接口用例已不存在。", detail={"missing": missing})
         cases = [case_map[item] for item in allowed_ids]
         spec = self.repository.api_specs.get(artifact.spec_id)
-        allowed_hosts = self._allowed_hosts(spec.servers, request.base_url)
+        profile = (
+            ApiEnvironmentService(self.settings, self.repository).get(
+                request.environment_id
+            )
+            if request.environment_id
+            else None
+        )
+        runtime_variables = {
+            **(profile.variables if profile else {}),
+            **request.environment,
+            **request.secret_values,
+        }
+        default_headers = {
+            **(profile.headers if profile else {}),
+            **request.headers,
+        }
+        effective_base_url = request.base_url or (profile.base_url if profile else "")
+        allowed_hosts = self._allowed_hosts(spec.servers, effective_base_url)
         if not allowed_hosts:
             raise BadRequestError(
                 "没有可用于受控执行的目标地址。请在 OpenAPI servers 或本次 base_url 中指定。",
@@ -129,10 +147,11 @@ class ControlledHttpExecutor:
             async with semaphore:
                 return await self._execute_case(
                     case,
-                    environment=dict(request.environment),
+                    environment=dict(runtime_variables),
                     allowed_hosts=allowed_hosts,
+                    default_headers=default_headers,
                     default_base_url=str(
-                        request.base_url
+                        effective_base_url
                         or (spec.servers[0].url if spec.servers else "")
                     ),
                 )
@@ -213,6 +232,7 @@ class ControlledHttpExecutor:
         *,
         environment: dict[str, str],
         allowed_hosts: set[str],
+        default_headers: dict[str, str],
         default_base_url: str,
     ) -> _CaseOutcome:
         started = time.perf_counter()
@@ -253,9 +273,31 @@ class ControlledHttpExecutor:
 
         headers = {
             str(key): str(value)
+            for key, value in self._resolve(default_headers, environment).items()
+        }
+        headers.update({
+            str(key): str(value)
             for key, value in (resolved.get("headers") or {}).items()
             if str(key).lower() not in {"host", "content-length"}
-        }
+        })
+        if self._contains_placeholder(headers):
+            missing_variables = sorted(
+                set(_PLACEHOLDER_RE.findall(json.dumps(headers, ensure_ascii=False)))
+            )
+            return _CaseOutcome(
+                result=CaseResult(
+                    case_id=case.case_id,
+                    name=case.title,
+                    status="skipped",
+                    operation_id=case.operation_id,
+                    message=(
+                        "执行环境缺少 Header 变量："
+                        + ("、".join(missing_variables) or "未知")
+                        + "；为避免发送占位符，请求未发出。"
+                    ),
+                ),
+                duration_ms=_milliseconds(time.perf_counter() - started),
+            )
         params = resolved.get("query") or {}
         cookies = resolved.get("cookies") or {}
         kwargs: dict[str, Any] = {"headers": headers, "params": params}
@@ -481,6 +523,13 @@ def _assert_json(assertion: ApiAssertion, values: list[Any]) -> list[str]:
             return [] if all(len(str(item)) >= int(expected) for item in values) else ["长度过短"]
         if assertion.operator == "maxLength":
             return [] if all(len(str(item)) <= int(expected) for item in values) else ["长度过长"]
+        if assertion.operator == "matches":
+            pattern = str(expected or "")
+            return (
+                []
+                if pattern and all(re.fullmatch(pattern, str(item)) for item in values)
+                else ["正则不匹配"]
+            )
         if assertion.operator == "gte":
             return [] if all(item >= expected for item in values) else ["数值过小"]
         if assertion.operator == "lte":

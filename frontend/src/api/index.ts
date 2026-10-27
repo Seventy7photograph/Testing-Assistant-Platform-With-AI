@@ -66,6 +66,7 @@ import type {
   AssistantConversation,
   AssistantConversationSummary,
   AssistantStatus,
+  ApiEnvironmentProfile,
   ToolCatalogItem,
   RoutingPolicyInfo,
   ExternalStatus,
@@ -177,10 +178,37 @@ export const api = {
     artifact_id: string;
     case_ids?: string[];
     allow_all_cases?: boolean;
+    environment_id?: string;
     environment?: Record<string, string>;
+    secret_values?: Record<string, string>;
+    headers?: Record<string, string>;
     base_url?: string;
     idempotency_key?: string;
   }) => post<{ job: Job; run: TestRun }>("/execution/http", payload),
+  apiEnvironments: () => get<ApiEnvironmentProfile[]>("/execution/environments"),
+  createApiEnvironment: (payload: {
+    name: string;
+    base_url?: string;
+    variables?: Record<string, string>;
+    headers?: Record<string, string>;
+  }) => post<ApiEnvironmentProfile>("/execution/environments", payload),
+  updateApiEnvironment: (
+    environmentId: string,
+    payload: {
+      name?: string;
+      base_url?: string;
+      variables?: Record<string, string>;
+      headers?: Record<string, string>;
+    },
+  ) =>
+    put<ApiEnvironmentProfile>(
+      `/execution/environments/${encodeURIComponent(environmentId)}`,
+      payload,
+    ),
+  deleteApiEnvironment: (environmentId: string) =>
+    del<{ deleted: boolean; environment_id: string }>(
+      `/execution/environments/${encodeURIComponent(environmentId)}`,
+    ),
 
   /* ---------- v3.0 知识与只读助手 ---------- */
   knowledgeStats: () => get<KnowledgeIndexStats>("/knowledge/stats"),

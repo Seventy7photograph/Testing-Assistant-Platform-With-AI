@@ -195,6 +195,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/api-specs/import" `
 | GET | `/automation/runs/{run_id}/report-source` | 转换报告数据源 |
 | POST | `/automation/runs/{run_id}/follow-up` | 创建失败跟进事项 |
 | GET | `/automation/events` | 查询结构化事件 |
+| GET / POST | `/execution/environments` | 项目接口测试环境列表 / 创建 |
+| PUT / DELETE | `/execution/environments/{environment_id}` | 更新 / 删除环境 |
 | POST | `/execution/http` | 受控执行资产中的接口用例 |
 
 ### 生成自动化资产

@@ -29,6 +29,7 @@ from app.schemas.automation_ai import AutomationAIReview
 from app.schemas.assistant import AssistantConversation
 from app.schemas.execution import AutomationArtifact, JobEvent, TestRun
 from app.schemas.jobs import AgentRun, Job, Schedule, ToolCall
+from app.schemas.platform_execution import ApiEnvironmentProfile
 from app.schemas.requirement import RequirementDoc
 from app.schemas.testcase import TestCaseSuite
 from app.schemas.work_item import WorkItem
@@ -204,6 +205,12 @@ class Repository:
         self.test_runs: JsonObjectStore[TestRun] = JsonObjectStore(
             base / "test_runs", TestRun, id_attr="run_id", label="测试运行"
         )
+        self.api_environments: JsonObjectStore[ApiEnvironmentProfile] = JsonObjectStore(
+            base / "api_environments",
+            ApiEnvironmentProfile,
+            id_attr="environment_id",
+            label="接口测试环境",
+        )
         self.job_events: JsonObjectStore[JobEvent] = JsonObjectStore(
             base / "job_events", JobEvent, id_attr="event_id", label="任务事件"
         )
@@ -265,6 +272,13 @@ class Repository:
         self.test_runs = SqlObjectStore(
             self.engine, TestRun, kind="test_runs", id_attr="run_id", label="测试运行"
         )
+        self.api_environments = SqlObjectStore(
+            self.engine,
+            ApiEnvironmentProfile,
+            kind="api_environments",
+            id_attr="environment_id",
+            label="接口测试环境",
+        )
         self.job_events = SqlObjectStore(
             self.engine, JobEvent, kind="job_events", id_attr="event_id", label="任务事件"
         )
@@ -313,6 +327,7 @@ class Repository:
                 or self.api_cases.count()
                 or self.automation_artifacts.count()
                 or self.test_runs.count()
+                or self.api_environments.count()
                 or self.job_events.count()
                 or self.work_items.count()
                 or self.automation_ai_reviews.count()
@@ -336,6 +351,7 @@ class Repository:
                 "api_cases",
                 "automation_artifacts",
                 "test_runs",
+                "api_environments",
                 "job_events",
                 "work_items",
                 "automation_ai_reviews",

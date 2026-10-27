@@ -189,10 +189,10 @@ export const helpTopics: Record<string, HelpTopic> = {
     intro: "对已验证的接口资产执行受控 HTTP 用例，并查看任务历史和调度定义。",
     points: [
       { label: "功能", text: "按资产和 case_ids 执行 HTTP 用例，实时显示运行状态、结果、任务和 Schedule 列表。" },
-      { label: "操作", text: "填写 AUTO 资产 ID 和具体用例 ID；全量执行必须显式勾选确认，表单跨页面保留。" },
+      { label: "操作", text: "选择或保存项目环境，填写资产和具体用例 ID；全量执行必须显式确认。" },
       { label: "原理", text: "平台创建 Job、发送受控 HTTP 请求、执行断言并生成 TestRun；不执行 Python、shell 或 pytest。" },
       { label: "口径", text: "目标主机须在 OpenAPI servers 或本次 base_url 白名单内；默认 200 条、4 并发、20 秒、1 MB。" },
-      { label: "边界", text: "调度定义可登记但不会自动运行；缺变量用例记为跳过，环境变量不写入任务或日志。" },
+      { label: "边界", text: "敏感 Header 只存变量占位符；临时密钥不落盘；调度仅登记，缺变量用例记为跳过。" },
     ],
     steps: ["确认资产已 validated", "填写用例和环境变量", "执行并核对 TestRun", "在任务历史查看 trace"],
   },

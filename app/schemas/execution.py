@@ -175,6 +175,9 @@ class JobEvent(BaseModel):
     artifact_id: str | None = None
     run_id: str | None = None
     work_item_id: str | None = None
+    project_id: str = ""
+    job_id: str = ""
+    level: str = "info"
     message: str = ""
     created_at: str = Field(default_factory=now_iso)
 

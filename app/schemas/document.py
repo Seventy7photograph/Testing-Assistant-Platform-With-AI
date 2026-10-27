@@ -95,6 +95,12 @@ class DocumentRecord(BaseModel):
     assets: list[DocumentAsset] = Field(
         default_factory=list, description="文档内的图片及识别情况（V2.0）"
     )
+    external_source: str = ""
+    external_id: str = ""
+    external_url: str = ""
+    external_version: str = ""
+    external_status: str = ""
+    sync_metadata: dict = Field(default_factory=dict)
     created_at: str = Field(default_factory=now_iso)
 
     def preview(self, limit: int = 500) -> str:

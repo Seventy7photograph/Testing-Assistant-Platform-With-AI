@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">Current workflows</title>
+  <desc id="desc">Four current delivery flows using the same three-color system.</desc>
+  <rect width="1200" height="300" fill="#EFE8D6"/>
+  <rect x="32" y="28" width="1136" height="56" fill="#1C4A9C"/>
+  <rect x="32" y="28" width="8" height="56" fill="#DA2E2B"/>
+  <text x="64" y="64" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="3">ONE WORKBENCH · FOUR CONNECTED WORKFLOWS</text>
+  <g fill="none" stroke="#1C4A9C" stroke-width="2">
+    <path d="M180 132H205M180 206H205M640 132H665M640 206H665M916 132H941M916 206H941"/>
+    <rect x="52" y="112" width="128" height="42" rx="5"/>
+    <rect x="52" y="186" width="128" height="42" rx="5"/>
+    <rect x="205" y="112" width="128" height="42" rx="5"/>
+    <rect x="205" y="186" width="128" height="42" rx="5"/>
+    <rect x="512" y="112" width="128" height="42" rx="5"/>
+    <rect x="512" y="186" width="128" height="42" rx="5"/>
+    <rect x="665" y="112" width="128" height="42" rx="5"/>
+    <rect x="665" y="186" width="128" height="42" rx="5"/>
+    <rect x="972" y="112" width="128" height="42" rx="5"/>
+    <rect x="972" y="186" width="128" height="42" rx="5"/>
+  </g>
+  <g fill="#1C4A9C" font-family="Arial, sans-serif" font-size="13" text-anchor="middle">
+    <text x="116" y="138">Requirement</text>
+    <text x="116" y="212">Structured input</text>
+    <text x="269" y="138">Design methods</text>
+    <text x="269" y="212">Trace + coverage</text>
+    <text x="576" y="138">OpenAPI</text>
+    <text x="576" y="212">Contract cases</text>
+    <text x="729" y="138">Automation</text>
+    <text x="729" y="212">JUnit + follow-up</text>
+    <text x="1036" y="138">Execution data</text>
+    <text x="1036" y="212">Metrics + report</text>
+  </g>
+  <g fill="#DA2E2B" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2">
+    <text x="52" y="94">USE CASES</text>
+    <text x="512" y="94">API ASSETS</text>
+    <text x="972" y="94">DELIVERY</text>
+  </g>
+  <rect x="32" y="254" width="1136" height="2" fill="#DA2E2B"/>
+  <text x="52" y="280" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="13">Deterministic facts · traceable references · explicit degradation · human-controlled AI</text>
+</svg>

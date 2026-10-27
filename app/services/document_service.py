@@ -28,8 +28,11 @@ _INVALID_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 class DocumentService:
     def __init__(self, settings: Settings | None = None, repository: Repository | None = None) -> None:
-        self.settings = settings or get_settings()
         self.repository = repository or get_repository()
+        self.platform_settings = settings or get_settings()
+        # 项目请求传入的是全局 Settings + 项目 Repository；文件目录必须跟随
+        # Repository 的项目分区，否则记录隔离了、原文仍落在全局 uploads/。
+        self.settings = repository.settings if repository is not None else self.platform_settings
 
     # ------------------------------------------------------------------ #
     def save_text(self, *, text: str, title: str = "粘贴的需求文本") -> DocumentRecord:
@@ -42,6 +45,7 @@ class DocumentService:
         content = text or ""
         if not content.strip():
             raise DocumentParseError("粘贴的需求文本为空，无法保存到文档库。")
+        self._check_quota()
 
         doc_id = new_id("DOC-")
         data = content.encode("utf-8")
@@ -61,6 +65,7 @@ class DocumentService:
             parser="pasted_text",
         )
         self.repository.documents.save(record)
+        self._index_document(record)
         logger.info(
             "粘贴文本已入库：%s（%s，%d 字符）",
             doc_id,
@@ -84,6 +89,7 @@ class DocumentService:
         """
         if not filename:
             raise UnsupportedFormatError("上传文件缺少文件名，无法识别格式。")
+        self._check_quota()
 
         size = len(data)
         if size == 0:
@@ -133,6 +139,7 @@ class DocumentService:
             assets=outcome.assets,
         )
         self.repository.documents.save(record)
+        self._index_document(record)
         logger.info(
             "文档已入库：%s（%s，%d 字符，解析器=%s，图片 %d 张/识别 %d 张）",
             doc_id,
@@ -192,6 +199,7 @@ class DocumentService:
         record.assets = outcome.assets
         record.warnings = [*record.parser_warnings, *outcome.warnings]
         self.repository.documents.save(record)
+        self._index_document(record)
         logger.info(
             "图片已重新识别：%s（识别 %d/%d 张）", doc_id, outcome.recognized, outcome.image_count
         )
@@ -251,3 +259,23 @@ class DocumentService:
             logger.warning("原始文件保存失败（不影响解析结果）：%s", exc)
             return Path("")
         return path
+
+    def _index_document(self, record: DocumentRecord) -> None:
+        """知识索引是建议层，失败不能阻断主业务写入。"""
+        try:
+            from app.knowledge.indexer import KnowledgeService
+
+            KnowledgeService(self.settings, self.repository).index_document(record)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("文档知识索引更新失败（不影响文档保存）：%s", exc)
+
+    def _check_quota(self) -> None:
+        from app.core.context import get_current_project_id
+        from app.services.project_service import ProjectService
+
+        project_id = get_current_project_id()
+        if not project_id:
+            return
+        service = ProjectService(self.platform_settings)
+        project = service.get(project_id)
+        service.check_quota(project, resource="documents", current=self.repository.documents.count())

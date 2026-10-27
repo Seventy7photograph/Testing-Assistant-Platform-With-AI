@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="96" viewBox="0 0 1200 96" role="img" aria-labelledby="title desc">
+  <title id="title">Testing Assistant Platform documentation</title>
+  <desc id="desc">Documentation banner using paper white, cobalt blue, and vermilion.</desc>
+  <rect width="1200" height="96" fill="#EFE8D6"/>
+  <rect x="0" y="0" width="210" height="96" fill="#1C4A9C"/>
+  <rect x="210" y="0" width="10" height="96" fill="#DA2E2B"/>
+  <text x="28" y="40" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="12" letter-spacing="3">TESTING ASSISTANT</text>
+  <text x="28" y="70" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="22" font-weight="700">DOCUMENTATION</text>
+  <text x="256" y="41" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="2">CURRENT SYSTEM REFERENCE</text>
+  <text x="256" y="69" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="17">Paper white · Cobalt blue · Vermilion</text>
+  <rect x="1110" y="26" width="46" height="8" fill="#DA2E2B"/>
+</svg>

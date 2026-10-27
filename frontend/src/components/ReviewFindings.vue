@@ -26,7 +26,7 @@ const visible = computed(() => (expanded.value ? props.findings : props.findings
       <span class="chip" :class="warningCount ? 'chip--warn' : 'chip--ghost'">
         {{ warningCount }} 条需关注 / 共 {{ findings.length }} 条
       </span>
-      <span class="rf__note">规则用例未被改写，以下是模型给出的核对意见。</span>
+      <span class="rf__note">只读建议，需人工确认。</span>
     </p>
     <ul class="rf__list">
       <li v-for="(item, index) in visible" :key="`${item.requirement_id}-${index}`" :data-tone="item.severity">
@@ -48,7 +48,7 @@ const visible = computed(() => (expanded.value ? props.findings : props.findings
             <ul v-if="item.evidence_quotes.length" class="rf__quotes">
               <li v-for="quote in item.evidence_quotes" :key="quote">“{{ quote }}”</li>
             </ul>
-            <p v-else class="rf__uncertain">{{ item.uncertainty_reason || "该意见为模型判断，需人工核对。" }}</p>
+            <p v-else class="rf__uncertain">{{ item.uncertainty_reason || "需人工核对" }}</p>
           </details>
         </div>
       </li>

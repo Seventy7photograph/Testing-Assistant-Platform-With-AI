@@ -33,6 +33,7 @@ class NullProvider(LLMProvider):
         self,
         messages: list[LLMMessage],
         *,
+        model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         json_mode: bool = False,

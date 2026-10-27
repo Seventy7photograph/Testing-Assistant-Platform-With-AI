@@ -22,6 +22,8 @@ from app.services.execution_service import ExecutionService
 from app.services.pipeline_service import PipelineService
 from app.services.requirement_service import RequirementService
 from app.services.work_item_service import WorkItemService
+from app.services.job_service import JobService
+from app.services.integration_service import IntegrationService
 
 
 def settings_dep() -> Settings:
@@ -99,6 +101,20 @@ def automation_ai_service_dep(
     return AutomationAIService(settings, repository)
 
 
+def job_service_dep(
+    settings: Annotated[Settings, Depends(settings_dep)],
+    repository: Annotated[Repository, Depends(repository_dep)],
+) -> JobService:
+    return JobService(settings, repository)
+
+
+def integration_service_dep(
+    settings: Annotated[Settings, Depends(settings_dep)],
+    repository: Annotated[Repository, Depends(repository_dep)],
+) -> IntegrationService:
+    return IntegrationService(settings, repository)
+
+
 SettingsDep = Annotated[Settings, Depends(settings_dep)]
 RepositoryDep = Annotated[Repository, Depends(repository_dep)]
 LLMDep = Annotated[LLMProvider, Depends(llm_dep)]
@@ -111,3 +127,5 @@ PipelineServiceDep = Annotated[PipelineService, Depends(pipeline_service_dep)]
 AutomationServiceDep = Annotated[ExecutionService, Depends(automation_service_dep)]
 WorkItemServiceDep = Annotated[WorkItemService, Depends(work_item_service_dep)]
 AutomationAIServiceDep = Annotated[AutomationAIService, Depends(automation_ai_service_dep)]
+JobServiceDep = Annotated[JobService, Depends(job_service_dep)]
+IntegrationServiceDep = Annotated[IntegrationService, Depends(integration_service_dep)]

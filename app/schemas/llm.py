@@ -106,3 +106,19 @@ class PromptInfo(BaseModel):
     temperature: float
     model_scope: str
     change_log: list[str] = Field(default_factory=list)
+
+
+class ModelRouteInfo(BaseModel):
+    provider: str
+    model: str
+    task: str
+    strategy: str
+    quality_tier: str
+    cost_tier: str
+    rationale: str
+
+
+class RoutingPolicyInfo(BaseModel):
+    configured_strategy: str = "balanced"
+    strategy: str = "balanced"
+    routes: list[ModelRouteInfo] = Field(default_factory=list)

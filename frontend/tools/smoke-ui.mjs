@@ -184,8 +184,37 @@ async function main() {
 
     // SPA 内切换菜单：Pinia 会话必须保留输入，KeepAlive 也必须保住组件状态。
     await page.fill("textarea", "状态缓存验证：手机号：11位数字，必填");
-    await page.locator('a[href="/"]').first().click();
+    const transitionStability = await page.evaluate(async () => {
+      const read = () => ({
+        main: document.querySelector(".shell__main")?.getBoundingClientRect().width ?? 0,
+        top: document.querySelector(".bar")?.getBoundingClientRect().width ?? 0,
+        project: document.querySelector(".project-switcher-desktop")?.getBoundingClientRect().width ?? 0,
+        gutter: window.innerWidth - document.documentElement.clientWidth,
+      });
+      const samples = [read()];
+      document.querySelector('a[href="/"]')?.click();
+      for (let index = 0; index < 24; index += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        samples.push(read());
+      }
+      const range = (key) => {
+        const values = samples.map((item) => item[key]);
+        return Math.max(...values) - Math.min(...values);
+      };
+      return { main: range("main"), top: range("top"), project: range("project"), gutter: range("gutter") };
+    });
+    await page.waitForURL(`${base}/`);
+    await page.waitForTimeout(300);
+    check(
+      "菜单切换时主框架与项目控件无横向抖动",
+      transitionStability.main <= 0.5 &&
+        transitionStability.top <= 0.5 &&
+        transitionStability.project <= 0.5 &&
+        transitionStability.gutter <= 0.5,
+      JSON.stringify(transitionStability),
+    );
     check("总览不残留生成页或报告页吸底栏", (await page.locator(".sticky-actions").count()) === 0);
+    await page.screenshot({ path: path.join(OUT, "dashboard-v3.png"), fullPage: true });
     await page.locator('a[href="/generate"]').first().click();
     await page.waitForTimeout(200);
     const cachedInput = await page.locator("textarea").inputValue();
@@ -499,6 +528,31 @@ async function main() {
       narrow.scroll <= narrow.client + 1,
       `scrollWidth=${narrow.scroll} clientWidth=${narrow.client}`,
     );
+    await page.evaluate(() => {
+      window.scrollTo(0, Math.min(700, document.documentElement.scrollHeight - window.innerHeight));
+    });
+    await page.waitForTimeout(250);
+    const mobileUtilities = await page.evaluate(() => {
+      const assistant = document.querySelector(".bar__assistant")?.getBoundingClientRect();
+      const backtop = document.querySelector(".backtop")?.getBoundingClientRect();
+      if (!assistant || !backtop) return { overlap: 999, assistant: false, backtop: false };
+      const overlap =
+        Math.max(0, Math.min(assistant.right, backtop.right) - Math.max(assistant.left, backtop.left)) *
+        Math.max(0, Math.min(assistant.bottom, backtop.bottom) - Math.max(assistant.top, backtop.top));
+      return { overlap, assistant: true, backtop: true };
+    });
+    check(
+      "移动端顶部助手与返回顶部按钮不重叠",
+      mobileUtilities.assistant &&
+        mobileUtilities.backtop &&
+        mobileUtilities.overlap === 0,
+      `overlap=${mobileUtilities.overlap}`,
+    );
+    await page.locator(".bar__assistant").click();
+    await page.waitForSelector(".assistant");
+    check("滚动后助手仍可打开", (await page.locator(".assistant").count()) === 1);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".assistant", { state: "detached" });
     await page.screenshot({ path: path.join(OUT, "generate-warnings-mobile.png"), fullPage: true });
 
     // 深色模式下也过一眼：新组件必须跟着主题令牌走，而不是只在浅色下好看。
@@ -517,7 +571,7 @@ async function main() {
       `theme=${darkOverflow.theme} scrollWidth=${darkOverflow.scroll}`,
     );
     await page.screenshot({ path: path.join(OUT, "generate-warnings-dark.png") });
-    await page.getByTitle("切换到冰川蓝白（浅色）").click();
+    await page.getByTitle("切换到浅色模式").click();
 
     console.log("\n=== 生成阶段的大模型复核与补充（review / enhance） ===");
     // 打开「生成用大模型」，参与方式选「复核规则产出」。
@@ -553,6 +607,156 @@ async function main() {
     const supplementText = await page.$eval(".cases__count", (node) => node.textContent.trim());
     check("enhance 模式补充了用例", supplementRows >= 1, `${supplementText}`);
     await page.screenshot({ path: path.join(OUT, "generate-enhance-supplement.png"), fullPage: false });
+
+    console.log("\n=== v3.0 独立交付页、系统页与右侧助手 ===");
+    await page.goto(`${base}/projects`, { waitUntil: "networkidle" });
+    await page.waitForSelector(".platform");
+    check(
+      "项目页可访问且右侧助手常驻",
+      (await page.locator(".platform").count()) === 1 &&
+        (await page.locator(".assistant-rail").count()) === 1,
+    );
+
+    const projectKey = `UIV3${Date.now().toString(36).slice(-6).toUpperCase()}`;
+    await page.getByPlaceholder("QA-CORE").fill(projectKey);
+    await page.getByPlaceholder("核心质量项目").fill(`UI v3 ${projectKey}`);
+    await page.getByRole("button", { name: "创建并切换" }).click();
+    await page.locator(".project-row", { hasText: projectKey }).waitFor();
+    check(
+      "平台页可创建并切换项目",
+      (await page.locator(".project-row", { hasText: projectKey }).count()) === 1,
+      projectKey,
+    );
+
+    await page.goto(`${base}/integrations`, { waitUntil: "networkidle" });
+    await page.getByPlaceholder("QA 或 8").fill("QA-UI");
+    await page.locator(".code-area").fill(
+      JSON.stringify([
+        {
+          external_id: "QA-UI-1",
+          title: "支付超时重试",
+          body: "# 支付超时\n支付超时后最多自动重试三次。",
+          status: "进行中",
+          version: "2",
+        },
+      ]),
+    );
+    await page.getByRole("button", { name: "导入需求" }).click();
+    await page.waitForTimeout(500);
+    check(
+      "Jira fixture 可从界面导入",
+      (await page.locator(".feedback").textContent())?.includes("拉取 1 条") === true,
+      (await page.locator(".feedback").textContent()) ?? "",
+    );
+
+    await page.goto(`${base}/knowledge`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "重建索引" }).click();
+    await page.waitForTimeout(500);
+    await page.getByPlaceholder("检索需求、用例、接口或帮助").fill("支付超时 自动重试");
+    await page.getByRole("button", { name: "检索", exact: true }).click();
+    await page.waitForSelector(".citations article");
+    check(
+      "中文知识检索在界面显示引用",
+      (await page.locator(".citations article").count()) >= 1,
+    );
+    check(
+      "模型路由在界面可解释",
+      (await page.locator(".routes .route").count()) >= 4,
+    );
+    await page.screenshot({ path: path.join(OUT, "platform-v3.png"), fullPage: true });
+
+    await page.goto(`${base}/automation`, { waitUntil: "networkidle" });
+    check(
+      "自动化资产为独立页面",
+      (await page.locator(".tabs").count()) === 0 &&
+        (await page.locator(".workspace").count()) === 1,
+    );
+    await page.screenshot({ path: path.join(OUT, "automation-v3.png"), fullPage: true });
+    await page.goto(`${base}/work-items`, { waitUntil: "networkidle" });
+    check(
+      "工作事项为独立页面",
+      (await page.locator(".tabs").count()) === 0 &&
+        (await page.locator(".item-workbench").count()) === 1,
+    );
+    await page.screenshot({ path: path.join(OUT, "work-items-v3.png"), fullPage: true });
+
+    await page.locator(".assistant-rail__button").click();
+    await page.waitForSelector(".assistant");
+    check(
+      "助手打开时背景进入 inert 状态",
+      await page.$eval(".shell__main", (node) => node.inert === true),
+    );
+    await page.keyboard.press("Escape");
+    await page.locator(".assistant").waitFor({ state: "detached" });
+    check("Esc 可关闭助手", (await page.locator(".assistant").count()) === 0);
+    await page.locator(".assistant-rail__button").click();
+    await page.waitForSelector(".assistant");
+    await page.getByPlaceholder("查询当前项目状态或知识…").fill("支付超时应该怎么处理？");
+    await page.getByTitle("发送").click();
+    await page.waitForSelector(".assistant .answer", { timeout: 20_000 });
+    check(
+      "只读助手回答带知识来源",
+      (await page.locator(".assistant .source").count()) >= 1,
+    );
+    check(
+      "助手区分当前事实与知识引用",
+      (await page.locator(".assistant .facts").count()) +
+        (await page.locator(".assistant .sources").count()) >= 1,
+    );
+    await page.screenshot({ path: path.join(OUT, "assistant-v3.png"), fullPage: false });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(250);
+    const assistantMobile = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+      width: document.querySelector(".assistant")?.getBoundingClientRect().width ?? 0,
+    }));
+    check(
+      "助手窄屏全宽且无横向溢出",
+      assistantMobile.scroll <= assistantMobile.client + 1 &&
+        assistantMobile.width <= assistantMobile.client + 1,
+      `width=${assistantMobile.width} client=${assistantMobile.client}`,
+    );
+    await page.getByTitle("关闭").click();
+    await page.locator(".assistant").waitFor({ state: "detached" });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${base}/projects`, { waitUntil: "networkidle" });
+    const mobileProjectIdentity = await page.locator(".mobile-project .project").evaluate((node) => ({
+      visible: node.getBoundingClientRect().width > 0,
+      name: node.querySelector("select")?.selectedOptions[0]?.textContent?.trim() ?? "",
+      role: node.querySelector(".project__role")?.textContent?.trim() ?? "",
+    }));
+    check(
+      "移动端保留项目 Key、名称与角色",
+      mobileProjectIdentity.visible &&
+        mobileProjectIdentity.name.includes("UIV3") &&
+        mobileProjectIdentity.name.includes("UI v3") &&
+        mobileProjectIdentity.role === "owner",
+      JSON.stringify(mobileProjectIdentity),
+    );
+    check(
+      "项目页移动端无横向溢出",
+      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+    );
+    await page.screenshot({ path: path.join(OUT, "projects-mobile.png"), fullPage: true });
+
+    await page.goto(`${base}/integrations`, { waitUntil: "networkidle" });
+    check(
+      "外部连接页移动端无横向溢出",
+      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+    );
+    await page.screenshot({ path: path.join(OUT, "integrations-mobile.png"), fullPage: true });
+
+    await page.goto(`${base}/jobs`, { waitUntil: "networkidle" });
+    check(
+      "运行任务页移动端无横向溢出",
+      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+    );
+    await page.screenshot({ path: path.join(OUT, "jobs-mobile.png"), fullPage: true });
+
+    await page.setViewportSize({ width: 1440, height: 980 });
   } finally {
     if (browser) await browser.close();
     server.kill();

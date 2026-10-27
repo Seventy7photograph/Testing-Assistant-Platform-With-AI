@@ -94,7 +94,7 @@ async function parse(row: DocumentSummary): Promise<void> {
     const confirmed = await confirmAction({
       title: row.has_requirement ? `重新解析「${row.filename}」` : `解析「${row.filename}」`,
       message: row.has_requirement
-        ? "该文档已有结构化需求，重新解析会覆盖原有结果（并按当前设置重新抽取）。已生成的用例集不受影响。若只是想回看，点「查看」即可，不必重跑。"
+        ? "重新解析会覆盖结构化需求；已有用例集不受影响。"
         : "将调用大模型抽取结构化需求，耗时随文档长度增长并消耗额度。解析失败会自动降级为规则引擎，并在结果页标注降级原因。",
       confirmText: row.has_requirement ? "重新解析" : "开始解析",
     });
@@ -248,7 +248,7 @@ async function removeSelected(): Promise<void> {
       v-if="error"
       title="文档列表没有取到"
       :message="error"
-      recovery="确认后端已启动（python run.py），然后重试。"
+      recovery="确认服务已启动后重试。"
       @retry="load"
     />
 
@@ -274,7 +274,7 @@ async function removeSelected(): Promise<void> {
           </div>
         </el-upload>
         <p v-if="uploading" class="scan-status" role="status">
-          <span class="dot is-unfrozen" /> 当前任务仍在处理，完成前不会标记为已解析
+          <span class="dot is-unfrozen" /> 解析中
         </p>
         <FieldHint>
           单个文件不超过 20MB。Word 表格会被结构化平铺，PDF 按页抽取，兼容 GBK 等中文编码。
@@ -461,7 +461,7 @@ async function removeSelected(): Promise<void> {
         v-else
         icon="doc"
         title="文档库还是空的"
-        reason="上传一份需求文档（Word / PDF / Markdown 均可），平台会解析成结构化需求，再据此生成用例。"
+        reason="支持 Word、PDF、Markdown。"
         action-label="去上传"
         @action="load"
       />
@@ -560,8 +560,8 @@ async function removeSelected(): Promise<void> {
   left: 5%;
   right: 5%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--glacier), transparent);
-  box-shadow: 0 0 18px 4px color-mix(in srgb, var(--glacier) 28%, transparent);
+  background: var(--signal);
+  box-shadow: none;
   animation: document-scan 1.8s var(--ease) infinite;
   pointer-events: none;
 }

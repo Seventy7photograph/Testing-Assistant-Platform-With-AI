@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings, get_settings
+from app.core.context import get_current_project_id
 
 APP_NAME = "测试工程师助手平台"
 APP_SUBTITLE = "AI 用例生成 · 测试报告"
@@ -76,7 +77,14 @@ def _settings() -> Settings:
 
 
 def data_dir() -> Path:
-    path = _settings().data_dir
+    settings = _settings()
+    project_id = get_current_project_id()
+    if project_id and (
+        project_id != "PRJ-default" or settings.project_isolation_enabled
+    ):
+        path = settings.project_storage_dir(project_id) / "data"
+    else:
+        path = settings.data_dir
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -22,43 +22,48 @@ interface NavGroup {
 
 const groups: NavGroup[] = [
   {
-    caption: "平台",
+    caption: "工作区",
     items: [
-      { nav: "dashboard", to: "/", label: "总览", hint: "AI 用例 · 报告", icon: "gauge" },
+      { nav: "dashboard", to: "/", label: "总览", hint: "工作台", icon: "gauge" },
+      { nav: "work-items", to: "/work-items", label: "工作事项", hint: "待办跟进", icon: "cases" },
     ],
   },
   {
-    caption: "用例生成",
+    caption: "用例设计",
     items: [
-      { nav: "generate", to: "/generate", label: "用例生成", hint: "需求 → 用例", icon: "sparkle" },
-      { nav: "documents", to: "/documents", label: "文档与需求", hint: "上传 · 解析", icon: "doc" },
-      { nav: "apis", to: "/apis", label: "接口资产", hint: "OpenAPI · Postman", icon: "route" },
-      { nav: "suites", to: "/suites", label: "用例集", hint: "统计 · 导出", icon: "cases" },
+      { nav: "generate", to: "/generate", label: "用例生成", hint: "需求生成", icon: "sparkle" },
+      { nav: "documents", to: "/documents", label: "文档与需求", hint: "文档需求", icon: "doc" },
+      { nav: "apis", to: "/apis", label: "接口资产", hint: "接口规范", icon: "route" },
+      { nav: "suites", to: "/suites", label: "用例集", hint: "用例资产", icon: "cases" },
     ],
   },
   {
     caption: "测试报告",
     items: [
-      { nav: "report", to: "/report", label: "报告工作台", hint: "指标 · 生成", icon: "chart" },
-      { nav: "archive", to: "/report/archive", label: "报告存档", hint: "趋势 · 检索", icon: "archive" },
+      { nav: "report", to: "/report", label: "测试报告", hint: "报告生成", icon: "chart" },
+      { nav: "archive", to: "/report/archive", label: "报告存档", hint: "报告历史", icon: "archive" },
     ],
   },
   {
-    caption: "交付闭环",
+    caption: "工程交付",
     items: [
-      {
-        nav: "workspace",
-        to: "/workspace",
-        label: "交付工作台",
-        hint: "自动化 · 执行 · 事项",
-        icon: "route",
-      },
+      { nav: "automation", to: "/automation", label: "自动化资产", hint: "脚本资产", icon: "route" },
+      { nav: "executions", to: "/executions", label: "执行记录", hint: "执行结果", icon: "play" },
     ],
   },
   {
-    caption: "平台设置",
+    caption: "项目与集成",
     items: [
-      { nav: "settings", to: "/settings", label: "大模型与阈值", hint: "所有模型任务共用", icon: "sliders" },
+      { nav: "projects", to: "/projects", label: "项目", hint: "项目隔离", icon: "layers" },
+      { nav: "integrations", to: "/integrations", label: "外部连接", hint: "Jira 与禅道", icon: "target" },
+    ],
+  },
+  {
+    caption: "系统",
+    items: [
+      { nav: "jobs", to: "/jobs", label: "运行任务", hint: "任务审计", icon: "clock" },
+      { nav: "knowledge", to: "/knowledge", label: "知识索引", hint: "检索索引", icon: "search" },
+      { nav: "settings", to: "/settings", label: "模型设置", hint: "模型阈值", icon: "sliders" },
     ],
   },
 ];
@@ -134,12 +139,9 @@ function go(to: string) {
               @click.prevent="go(item.to)"
             >
               <span class="nav__icon"><AppIcon :name="item.icon" :size="18" /></span>
-              <span class="nav__text">
-                <span class="nav__label">{{ item.label }}</span>
-                <span class="nav__hint">{{ item.hint }}</span>
-              </span>
+              <span class="nav__text"><span class="nav__label">{{ item.label }}</span></span>
               <span
-                v-if="item.nav === 'workspace' && workItems.attention"
+                v-if="item.nav === 'work-items' && workItems.attention"
                 class="nav__count mono"
                 :title="`${workItems.attention} 条今日或逾期事项`"
               >
@@ -168,13 +170,6 @@ function go(to: string) {
           <span class="status__value">{{ health.llmLabel }}</span>
         </span>
       </button>
-
-      <p v-if="health.reachable && !health.llmReady" class="rail__warn">
-        未配置 API Key：用例链路降级为规则引擎，报告链路需配置后可用。
-      </p>
-      <p v-else-if="!health.reachable" class="rail__warn">
-        {{ health.error || "正在读取服务状态…" }}
-      </p>
 
       <button
         type="button"
@@ -206,7 +201,7 @@ function go(to: string) {
   background: linear-gradient(180deg, var(--ice-0) 0%, var(--rail-face) 46%, var(--ice-2) 100%);
   border-right: 1px solid var(--rail-edge);
   color: var(--ink-2);
-  transition: width var(--dur) var(--ease), background var(--dur-slow) var(--ease);
+  transition: background-color var(--dur-slow) var(--ease);
   overflow: hidden;
 }
 
@@ -591,6 +586,123 @@ function go(to: string) {
     padding-inline: 0;
     border-right: none;
   }
+}
+
+/* Paper & Ink Workbench rail */
+.rail,
+.rail[data-domain="case"],
+.rail[data-domain="report"] {
+  --rail-edge: var(--rail-line);
+  background: var(--rail-ink);
+  border-right-color: var(--rail-line);
+  color: var(--rail-muted);
+}
+
+.rail__brand {
+  border-bottom-color: var(--rail-line);
+}
+
+.rail__mark {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  background: var(--signal);
+  color: var(--ice-0);
+  box-shadow: none;
+}
+
+.rail__title {
+  color: var(--ice-0);
+  font-size: var(--fs-sm);
+}
+
+.rail__sub {
+  display: none;
+}
+
+.rail__caption {
+  color: var(--rail-muted);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+}
+
+.nav {
+  min-height: 34px;
+  padding: 7px 9px;
+  color: var(--rail-muted);
+  border: 1px solid transparent;
+}
+
+.nav::before,
+.nav--on::before {
+  display: none;
+}
+
+.nav:hover {
+  background: color-mix(in srgb, var(--ice-0) 7%, transparent);
+  border-color: var(--rail-line);
+  color: var(--ice-0);
+}
+
+.nav--on {
+  background: color-mix(in srgb, var(--signal) 11%, var(--rail-ink));
+  border-color: color-mix(in srgb, var(--signal) 28%, var(--rail-line));
+  color: var(--ice-0);
+  box-shadow: none;
+}
+
+.nav--on::after {
+  left: -1px;
+  width: 3px;
+  height: 22px;
+  border-radius: 0;
+  background: var(--signal);
+}
+
+.nav--on .nav__icon {
+  color: var(--ice-0);
+}
+
+.nav__label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.nav__hint {
+  display: none;
+}
+
+.nav__count {
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fail) 18%, transparent);
+  color: var(--fail);
+}
+
+.rail__foot {
+  border-top-color: var(--rail-line);
+}
+
+.status {
+  color: var(--rail-muted);
+}
+
+.status:hover,
+.collapse:hover {
+  background: color-mix(in srgb, var(--ice-0) 7%, transparent);
+  border-color: var(--rail-line);
+  color: var(--ice-0);
+}
+
+.status__label {
+  color: var(--rail-muted);
+}
+
+.status__value {
+  color: #eef1e7;
+}
+
+.collapse {
+  color: var(--rail-muted);
 }
 </style>
 

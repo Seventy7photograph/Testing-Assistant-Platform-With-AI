@@ -27,6 +27,7 @@ from app.llm.factory import (
     reset_llm_provider_cache,
 )
 from app.llm.prompt_registry import ALL_PROMPTS
+from app.llm.router import normalize_strategy, routing_preview
 from app.llm.runtime_config import mask_api_key
 from app.schemas.api import ApiResponse, ok
 from app.schemas.llm import (
@@ -38,6 +39,8 @@ from app.schemas.llm import (
     LLMTestRequest,
     LLMTestResult,
     PromptInfo,
+    ModelRouteInfo,
+    RoutingPolicyInfo,
 )
 
 router = APIRouter(tags=["大模型配置"])
@@ -97,6 +100,27 @@ async def list_prompts() -> dict:
             )
             for spec in ALL_PROMPTS
         ]
+    )
+
+
+@router.get(
+    "/llm/routing",
+    response_model=ApiResponse[RoutingPolicyInfo],
+    summary="预览按任务、成本与质量路由到的模型",
+)
+async def preview_model_routing(
+    settings: SettingsDep,
+    strategy: str | None = None,
+) -> dict:
+    effective = get_effective_settings()
+    selected = normalize_strategy(strategy or effective.llm_routing_strategy)
+    routes = routing_preview(effective, selected)
+    return ok(
+        RoutingPolicyInfo(
+            configured_strategy=normalize_strategy(effective.llm_routing_strategy),
+            strategy=selected,
+            routes=[ModelRouteInfo(**item.as_dict()) for item in routes],
+        )
     )
 
 

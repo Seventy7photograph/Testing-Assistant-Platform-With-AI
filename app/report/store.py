@@ -68,26 +68,27 @@ def _session() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
-_initialized = False
+_initialized_paths: set[str] = set()
 
 
 def init_db() -> None:
     """建表（幂等）。应用启动时调用一次；未调用时首次读写也会自动补建。"""
 
-    global _initialized
+    path = db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
     conn = _connect()
     try:
         with conn:
             conn.executescript(_SCHEMA)
     finally:
         conn.close()
-    _initialized = True
+    _initialized_paths.add(str(path))
 
 
 def _ensure_schema() -> None:
     """延迟初始化：让不经过 app lifespan 的调用方（脚本 / 单测）也能直接用。"""
 
-    if not _initialized:
+    if str(db_path()) not in _initialized_paths:
         init_db()
 
 

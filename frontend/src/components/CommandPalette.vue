@@ -24,15 +24,21 @@ interface Entry {
 }
 
 const pages: Entry[] = [
-  { label: "总览", hint: "AI 工作流状态与最近动态", icon: "gauge", to: "/", group: "页面" },
+  { label: "总览", hint: "平台状态与最近动态", icon: "gauge", to: "/", group: "页面" },
   { label: "用例生成", hint: "需求文档 → 结构化需求 → 用例集", icon: "sparkle", to: "/generate", group: "页面" },
   { label: "文档与需求", hint: "上传 · 解析 · 追溯", icon: "doc", to: "/documents", group: "页面" },
   { label: "接口资产", hint: "OpenAPI → 契约用例 → Postman", icon: "route", to: "/apis", group: "页面" },
   { label: "用例集", hint: "浏览 · 统计 · 导出", icon: "cases", to: "/suites", group: "页面" },
-  { label: "报告工作台", hint: "执行数据 → 指标 → AI 报告", icon: "chart", to: "/report", group: "页面" },
+  { label: "报告工作台", hint: "执行数据 → 指标 → 报告", icon: "chart", to: "/report", group: "页面" },
   { label: "报告存档", hint: "趋势 · 检索 · 对比", icon: "archive", to: "/report/archive", group: "页面" },
-  { label: "交付工作台", hint: "自动化资产 · 执行记录 · 工作事项", icon: "route", to: "/workspace", group: "页面" },
-  { label: "大模型与阈值", hint: "所有模型任务共用配置", icon: "sliders", to: "/settings", group: "页面" },
+  { label: "自动化资产", hint: "pytest 资产与增强", icon: "route", to: "/automation", group: "页面" },
+  { label: "执行记录", hint: "JUnit 与受控执行", icon: "play", to: "/executions", group: "页面" },
+  { label: "工作事项", hint: "待办与提醒", icon: "cases", to: "/work-items", group: "页面" },
+  { label: "项目", hint: "项目与审计", icon: "layers", to: "/projects", group: "页面" },
+  { label: "外部连接", hint: "Jira 与禅道", icon: "target", to: "/integrations", group: "页面" },
+  { label: "运行任务", hint: "任务与执行治理", icon: "clock", to: "/jobs", group: "页面" },
+  { label: "知识索引", hint: "检索与模型路由", icon: "search", to: "/knowledge", group: "页面" },
+  { label: "模型设置", hint: "模型与阈值", icon: "sliders", to: "/settings", group: "页面" },
 ];
 
 function score(entry: Entry, needle: string): number {
@@ -168,7 +174,7 @@ function choose(index: number) {
   align-items: flex-start;
   padding: 14vh var(--s4) var(--s4);
   background: var(--scrim);
-  backdrop-filter: blur(3px);
+  backdrop-filter: none;
 }
 
 .panel {

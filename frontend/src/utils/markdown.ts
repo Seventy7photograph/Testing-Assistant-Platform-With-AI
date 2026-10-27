@@ -30,7 +30,10 @@ function splitRow(line: string): string[] {
   return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
 }
 
-export function renderMarkdown(source: string): string {
+export function renderMarkdown(
+  source: string,
+  options: { copyableCode?: boolean } = {},
+): string {
   if (!source) return "";
   const lines = escapeHtml(source).split(/\r?\n/);
   const out: string[] = [];
@@ -53,7 +56,12 @@ export function renderMarkdown(source: string): string {
         index += 1;
       }
       index += 1;
-      out.push(`<pre><code>${buffer.join("\n")}</code></pre>`);
+      const pre = `<pre><code>${buffer.join("\n")}</code></pre>`;
+      out.push(
+        options.copyableCode
+          ? `<div class="md-code"><button type="button" class="md-code__copy" data-copy-code aria-label="复制代码">复制代码</button>${pre}</div>`
+          : pre,
+      );
       continue;
     }
 

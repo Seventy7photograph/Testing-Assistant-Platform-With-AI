@@ -24,7 +24,7 @@ from app.exporters.base import Exporter, ExportResult
 from app.schemas.testcase import TestCase, TestCaseSuite
 
 CREATOR_NAME = "测试工程师助手平台"
-CREATOR_VERSION = "2.3.2"
+CREATOR_VERSION = "3.0.0"
 
 #: 树形结构用「逻辑图」布局，用例分支多时比思维导图更易读。
 STRUCTURE_CLASS = "org.xmind.ui.logic.right"

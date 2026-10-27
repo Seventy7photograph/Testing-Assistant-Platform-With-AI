@@ -1,17 +1,14 @@
-"""外部系统集成（架构预留，V1.0 不实现具体逻辑）。
-
-设计动机：禅道/Jira 的差异（字段名、鉴权、分页）必须收敛在适配器内部，
-否则后期每接一个平台就要改一次主干代码。
-"""
+"""外部系统同步适配器（v3.0：Jira / 禅道）。"""
 from app.integrations.base import (
     INTEGRATION_REGISTRY,
     ExternalSyncAdapter,
-    JiraAdapter,
     SyncResult,
-    ZentaoAdapter,
     available_integrations,
+    build_adapter,
     get_adapter,
 )
+from app.integrations.jira import JiraAdapter
+from app.integrations.zentao import ZentaoAdapter
 
 __all__ = [
     "INTEGRATION_REGISTRY",
@@ -20,5 +17,6 @@ __all__ = [
     "SyncResult",
     "ZentaoAdapter",
     "available_integrations",
+    "build_adapter",
     "get_adapter",
 ]

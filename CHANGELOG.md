@@ -4,6 +4,62 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)：`MAJOR.MINOR.PATCH`。
 
+## [3.0.0] - 2026-10-27 · AI 测试平台化与只读知识助手（V3.0 + V3.1 合并）
+
+### Added
+
+- **项目与租户地基**：新增 `Project`、项目级仓储分区、可选 `X-API-Key` 鉴权、
+  文档/用例/任务配额、项目头和审计日志。默认单项目兼容 v2.x 数据目录。
+- **Jira 与禅道双向同步**：实现 `ExternalSyncAdapter` 真实 REST 适配器，支持需求拉取、
+  用例回写、状态回读、健康检查；无沙箱实例时可用 JSON fixture 完整验收。
+- **可解释模型路由**：按任务复杂度、质量与成本选择模型，决策理由、Prompt 版本和模型组合
+  进入生成/运行元数据；新增 `/llm/routing` 预览接口。
+- **受控 HTTP 执行**：只运行通过静态校验资产中的接口用例，限制目标主机、方法、超时、
+  并发、用例数与响应体大小；不执行任意 Python、shell 或下载脚本。
+- **运行治理**：新增 `Job`、`Schedule`、`AgentRun`、`ToolCall` 模型、幂等任务创建、
+  事件时间线和项目级审计查询。调度定义在 v3.0 仅登记，执行器留给 v3.2。
+- **项目级 RAG**：SQLite FTS5 知识索引覆盖文档、用例、接口规范、报告和平台帮助；
+  中文采用字符二元组检索，返回来源、版本、定位与哈希生命周期。
+- **只读 Agent 助手**：全站固定右侧栏升级为持久多轮会话，支持测试问答、新闻、
+  代码生成/修改建议和可复制代码；健康、最近资源、任务状态、今日和逾期事项仍走确定性工具，
+  工具调用全量审计。服务端限制轮次、上下文、每分钟请求、联网次数、抓取数量与正文长度。
+- **受控网页检索/抓取**：DeepSeek 自动复用 Bearer Key 调用 `/v1/tools/search`
+  与 `/v1/tools/fetch`；其他模型需显式配置兼容端点。网页正文按不可信资料进入 Prompt，
+  引用在回答底部折叠展示；不可用时明确说明原因，不伪造联网结果。
+- **仓库文档与三色视觉**：README 重构为简洁入口，功能、API、配置、FAQ、架构和设计拆分维护；
+  GitHub 页面使用纸本白、钴蓝、猩红 SVG 与真实脱敏界面截图。历史走查与验收记录移入
+  `docs/history/`。
+- **独立管理页**：项目、外部连接、运行任务、知识索引和模型设置各自成页。
+
+### Changed
+
+- 原 V3.0（AI 测试平台化）与原 V3.1（RAG 知识库与只读 Agent 助手）合并为新 v3.0.0；
+  V3.1 不再单独排期或发版。
+- 外部集成从“占位返回 501”升级为可配置实现；配置缺失时返回 409 和明确缺失项。
+- 交付工作台拆为自动化资产、执行记录、工作事项三个独立入口；
+  平台治理拆为项目、外部连接、运行任务、知识索引和模型设置。
+- 前端视觉从旧“冰川刻度”替换为 **Paper & Ink Workbench**：纸本白主画布、
+  钴蓝结构、猩红点缀、低圆角与高密度排版。
+- 按指定色板统一为纸本白 `#EFE8D6`、钴蓝 `#1C4A9C`、猩红 `#DA2E2B`；
+  猩红仅用于当前位置、焦点、运行和风险标记。
+- 移除页面常驻流程说明、重复标题、卡片副标题和多余解释性文案；
+  字段提示默认收成可聚焦的 `?`，空状态限制为最多两行。
+- 修复菜单切换抖动：移除路由离场位移动画、固定项目控件宽度并预留稳定滚动条槽。
+- 助手状态区分普通提示与真实降级；修复模型和联网成功但仅因安全提示而显示“已降级”的问题。
+
+### Security
+
+- 项目身份只从验证后的请求上下文进入业务层；跨项目知识、任务和审计默认不可见。
+- 知识文档、用户输入与外部系统正文按不可信数据处理；注入文本不能改变白名单工具策略。
+- 受控执行不持久化环境变量和敏感请求头；日志、任务摘要和 Agent 工具参数经过脱敏。
+
+### Verification
+
+- 新增 v3 定向回归覆盖项目隔离、鉴权、配额、Jira/禅道、模型路由、受控执行、
+  Job 幂等、知识生命周期、中文检索、助手引用/拒答与注入防护。
+- 全量 pytest、离线验收脚本、前端类型检查、生产构建和 Playwright 冒烟结果记录在
+  `docs/history/v3.0.0-acceptance-report.md`。
+
 ## [2.3.2] - 2026-10-27 · 受控 AI 自动派生版本与侧边抽屉
 
 ### Added
@@ -635,7 +691,8 @@
 - 使用 JSON 文件存储，不适合多实例并发部署。
 - PDF 仅支持文本型，暂不做 OCR。
 
-[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.2...HEAD
+[Unreleased]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.2...v3.0.0
 [2.3.2]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/Seventy7photograph/Testing-Assistant-Platform-With-AI/compare/v2.2.0...v2.3.0

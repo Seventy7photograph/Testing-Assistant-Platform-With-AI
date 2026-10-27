@@ -10,6 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from app.automation.pytest_generator import build_pytest_artifact
 from app.automation.validators import validate_generated_files
 from app.core.config import Settings, get_settings
+from app.core.context import get_current_project_id
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError, PayloadTooLargeError
 from app.core.logging import get_logger, sanitize_log_text
 from app.core.utils import dump_json, new_id, now_iso
@@ -49,6 +50,7 @@ class ExecutionService:
         artifact_id: str | None = None,
         run_id: str | None = None,
         work_item_id: str | None = None,
+        job_id: str | None = None,
     ) -> JobEvent:
         event = JobEvent(
             event_id=new_id("EVT-"),
@@ -58,6 +60,8 @@ class ExecutionService:
             artifact_id=artifact_id,
             run_id=run_id,
             work_item_id=work_item_id,
+            project_id=get_current_project_id(),
+            job_id=job_id or "",
             message=sanitize_log_text(message),
         )
         self.repository.job_events.save(event)

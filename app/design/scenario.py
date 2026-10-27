@@ -255,6 +255,7 @@ class ScenarioStrategy(DesignStrategy):
                 "prompt_version": response.prompt_version or PROMPT_SCENARIO_ENRICHMENT.version,
                 "model": response.model or self.context.llm.model,
                 "temperature": response.temperature,
+                "route": response.route.as_dict() if response.route else {},
                 "requirement_id": item.id,
                 "attempt": response.attempts,
                 "validation_failures": [],

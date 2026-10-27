@@ -28,7 +28,7 @@ const emit = defineEmits<{
 }>();
 
 const subtitle = computed(
-  () => props.contextLabel || "模型建议需人工决定，原资产版本保持不变",
+  () => props.contextLabel || "人工确认后应用，原版本保留",
 );
 </script>
 
@@ -47,16 +47,15 @@ const subtitle = computed(
       <header class="drawer__head">
         <span class="drawer__mark"><AppIcon name="sparkle" :size="19" /></span>
         <div>
-          <p class="calib">CONTROLLED AI WORKBENCH</p>
-          <h3>自动化受控增强</h3>
+          <h3>自动化建议</h3>
           <p>{{ subtitle }}</p>
         </div>
         <div class="spacer" />
         <button
           type="button"
           class="drawer__close"
-          title="关闭 AI 增强抽屉"
-          aria-label="关闭 AI 增强抽屉"
+          title="关闭建议抽屉"
+          aria-label="关闭建议抽屉"
           @click="emit('update:open', false)"
         >
           <AppIcon name="x" :size="17" />
@@ -90,7 +89,7 @@ const subtitle = computed(
   padding: var(--s4) var(--s5);
   border-bottom: 1px solid var(--ice-3);
   background: var(--bar-face);
-  backdrop-filter: blur(14px);
+  backdrop-filter: none;
 }
 
 .drawer__mark {

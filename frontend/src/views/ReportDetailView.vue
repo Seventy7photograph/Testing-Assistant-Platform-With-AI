@@ -176,7 +176,7 @@ function printReport(): void {
         <WarningList :items="detail.warnings" />
       </SectionCard>
 
-      <SectionCard title="原始执行数据" sub="报告只做归纳，不修改输入" icon="file">
+      <SectionCard title="原始执行数据" icon="file">
         <template #actions>
           <el-button size="small" @click="showSource = !showSource">
             {{ showSource ? "收起" : "展开" }}
@@ -184,7 +184,7 @@ function printReport(): void {
         </template>
         <pre v-if="showSource" class="source pre">{{ detail.source_data }}</pre>
         <FieldHint v-else>
-          原文 {{ detail.source_data.length }} 字。展开可核对报告里的每个数字是否来自这份输入。
+          原文 {{ detail.source_data.length }} 字。
         </FieldHint>
       </SectionCard>
     </template>

@@ -82,12 +82,8 @@ const short = computed(() => {
   width: 92px;
   height: 92px;
   justify-content: center;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 34% 26%,
-    var(--seal-face-hi),
-    var(--seal-face-lo)
-  );
+  border-radius: var(--radius);
+  background: var(--ice-2);
   border: 1px solid currentColor;
   box-shadow: inset 0 0 0 4px var(--seal-ring);
 }

@@ -3,14 +3,51 @@ import { computed } from "vue";
 
 import { renderMarkdown } from "@/utils/markdown";
 
-const props = defineProps<{ source: string; streaming?: boolean }>();
-const html = computed(() => renderMarkdown(props.source));
+const props = defineProps<{
+  source: string;
+  streaming?: boolean;
+  copyableCode?: boolean;
+}>();
+const html = computed(() =>
+  renderMarkdown(props.source, { copyableCode: props.copyableCode }),
+);
+
+function fallbackCopy(text: string): void {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+async function copyCode(event: MouseEvent): Promise<void> {
+  const target = event.target as HTMLElement | null;
+  const button = target?.closest<HTMLButtonElement>("[data-copy-code]");
+  if (!button) return;
+  const code = button.parentElement?.querySelector("code")?.textContent ?? "";
+  if (!code) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(code);
+    else fallbackCopy(code);
+    button.textContent = "已复制";
+    window.setTimeout(() => {
+      button.textContent = "复制代码";
+    }, 1500);
+  } catch {
+    fallbackCopy(code);
+    button.textContent = "已复制";
+  }
+}
 </script>
 
 <template>
   <div class="md">
     <!-- eslint-disable-next-line vue/no-v-html -- 内容已在 renderMarkdown 中整体转义 -->
-    <div class="md__body" v-html="html" />
+    <div class="md__body" v-html="html" @click="copyCode" />
     <span v-if="streaming" class="md__caret" aria-hidden="true" />
   </div>
 </template>
@@ -105,6 +142,36 @@ const html = computed(() => renderMarkdown(props.source));
   background: var(--ice-1);
   border: 1px solid var(--ice-3);
   border-radius: var(--radius);
+}
+
+.md__body :deep(.md-code) {
+  position: relative;
+  margin-bottom: var(--s3);
+}
+
+.md__body :deep(.md-code pre) {
+  margin-bottom: 0;
+  padding-top: 34px;
+}
+
+.md__body :deep(.md-code__copy) {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  right: 6px;
+  padding: 3px 7px;
+  border: 1px solid var(--ice-4);
+  border-radius: 4px;
+  background: var(--ice-0);
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.md__body :deep(.md-code__copy:hover) {
+  color: var(--ink-1);
+  border-color: var(--glacier);
 }
 
 .md__body :deep(pre code) {

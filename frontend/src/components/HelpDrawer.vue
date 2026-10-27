@@ -80,8 +80,55 @@ const topics: Record<string, Topic> = {
       { label: "留痕", text: "存的是正文 + 指标快照 + 原始输入，删除后不可恢复。" },
     ],
   },
+  automation: {
+    title: "自动化资产",
+    intro: "把接口用例生成可审查的 pytest 资产。",
+    points: [
+      { label: "版本", text: "同一规范重新生成会产生新版本，原版本保留。" },
+      { label: "门禁", text: "未通过语法、危险调用或密钥扫描的资产不可下载。" },
+    ],
+  },
+  executions: {
+    title: "执行记录",
+    intro: "回收 JUnit 结果，并把失败送入报告或工作事项。",
+    points: [
+      { label: "未匹配", text: "未知 case_id 会保留在未匹配结果中。" },
+      { label: "报告", text: "运行数据可直接送入报告工作台。" },
+    ],
+  },
+  "work-items": {
+    title: "工作事项",
+    intro: "记录待办、跟进和提醒。",
+    points: [
+      { label: "隐私", text: "工作事项不进入知识索引或助手上下文。" },
+      { label: "提醒", text: "提醒只在页面打开时生效。" },
+    ],
+  },
+  projects: {
+    title: "项目",
+    intro: "项目和审计按项目边界隔离。",
+    points: [{ label: "隔离", text: "文档、用例、执行、报告和知识均跟随当前项目。" }],
+  },
+  integrations: {
+    title: "外部连接",
+    intro: "连接 Jira 或禅道，双向同步需求与用例。",
+    points: [{ label: "凭据", text: "Token 仅从环境变量读取。" }],
+  },
+  jobs: {
+    title: "运行任务",
+    intro: "查看受控执行、任务状态和助手工具调用。",
+    points: [{ label: "审计", text: "任务事件与工具调用均带项目和 trace ID。" }],
+  },
+  knowledge: {
+    title: "知识索引",
+    intro: "管理项目知识检索与模型路由。",
+    points: [
+      { label: "引用", text: "检索结果保留来源、版本和行定位。" },
+      { label: "边界", text: "当前状态由确定性工具提供，不经知识库推断。" },
+    ],
+  },
   settings: {
-    title: "大模型与阈值",
+    title: "模型设置",
     intro: "所有模型任务共用同一份大模型配置；判定阈值只作用于报告的发版结论。",
     points: [
       { label: "优先级", text: "界面保存的覆盖 > .env 基线。可以逐项恢复，也可以一键回到 .env。" },
@@ -137,7 +184,7 @@ const topic = computed<Topic>(() => topics[ui.helpTopic] ?? topics.dashboard);
         <p class="help__engineNote">
           {{
             health.llmReady
-              ? `配置来源：${health.llmSourceLabel}。可在「大模型与阈值」页修改并立即生效。`
+              ? `配置来源：${health.llmSourceLabel}。可在「模型设置」页修改并立即生效。`
               : health.degradedReason ||
                 "未配置 LLM_API_KEY：用例链路会自动降级为纯规则引擎，报告链路需要配置后可用。"
           }}

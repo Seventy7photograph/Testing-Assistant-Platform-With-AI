@@ -363,15 +363,12 @@ async function remove(): Promise<void> {
             </el-table-column>
             <el-table-column label="覆盖" width="88" align="right">
               <template #default="{ row }">
-                <Tip :text="`合并用例按它覆盖到的全部方法重新计数，避免跨方法合并后被少算。`">
+                <Tip text="合并用例覆盖的全部方法">
                   <span class="mono num">{{ row.covered }}</span>
                 </Tip>
               </template>
             </el-table-column>
           </el-table>
-          <FieldHint>
-            两列口径不同：左边是「这条用例由哪种方法生成」，右边是「这条用例覆盖了哪些方法」。合并后两者会有差异。
-          </FieldHint>
         </SectionCard>
 
         <SectionCard title="分布" sub="优先级与模块 Top 8" icon="layers">
@@ -445,7 +442,7 @@ async function remove(): Promise<void> {
         <EmptyState
           icon="doc"
           title="找不到对应的结构化需求"
-          reason="这份用例集的源需求可能已被删除，或从未解析。用例明细与统计不受影响，仍可正常导出。"
+          reason="源需求不可用，用例仍可导出。"
           action-label="前往文档与需求"
           @action="router.push('/documents')"
         />
@@ -474,7 +471,7 @@ async function remove(): Promise<void> {
         </template>
         <div class="gaps">
           <p class="gaps__hint">
-            缺口按「需求条目 + 具体目标」定位；补齐后重新生成用例即可，覆盖率会同步刷新。
+            补齐后重新生成用例。
           </p>
           <ul class="gaps__list">
             <li v-for="(gap, index) in coverageOpen?.gaps ?? []" :key="`${gap.requirement_id}-${index}`">
@@ -685,7 +682,7 @@ async function remove(): Promise<void> {
   height: 100%;
   border-radius: 3px;
   background: var(--glacier);
-  transition: width var(--dur-slow) var(--ease);
+  transition: none;
 }
 
 .dist__list li:last-child .num,

@@ -39,7 +39,7 @@ onMounted(async () => {
       title="总览数据没有取到"
       :message="state.error.value"
       :code="state.code.value"
-      recovery="确认后端已启动（python run.py），然后重试。界面其余功能不依赖这一页。"
+      recovery="确认服务已启动后重试。"
       @retry="state.run().then((r) => r && (data = r))"
     />
 
@@ -113,7 +113,6 @@ onMounted(async () => {
             <span class="lane__mark"><AppIcon name="sparkle" :size="19" /></span>
             <div>
               <h2 class="lane__title">用例生成</h2>
-              <p class="lane__sub">需求文档 → 结构化需求 → 等价类 / 边界值 / 场景法 → 用例集</p>
             </div>
           </header>
 
@@ -156,7 +155,6 @@ onMounted(async () => {
             <span class="lane__mark"><AppIcon name="chart" :size="19" /></span>
             <div>
               <h2 class="lane__title">测试报告</h2>
-              <p class="lane__sub">执行数据 → 确定性指标 → AI 归纳与建议 → 存档 / 趋势 / 导出</p>
             </div>
           </header>
 
@@ -186,8 +184,8 @@ onMounted(async () => {
           </div>
 
           <p v-if="!data.report.llm_configured" class="lane__warn">
-            未配置大模型：指标仍可计算并导出，但 AI 归纳不可用。去
-            <RouterLink to="/settings">大模型与阈值</RouterLink> 填写 API Key。
+            未配置大模型：指标仍可计算并导出，但报告正文不可用。去
+            <RouterLink to="/settings">模型设置</RouterLink> 填写 API Key。
           </p>
         </article>
       </div>
@@ -196,8 +194,7 @@ onMounted(async () => {
         <div class="delivery-band__head">
           <span class="delivery-band__mark"><AppIcon name="route" :size="19" /></span>
           <div>
-            <h2 class="lane__title">交付工作台</h2>
-            <p class="lane__sub">接口用例 → pytest 资产 → JUnit 结果 → 跟进事项与提醒</p>
+            <h2 class="lane__title">工程交付</h2>
           </div>
           <div class="spacer" />
           <span class="chip" :class="data.counts.work_items_overdue ? 'chip--fail' : 'chip--ghost'">
@@ -221,10 +218,14 @@ onMounted(async () => {
             <span class="label">最近跟进</span>
             <span>{{ data.recent.work_items[0]?.title || "还没有待办，记下一条下一步。" }}</span>
           </div>
-          <el-button type="primary" @click="router.push('/workspace')">
-            <AppIcon name="route" :size="15" />
-            打开交付工作台
-          </el-button>
+          <div class="delivery-band__actions">
+            <el-button type="primary" @click="router.push('/automation')">
+              <AppIcon name="route" :size="15" />
+              自动化资产
+            </el-button>
+            <el-button text @click="router.push('/executions')">执行记录</el-button>
+            <el-button text @click="router.push('/work-items')">工作事项</el-button>
+          </div>
         </div>
       </section>
 
@@ -248,7 +249,7 @@ onMounted(async () => {
             v-else
             icon="doc"
             title="还没有上传过需求文档"
-            reason="上传 .docx / .pdf / .md / .txt 后会自动解析成结构化需求，作为用例生成的输入。"
+            reason="上传需求文档开始解析。"
             action-label="去上传"
             @action="router.push('/generate')"
           />
@@ -278,7 +279,7 @@ onMounted(async () => {
             v-else
             icon="cases"
             title="还没有生成过用例集"
-            reason="在「用例生成」里粘贴或上传需求，选择设计方法后即可生成，并导出 Excel 四表。"
+            reason="选择需求与设计方法后生成。"
             action-label="去生成"
             @action="router.push('/generate')"
           />
@@ -306,7 +307,7 @@ onMounted(async () => {
             v-else
             icon="chart"
             title="还没有生成过测试报告"
-            reason="把跑完的执行数据（JSON 或纯文本）粘贴进报告工作台，几秒内得到一份可归档的报告。"
+            reason="粘贴执行数据生成报告。"
             action-label="去生成报告"
             @action="router.push('/report')"
           />
@@ -386,30 +387,14 @@ onMounted(async () => {
   flex-direction: column;
   gap: var(--s4);
   padding: var(--s5);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   border: 1px solid var(--ice-3);
-  background: linear-gradient(158deg, var(--ice-0) 0%, var(--lane-wash) 100%);
+  background: var(--ice-0);
   overflow: hidden;
 }
 
-.lane--case {
-  --lane-wash: color-mix(in srgb, var(--glacier) 9%, var(--ice-1));
-}
-
-.lane--report {
-  --lane-wash: color-mix(in srgb, var(--glacier) 16%, var(--ice-1));
-}
-
 .lane::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    520px circle at 108% -12%,
-    color-mix(in srgb, var(--glacier) 12%, transparent),
-    transparent 62%
-  );
-  pointer-events: none;
+  display: none;
 }
 
 .lane__head {
@@ -425,8 +410,8 @@ onMounted(async () => {
   width: 40px;
   height: 40px;
   flex: none;
-  border-radius: 13px;
-  background: var(--ice-0);
+  border-radius: var(--radius);
+  background: var(--ice-2);
   border: 1px solid var(--ice-3);
   color: var(--glacier-deep);
 }
@@ -497,9 +482,9 @@ onMounted(async () => {
 /* --- 交付闭环 ------------------------------------------------ */
 .delivery-band {
   padding: var(--s4) var(--s5);
-  border: 1px solid var(--glacier-tint);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(106deg, var(--ice-0), var(--glacier-wash));
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: var(--ice-0);
 }
 
 .delivery-band__head {
@@ -515,7 +500,7 @@ onMounted(async () => {
   height: 38px;
   flex: none;
   border: 1px solid var(--glacier-tint);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--ice-0);
   color: var(--glacier-deep);
 }
@@ -548,6 +533,13 @@ onMounted(async () => {
   font-size: var(--fs-sm);
 }
 
+.delivery-band__actions {
+  display: flex;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
 @media (max-width: 900px) {
   .delivery-band__facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -557,7 +549,7 @@ onMounted(async () => {
     grid-column: 1 / -1;
   }
 
-  .delivery-band__facts :deep(.el-button) {
+  .delivery-band__actions {
     grid-column: 1 / -1;
     justify-self: start;
   }

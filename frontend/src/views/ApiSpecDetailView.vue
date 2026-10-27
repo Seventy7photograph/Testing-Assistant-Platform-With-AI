@@ -185,8 +185,8 @@ async function reviewWithAi(): Promise<void> {
   if (!spec.value || reviewRunning.value || reviewCompleted.value) return;
   const calls = Math.min(6, Math.ceil(spec.value.stats.operations / 12));
   const confirmed = await confirmAction({
-    title: "AI 只读复核",
-    message: `将最多调用大模型 ${calls} 次，检查 ${spec.value.stats.operations} 个 operation 与现有用例摘要。模型只给出建议，不会改写路径、参数、schema 断言或用例。`,
+    title: "只读复核",
+    message: `最多调用模型 ${calls} 次，只给出建议，不改写用例。`,
     confirmText: "开始复核",
   });
   if (!confirmed) return;
@@ -197,14 +197,14 @@ async function reviewWithAi(): Promise<void> {
     if (reviewPollTimer !== undefined) window.clearTimeout(reviewPollTimer);
     if (result.meta.used) {
       notice.success(
-        "AI 复核完成",
+        "只读复核完成",
         `${result.findings.length} 条只读建议 · 覆盖 ${result.meta.reviewed_operations} 个 operation`,
       );
     } else {
-      notice.info("AI 复核未完成", result.meta.warnings[0] || "确定性用例保持不变。");
+      notice.info("只读复核未完成", result.meta.warnings[0] || "确定性用例保持不变。");
     }
   } catch (err) {
-    notice.error("AI 复核失败", (err as Error).message);
+    notice.error("只读复核失败", (err as Error).message);
   } finally {
     reviewing.value = false;
   }
@@ -279,15 +279,15 @@ function expectedText(value: unknown): string {
             :disabled="reviewRunning || reviewCompleted"
             :title="
               reviewCompleted
-                ? '当前规范已完成 AI 复核'
+                ? '当前规范已完成只读复核'
                 : reviewRunning
-                  ? 'AI 复核任务正在执行'
-                  : '可选：调用大模型只读复核，不会改写契约用例'
+                  ? '只读复核任务正在执行'
+                  : '只读复核，不改写用例'
             "
             @click="reviewWithAi"
           >
             <AppIcon name="sparkle" :size="14" />
-            {{ reviewCompleted ? "已完成 AI 复核" : reviewRunning ? "AI 复核中" : "AI 复核" }}
+            {{ reviewCompleted ? "已完成只读复核" : reviewRunning ? "只读复核中" : "只读复核" }}
           </el-button>
           <el-button size="small" :loading="exporting" @click="exportPostman">
             <AppIcon name="download" :size="14" /> Postman 2.1
@@ -428,7 +428,7 @@ function expectedText(value: unknown): string {
 
       <SectionCard
         v-if="spec.ai_review"
-        title="AI 复核建议"
+        title="只读复核建议"
         :sub="
           spec.ai_review.meta.status === 'running'
             ? '正在执行只读复核'
@@ -464,7 +464,7 @@ function expectedText(value: unknown): string {
         <WarningList :items="spec.ai_review.meta.warnings" />
 
         <p v-if="spec.ai_review.meta.status === 'running'" class="review-running">
-          复核任务仍在服务端执行，完成后本页会自动刷新结果。
+          处理中，完成后自动刷新。
         </p>
         <template v-else-if="spec.ai_review.findings.length">
           <ul class="review-list">

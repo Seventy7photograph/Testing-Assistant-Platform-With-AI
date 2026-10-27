@@ -320,7 +320,7 @@ async function exportSuite(format: string): Promise<void> {
                 type="textarea"
                 :rows="9"
                 resize="vertical"
-                placeholder="粘贴需求描述、验收标准或用户故事；越结构化，抽出的需求越准"
+                placeholder="粘贴需求、验收标准或用户故事"
               />
               <FieldHint>支持 Markdown 标题与列表；编号、字段名、取值范围会被优先识别。</FieldHint>
             </label>
@@ -495,7 +495,7 @@ async function exportSuite(format: string): Promise<void> {
         <SectionCard title="正在生成" sub="规则引擎跑方法，必要时调用大模型增强">
           <div class="pipeline" role="status" aria-live="polite">
             <span class="pipeline__rail"><i /></span>
-            <span>正在执行当前可用阶段，未完成的阶段不会提前标记完成</span>
+            <span>生成中</span>
             <b class="mono">{{ formatDuration(elapsedLive) }}</b>
           </div>
           <div class="grid grid--4">
@@ -606,7 +606,7 @@ async function exportSuite(format: string): Promise<void> {
         <EmptyState
           icon="sparkle"
           title="左侧送检后，这里会显示用例集"
-          reason="平台会先用规则引擎抽取结构化需求，再按选中的设计方法生成用例，最后去重、排序、按方法编号。"
+          reason="填写需求并选择设计方法。"
           action-label="加载示例需求"
           @action="
             mode = 'text';
@@ -733,8 +733,8 @@ async function exportSuite(format: string): Promise<void> {
   inset-block: 0;
   width: 34%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--glacier), transparent);
-  animation: pipeline-scan 1.5s linear infinite;
+  background: var(--signal);
+  animation: pipeline-scan 1.4s var(--ease-inout) infinite;
 }
 
 .pipeline b {
@@ -908,17 +908,17 @@ async function exportSuite(format: string): Promise<void> {
 }
 
 .methods {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
 .method {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--s2);
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 8px;
   border: 1px solid var(--ice-3);
   border-radius: var(--radius);
   background: var(--ice-0);
@@ -975,9 +975,7 @@ async function exportSuite(format: string): Promise<void> {
 }
 
 .method__note {
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--ink-3);
+  display: none;
 }
 
 .switches {

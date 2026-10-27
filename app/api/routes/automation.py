@@ -9,6 +9,7 @@ from app.api.responses import build_download_response
 from app.schemas.api import ApiResponse, ok
 from app.schemas.execution import (
     AutomationArtifact,
+    AutomationArtifactCaseList,
     AutomationArtifactSummary,
     AutomationCreateRequest,
     JobEvent,
@@ -63,6 +64,18 @@ async def list_automation_artifacts(
 )
 async def get_automation_artifact(artifact_id: str, service: AutomationServiceDep) -> dict:
     return ok(service.get_artifact(artifact_id))
+
+
+@router.get(
+    "/automation/artifacts/{artifact_id}/cases",
+    response_model=ApiResponse[AutomationArtifactCaseList],
+    summary="读取自动化资产包含的可执行用例",
+)
+async def list_automation_artifact_cases(
+    artifact_id: str,
+    service: AutomationServiceDep,
+) -> dict:
+    return ok(service.artifact_cases(artifact_id))
 
 
 @router.get("/automation/artifacts/{artifact_id}/download", summary="下载自动化资产 zip")

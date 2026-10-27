@@ -91,6 +91,27 @@ class AutomationCreateRequest(BaseModel):
     case_ids: list[str] = Field(default_factory=list, max_length=2000)
 
 
+class AutomationCaseSummary(BaseModel):
+    case_id: str
+    title: str
+    method: str
+    path: str
+    operation_id: str
+    category: Literal["positive", "negative", "boundary", "security", "contract"]
+    priority: str
+    risk: Literal["read", "write", "destructive"]
+    required_variables: list[str] = Field(default_factory=list)
+    assertion_count: int = 0
+    manual_assertion_count: int = 0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AutomationArtifactCaseList(BaseModel):
+    artifact_id: str
+    cases: list[AutomationCaseSummary] = Field(default_factory=list)
+    missing_case_ids: list[str] = Field(default_factory=list)
+
+
 class CaseResult(BaseModel):
     case_id: str | None = None
     name: str = ""
@@ -184,7 +205,9 @@ class JobEvent(BaseModel):
 
 __all__ = [
     "AutomationArtifact",
+    "AutomationArtifactCaseList",
     "AutomationArtifactSummary",
+    "AutomationCaseSummary",
     "AutomationCreateRequest",
     "CaseResult",
     "GeneratedFile",

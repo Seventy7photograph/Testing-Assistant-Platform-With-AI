@@ -79,6 +79,11 @@ class ControlledHttpExecutor:
                 "未通过静态安全校验的资产不能执行。",
                 detail={"artifact_id": artifact.artifact_id, "status": artifact.status},
             )
+        if not request.case_ids and not request.allow_all_cases:
+            raise BadRequestError(
+                "请指定要执行的用例 ID；执行全部用例必须显式确认。",
+                detail={"artifact_id": artifact.artifact_id},
+            )
         allowed_ids = list(dict.fromkeys(request.case_ids or artifact.case_ids))
         extras = [item for item in allowed_ids if item not in set(artifact.case_ids)]
         if extras:
@@ -216,13 +221,20 @@ class ControlledHttpExecutor:
         execution = case.execution.model_dump(mode="json")
         resolved = self._resolve(execution, environment)
         if self._contains_placeholder(resolved):
+            missing_variables = sorted(
+                set(_PLACEHOLDER_RE.findall(json.dumps(resolved, ensure_ascii=False)))
+            )
             return _CaseOutcome(
                 result=CaseResult(
                     case_id=case.case_id,
                     name=case.title,
-                    status="error",
+                    status="skipped",
                     operation_id=case.operation_id,
-                    message="执行环境缺少必需变量；为避免发送占位符，请求未发出。",
+                    message=(
+                        "执行环境缺少变量："
+                        + ("、".join(missing_variables) or "未知")
+                        + "；为避免发送占位符，请求未发出。"
+                    ),
                 ),
                 duration_ms=_milliseconds(time.perf_counter() - started),
             )
@@ -428,6 +440,11 @@ def _values_at_path(payload: Any, path: str) -> list[Any]:
 
 
 def _assert_json(assertion: ApiAssertion, values: list[Any]) -> list[str]:
+    if assertion.operator == "nullable":
+        # nullable 表示“可为 null”，不是“必须为 null”。类型断言负责校验非空值。
+        if assertion.expected is False and any(item is None for item in values):
+            return [f"{assertion.path} 不允许为 null"]
+        return []
     if assertion.operator == "exists":
         return [] if values and all(item is not None for item in values) else ["字段不存在"]
     if not values:

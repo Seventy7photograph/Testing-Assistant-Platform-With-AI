@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 
 import { api } from "@/api";
@@ -41,6 +41,7 @@ const {
   externalIds,
   artifactId,
   caseIds,
+  runAllConfirmed,
   environment,
   executionPhase,
   executionStartedAt,
@@ -61,9 +62,20 @@ const agentRuns = ref<AgentRun[]>([]);
 const toolCalls = ref<ToolCall[]>([]);
 const knowledge = ref<KnowledgeIndexStats | null>(null);
 const routes = ref<ModelRouteInfo[]>([]);
+const historyExpanded = ref(false);
+const scheduleBusy = ref(false);
+const scheduleForm = reactive({
+  name: "",
+  job_kind: "execution.http",
+  interval_seconds: 3600,
+  enabled: true,
+});
 
 const activeProject = computed(() => context.value?.project ?? projectStore.activeProject);
 const openJobs = computed(() => jobs.value.filter((item) => ["queued", "running"].includes(item.status)));
+const visibleJobs = computed(() =>
+  historyExpanded.value ? jobs.value : jobs.value.slice(0, 5),
+);
 const executionRunning = computed(() => executionPhase.value === "running");
 const executionResultJson = computed(() =>
   executionResult.value ? JSON.stringify(executionResult.value, null, 2) : "",
@@ -74,6 +86,21 @@ const executionStatusLabel = computed(() => {
   if (executionPhase.value === "failed") return "执行失败";
   return "待执行";
 });
+const selectedCaseCount = computed(
+  () => caseIds.value.split(",").map((item) => item.trim()).filter(Boolean).length,
+);
+const executionReady = computed(
+  () =>
+    Boolean(artifactId.value.trim())
+    && (selectedCaseCount.value > 0 || runAllConfirmed.value),
+);
+
+watch(
+  artifactId,
+  (next, previous) => {
+    if (previous && next !== previous) runAllConfirmed.value = false;
+  },
+);
 
 function setFeedback(text: string, failure = false) {
   if (failure) {
@@ -176,6 +203,17 @@ async function execute() {
     setFeedback("请先填写自动化资产 ID。", true);
     return;
   }
+  const selectedIds = caseIds.value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!selectedIds.length && !runAllConfirmed.value) {
+    setFeedback(
+      "请填写要执行的用例 ID，或勾选“确认执行全部用例”。全量执行可能包含写入和破坏性用例。",
+      true,
+    );
+    return;
+  }
   let env: Record<string, string>;
   try {
     const parsed = environment.value.trim() ? JSON.parse(environment.value) : {};
@@ -199,8 +237,9 @@ async function execute() {
   try {
     const result = await api.executeHttp({
       artifact_id: selectedArtifact,
-      case_ids: caseIds.value.split(",").map((item) => item.trim()).filter(Boolean),
+      case_ids: selectedIds,
       environment: env,
+      allow_all_cases: runAllConfirmed.value,
       idempotency_key: `ui-${selectedArtifact}-${requestKey}`,
     });
     draft.finishExecution(revision, result);
@@ -244,6 +283,27 @@ async function cancelJob(job: Job) {
     setFeedback("任务已取消。");
   } catch (err) {
     setFeedback((err as Error).message, true);
+  }
+}
+
+async function createSchedule() {
+  if (scheduleBusy.value || !scheduleForm.name.trim()) return;
+  scheduleBusy.value = true;
+  try {
+    const created = await api.createSchedule({
+      name: scheduleForm.name.trim(),
+      job_kind: scheduleForm.job_kind.trim(),
+      interval_seconds: Math.max(30, Number(scheduleForm.interval_seconds) || 3600),
+      enabled: scheduleForm.enabled,
+    });
+    schedules.value = await api.schedules();
+    scheduleForm.name = "";
+    notice.info("调度定义已登记", `${created.name} · ${created.job_kind}`);
+    setFeedback("调度定义已保存；当前版本不会自动触发执行。");
+  } catch (err) {
+    setFeedback(`登记调度失败：${(err as Error).message}`, true);
+  } finally {
+    scheduleBusy.value = false;
   }
 }
 
@@ -414,9 +474,24 @@ onMounted(async () => {
             用例 ID
             <input
               v-model="caseIds"
-              placeholder="留空执行资产内全部用例；多个用逗号分隔"
+              placeholder="填写具体用例 ID；多个用逗号分隔"
               :disabled="executionRunning"
             />
+          </label>
+          <p class="hint">
+            {{
+              selectedCaseCount
+                ? `已指定 ${selectedCaseCount} 条用例。`
+                : "未指定用例时，必须显式确认全量执行。"
+            }}
+          </p>
+          <label class="execution-confirm">
+            <input
+              v-model="runAllConfirmed"
+              type="checkbox"
+              :disabled="executionRunning || selectedCaseCount > 0"
+            />
+            <span>确认执行资产内全部用例，包括写入和破坏性操作</span>
           </label>
           <label>
             环境变量 JSON
@@ -430,7 +505,7 @@ onMounted(async () => {
           <button
             type="submit"
             class="btn btn--primary"
-            :disabled="executionRunning || !artifactId.trim()"
+            :disabled="executionRunning || !executionReady"
             :aria-busy="executionRunning"
           >
             <span v-if="executionRunning" class="execution-spinner" aria-hidden="true" />
@@ -467,9 +542,12 @@ onMounted(async () => {
         </section>
       </div>
       <section class="stack">
-        <h3>任务历史</h3>
+        <div class="section-line">
+          <h3>任务历史</h3>
+          <span class="mono">{{ jobs.length }} 条</span>
+        </div>
         <div class="rows">
-          <div v-for="job in jobs" :key="job.job_id" class="row">
+          <div v-for="job in visibleJobs" :key="job.job_id" class="row">
             <span class="mono">{{ job.job_id }}</span>
             <span>{{ job.kind }}</span>
             <span class="state" :data-state="job.status">{{ job.status }}</span>
@@ -477,9 +555,41 @@ onMounted(async () => {
             <time>{{ formatTime(job.created_at) }}</time>
           </div>
         </div>
+        <button
+          v-if="jobs.length > 5"
+          type="button"
+          class="btn history-toggle"
+          @click="historyExpanded = !historyExpanded"
+        >
+          {{ historyExpanded ? "收起任务历史" : `展开全部 ${jobs.length} 条` }}
+          <AppIcon :name="historyExpanded ? 'chevronDown' : 'chevronRight'" :size="14" />
+        </button>
       </section>
       <section class="stack">
-        <h3>调度定义</h3>
+        <div class="section-line">
+          <h3>调度定义</h3>
+          <span class="state" data-state="queued">仅登记</span>
+        </div>
+        <p class="hint">
+          当前版本只保存调度计划，不会自动执行任务。此前没有登记入口，所以“暂无调度”不是故障。
+        </p>
+        <form class="schedule-form" @submit.prevent="createSchedule">
+          <label>
+            名称
+            <input v-model="scheduleForm.name" placeholder="每日接口回归" required maxlength="100" />
+          </label>
+          <label>
+            任务类型
+            <input v-model="scheduleForm.job_kind" required maxlength="80" />
+          </label>
+          <label>
+            间隔秒数
+            <input v-model.number="scheduleForm.interval_seconds" type="number" min="30" required />
+          </label>
+          <button type="submit" class="btn btn--primary" :disabled="scheduleBusy || !scheduleForm.name">
+            {{ scheduleBusy ? "登记中…" : "登记调度" }}
+          </button>
+        </form>
         <div v-if="schedules.length" class="rows">
           <div v-for="schedule in schedules" :key="schedule.schedule_id" class="row">
             <span>{{ schedule.name }}</span>
@@ -490,7 +600,7 @@ onMounted(async () => {
             </span>
           </div>
         </div>
-        <p v-else class="empty">暂无调度。</p>
+        <p v-else class="empty">尚未登记调度定义。登记后仍由外部调度器触发。</p>
       </section>
     </section>
 
@@ -697,6 +807,37 @@ h3 {
   font-weight: 600;
 }
 
+.section-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.section-line > .mono {
+  color: var(--ink-3);
+  font-size: 10px;
+}
+
+.history-toggle {
+  align-self: flex-start;
+}
+
+.schedule-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.8fr) 120px auto;
+  gap: var(--s2);
+  align-items: end;
+}
+
+.schedule-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -858,6 +999,26 @@ h3 {
   gap: 5px;
   font-size: var(--fs-xs);
   color: var(--ink-3);
+}
+
+.form label.execution-confirm {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 9px;
+  border: 1px solid var(--warn-line, #b88642);
+  border-radius: var(--radius);
+  background: var(--warn-wash);
+  color: var(--warn, #8c6428);
+  line-height: 1.55;
+}
+
+.execution-confirm input {
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--signal);
 }
 
 input,
@@ -1025,6 +1186,9 @@ textarea {
   .split {
     grid-template-columns: 1fr;
   }
+  .schedule-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
   .readouts {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1050,6 +1214,9 @@ textarea {
   .inline-form input,
   .inline-form select {
     width: 100%;
+  }
+  .schedule-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

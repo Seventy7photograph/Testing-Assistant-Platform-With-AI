@@ -185,6 +185,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/api-specs/import" `
 | POST | `/automation/artifacts` | 生成版本化 pytest 资产 |
 | GET | `/automation/artifacts` | 资产列表 |
 | GET | `/automation/artifacts/{artifact_id}` | 资产详情与安全校验 |
+| GET | `/automation/artifacts/{artifact_id}/cases` | 资产内用例摘要、风险与所需变量 |
 | GET | `/automation/artifacts/{artifact_id}/download` | 下载通过校验的 zip |
 | DELETE | `/automation/artifacts/{artifact_id}` | 删除未关联执行的资产 |
 | POST | `/automation/runs/import` | 导入 JUnit XML |
@@ -216,9 +217,13 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/api-specs/import" `
     "BASE_URL": "https://example.invalid"
   },
   "base_url": "https://example.invalid",
+  "allow_all_cases": false,
   "idempotency_key": "demo-run-001"
 }
 ```
+
+`case_ids=[]` 时必须显式设置 `allow_all_cases=true`。缺少路径或请求变量的用例会记为
+`skipped`，不会发送包含 `{{变量}}` 的请求。
 
 ## 受控 AI 建议
 

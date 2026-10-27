@@ -25,6 +25,7 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
 
   const artifactId = ref("");
   const caseIds = ref("");
+  const runAllConfirmed = ref(false);
   const environment = ref(DEFAULT_ENVIRONMENT);
   const executionPhase = ref<ExecutionPhase>("idle");
   const executionStartedAt = ref("");
@@ -52,6 +53,7 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
     externalIds.value = "";
     artifactId.value = "";
     caseIds.value = "";
+    runAllConfirmed.value = false;
     environment.value = DEFAULT_ENVIRONMENT;
     executionPhase.value = "idle";
     executionStartedAt.value = "";
@@ -67,6 +69,7 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
     executionRevision += 1;
     artifactId.value = normalized;
     caseIds.value = "";
+    runAllConfirmed.value = false;
     executionPhase.value = "idle";
     executionStartedAt.value = "";
     executionError.value = "";
@@ -109,6 +112,7 @@ export const usePlatformDraftStore = defineStore("platform-draft", () => {
     externalIds,
     artifactId,
     caseIds,
+    runAllConfirmed,
     environment,
     executionPhase,
     executionStartedAt,

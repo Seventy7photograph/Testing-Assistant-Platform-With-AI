@@ -10,6 +10,7 @@ import type {
   ApiSpec,
   ApiSpecSummary,
   AutomationArtifact,
+  AutomationArtifactCaseList,
   AutomationArtifactSummary,
   AutomationAIKind,
   AutomationAIReview,
@@ -175,6 +176,7 @@ export const api = {
   executeHttp: (payload: {
     artifact_id: string;
     case_ids?: string[];
+    allow_all_cases?: boolean;
     environment?: Record<string, string>;
     base_url?: string;
     idempotency_key?: string;
@@ -253,6 +255,10 @@ export const api = {
     }),
   automationArtifact: (artifactId: string) =>
     get<AutomationArtifact>(`/automation/artifacts/${encodeURIComponent(artifactId)}`),
+  automationArtifactCases: (artifactId: string) =>
+    get<AutomationArtifactCaseList>(
+      `/automation/artifacts/${encodeURIComponent(artifactId)}/cases`,
+    ),
   createAutomationArtifact: (specId: string, caseIds: string[] = []) =>
     post<AutomationArtifact>("/automation/artifacts", {
       spec_id: specId,

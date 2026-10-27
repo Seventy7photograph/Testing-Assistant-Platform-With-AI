@@ -596,6 +596,27 @@ export interface AutomationArtifact extends Omit<
   files: GeneratedFile[];
 }
 
+export interface AutomationCaseSummary {
+  case_id: string;
+  title: string;
+  method: string;
+  path: string;
+  operation_id: string;
+  category: "positive" | "negative" | "boundary" | "security" | "contract";
+  priority: string;
+  risk: "read" | "write" | "destructive";
+  required_variables: string[];
+  assertion_count: number;
+  manual_assertion_count: number;
+  warnings: string[];
+}
+
+export interface AutomationArtifactCaseList {
+  artifact_id: string;
+  cases: AutomationCaseSummary[];
+  missing_case_ids: string[];
+}
+
 export interface CaseResult {
   case_id: string | null;
   name: string;

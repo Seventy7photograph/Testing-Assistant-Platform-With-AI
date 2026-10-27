@@ -7,6 +7,7 @@ import type {
   ApiSpecSummary,
   AutomationAIKind,
   AutomationArtifact,
+  AutomationCaseSummary,
   AutomationArtifactSummary,
   JobEvent,
   TestRun,
@@ -52,7 +53,11 @@ const artifacts = ref<AutomationArtifactSummary[]>([]);
 const selectedSpecId = ref("");
 const selectedArtifactId = ref("");
 const selectedArtifact = ref<AutomationArtifact | null>(null);
+const artifactCases = ref<AutomationCaseSummary[]>([]);
+const missingCaseIds = ref<string[]>([]);
 const caseIdFilter = ref("");
+const caseMethodFilter = ref("all");
+const caseRiskFilter = ref("all");
 
 const runs = ref<TestRunSummary[]>([]);
 const selectedRunId = ref("");
@@ -104,10 +109,19 @@ const failedResults = computed(() =>
     : [],
 );
 
-const filteredCaseIds = computed(() => {
-  const rows = selectedArtifact.value?.case_ids ?? [];
+const filteredArtifactCases = computed(() => {
   const query = caseIdFilter.value.trim().toLowerCase();
-  return query ? rows.filter((item) => item.toLowerCase().includes(query)) : rows;
+  return artifactCases.value.filter((item) => {
+    if (caseMethodFilter.value !== "all" && item.method !== caseMethodFilter.value) return false;
+    if (caseRiskFilter.value !== "all" && item.risk !== caseRiskFilter.value) return false;
+    if (!query) return true;
+    return (
+      item.case_id.toLowerCase().includes(query)
+      || item.title.toLowerCase().includes(query)
+      || item.path.toLowerCase().includes(query)
+      || item.operation_id.toLowerCase().includes(query)
+    );
+  });
 });
 
 const itemResultLabel = computed(() => {
@@ -229,8 +243,16 @@ async function createArtifact() {
 
 async function openArtifact(artifactId: string) {
   selectedArtifactId.value = artifactId;
-  selectedArtifact.value = await api.automationArtifact(artifactId);
+  const [artifact, caseList] = await Promise.all([
+    api.automationArtifact(artifactId),
+    api.automationArtifactCases(artifactId),
+  ]);
+  selectedArtifact.value = artifact;
+  artifactCases.value = caseList.cases;
+  missingCaseIds.value = caseList.missing_case_ids;
   caseIdFilter.value = "";
+  caseMethodFilter.value = "all";
+  caseRiskFilter.value = "all";
 }
 
 async function copyText(value: string, label: string) {
@@ -257,7 +279,12 @@ async function copyText(value: string, label: string) {
 
 function copyAllCaseIds() {
   if (!selectedArtifact.value) return;
-  void copyText(selectedArtifact.value.case_ids.join(", "), "全部用例 ID");
+  void copyText(
+    filteredArtifactCases.value.map((item) => item.case_id).join(", "),
+    caseIdFilter.value || caseMethodFilter.value !== "all" || caseRiskFilter.value !== "all"
+      ? "筛选后的用例 ID"
+      : "全部用例 ID",
+  );
 }
 
 function bringArtifactToExecution() {
@@ -598,6 +625,22 @@ function statusLabel(status: string): string {
   );
 }
 
+function caseCategoryLabel(category: AutomationCaseSummary["category"]): string {
+  return (
+    {
+      positive: "正向",
+      negative: "负向",
+      boundary: "边界",
+      security: "安全",
+      contract: "契约",
+    }[category] ?? category
+  );
+}
+
+function caseRiskLabel(risk: AutomationCaseSummary["risk"]): string {
+  return risk === "destructive" ? "破坏性" : risk === "write" ? "写入" : "只读";
+}
+
 function viewLabel(view: string): string {
   return (
     {
@@ -787,41 +830,90 @@ function viewLabel(view: string): string {
             <section class="case-id-panel">
               <div class="case-id-panel__head">
                 <div>
-                  <strong>自动化用例 ID</strong>
-                  <span class="muted mono">{{ selectedArtifact.case_ids.length }} 条</span>
+                  <strong>资产用例</strong>
+                  <span class="muted mono">
+                    {{ filteredArtifactCases.length }} / {{ artifactCases.length }} 条
+                  </span>
                 </div>
                 <button type="button" class="copy-mini" @click="copyAllCaseIds">
                   <AppIcon name="copy" :size="13" />
-                  复制全部
+                  复制当前结果
                 </button>
               </div>
-              <input
-                v-model="caseIdFilter"
-                type="search"
-                placeholder="筛选用例 ID"
-                aria-label="筛选自动化用例 ID"
-              />
+              <div class="case-id-filters">
+                <input
+                  v-model="caseIdFilter"
+                  type="search"
+                  placeholder="搜索 ID、标题、路径或 operation"
+                  aria-label="筛选资产用例"
+                />
+                <select v-model="caseMethodFilter" aria-label="按 HTTP 方法筛选">
+                  <option value="all">全部方法</option>
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+                <select v-model="caseRiskFilter" aria-label="按风险筛选">
+                  <option value="all">全部风险</option>
+                  <option value="read">只读</option>
+                  <option value="write">写入</option>
+                  <option value="destructive">破坏性</option>
+                </select>
+              </div>
               <div class="case-id-list">
                 <button
-                  v-for="caseId in filteredCaseIds"
-                  :key="caseId"
+                  v-for="item in filteredArtifactCases"
+                  :key="item.case_id"
                   type="button"
                   class="case-id-row"
-                  @click="copyText(caseId, caseId)"
+                  @click="copyText(item.case_id, item.case_id)"
                 >
-                  <code>{{ caseId }}</code>
-                  <AppIcon name="copy" :size="12" />
+                  <span class="case-id-row__main">
+                    <span class="case-id-row__title">
+                      <strong>{{ item.title }}</strong>
+                      <span class="chip chip--ghost">{{ caseCategoryLabel(item.category) }}</span>
+                      <span class="case-risk" :data-risk="item.risk">
+                        {{ caseRiskLabel(item.risk) }}
+                      </span>
+                      <span class="mono">{{ item.priority }}</span>
+                    </span>
+                    <span class="case-id-row__route mono">
+                      {{ item.method }} {{ item.path }}
+                    </span>
+                    <span class="case-id-row__meta">
+                      <code>{{ item.case_id }}</code>
+                      <span>{{ item.operation_id }}</span>
+                      <span v-if="item.required_variables.length">
+                        变量：{{ item.required_variables.join(", ") }}
+                      </span>
+                      <span v-if="item.manual_assertion_count">
+                        {{ item.manual_assertion_count }} 条待补断言
+                      </span>
+                    </span>
+                  </span>
+                  <AppIcon name="copy" :size="13" />
                 </button>
-                <p v-if="!filteredCaseIds.length" class="muted">没有匹配的用例 ID。</p>
+                <p v-if="!filteredArtifactCases.length" class="muted">
+                  没有匹配的资产用例。
+                </p>
               </div>
+              <p v-if="missingCaseIds.length" class="case-id-missing">
+                {{ missingCaseIds.length }} 条历史用例已不存在：
+                <span class="mono">{{ missingCaseIds.slice(0, 8).join(", ") }}</span>
+              </p>
             </section>
-            <div class="file-list">
-              <div v-for="file in selectedArtifact.files" :key="file.path" class="file-row">
-                <AppIcon name="file" :size="15" />
-                <code>{{ file.path }}</code>
-                <span class="mono">{{ file.content.length.toLocaleString() }} chars</span>
+            <details class="asset-files">
+              <summary>生成文件 · {{ selectedArtifact.files.length }}</summary>
+              <div class="file-list">
+                <div v-for="file in selectedArtifact.files" :key="file.path" class="file-row">
+                  <AppIcon name="file" :size="15" />
+                  <code>{{ file.path }}</code>
+                  <span class="mono">{{ file.content.length.toLocaleString() }} chars</span>
+                </div>
               </div>
-            </div>
+            </details>
             <ul v-if="selectedArtifact.change_summary.length" class="change-summary">
               <li v-for="change in selectedArtifact.change_summary" :key="change">
                 <AppIcon name="check" :size="13" />
@@ -1531,7 +1623,7 @@ function viewLabel(view: string): string {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 0.82fr) minmax(460px, 1.4fr);
+  grid-template-columns: minmax(520px, 1.45fr) minmax(320px, 0.8fr);
   gap: var(--gap-grid);
   align-items: start;
 }
@@ -1684,10 +1776,20 @@ function viewLabel(view: string): string {
   background: var(--ice-0);
 }
 
+.case-id-filters {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 120px 120px;
+  gap: var(--s2);
+}
+
+.case-id-filters select {
+  background: var(--ice-0);
+}
+
 .case-id-list {
   display: flex;
   flex-direction: column;
-  max-height: 240px;
+  max-height: 380px;
   overflow-y: auto;
   border: 1px solid var(--ice-3);
   border-radius: var(--radius-sm);
@@ -1695,9 +1797,9 @@ function viewLabel(view: string): string {
 }
 
 .case-id-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--s2);
   width: 100%;
   padding: 6px 8px;
@@ -1715,13 +1817,87 @@ function viewLabel(view: string): string {
   color: var(--glacier-deep);
 }
 
-.case-id-row code {
+.case-id-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
+}
+
+.case-id-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.case-id-row__title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-1);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-id-row__route {
+  overflow: hidden;
+  color: var(--glacier-deep);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-id-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+
+.case-id-row__meta code {
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: 10.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.case-risk {
+  padding: 1px 5px;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: 9px;
+}
+
+.case-risk[data-risk="write"] {
+  border-color: var(--warn-line, #b88642);
+  color: var(--warn, #8c6428);
+}
+
+.case-risk[data-risk="destructive"] {
+  border-color: var(--fail-line, #d6a1a5);
+  color: var(--fail);
+}
+
+.case-id-missing {
+  margin: 0;
+  color: var(--warn, #8c6428);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.asset-files summary {
+  padding: 7px 0;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.asset-files[open] summary {
+  margin-bottom: var(--s2);
 }
 
 .artifact-actions {
@@ -2308,6 +2484,10 @@ function viewLabel(view: string): string {
   .item-workbench {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .case-id-filters {
+    grid-template-columns: minmax(0, 1fr) 110px 110px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2342,6 +2522,10 @@ function viewLabel(view: string): string {
 
   .filter-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .case-id-filters {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .filter-row input:first-child {

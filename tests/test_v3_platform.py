@@ -14,12 +14,12 @@ import pytest
 from app.core.config import Settings
 from app.core.context import current_project_id
 from app.core.exceptions import BadRequestError, ConflictError
-from app.execution.http_executor import ControlledHttpExecutor
+from app.execution.http_executor import ControlledHttpExecutor, _assert_json
 from app.integrations.jira import JiraAdapter
 from app.integrations.zentao import ZentaoAdapter
 from app.llm.router import route_model
 from app.repository import Repository
-from app.schemas.api_testing import ApiCaseSpec
+from app.schemas.api_testing import ApiAssertion, ApiCaseSpec
 from app.schemas.execution import AutomationCreateRequest
 from app.schemas.jobs import JobCreate
 from app.schemas.platform import ProjectCreate, ProjectQuota, ProjectUpdate
@@ -343,6 +343,13 @@ paths:
                 item.job_id == result.job.job_id
                 for item in repository.job_events.list_recent(20)
             )
+            case_list = ExecutionService(settings, repository).artifact_cases(
+                artifact.artifact_id
+            )
+            assert len(case_list.cases) == len(artifact.case_ids)
+            assert case_list.cases[0].title
+            assert case_list.cases[0].method == "GET"
+            assert "baseUrl" in case_list.cases[0].required_variables
 
     def test_same_artifact_cannot_execute_concurrently(self) -> None:
         with TemporaryDirectory() as directory:
@@ -372,6 +379,17 @@ paths:
             assert len(results) == 2
             assert sum(isinstance(item, ConflictError) for item in results) == 1
             assert sum(not isinstance(item, Exception) for item in results) == 1
+
+    def test_nullable_assertion_allows_absent_or_null_values(self) -> None:
+        assertion = ApiAssertion(
+            kind="json",
+            path="$.name",
+            operator="nullable",
+            expected=True,
+        )
+        assert _assert_json(assertion, []) == []
+        assert _assert_json(assertion, [None]) == []
+        assert _assert_json(assertion, ["alice"]) == []
 
     def test_job_idempotency_and_schedule_definitions(self) -> None:
         with TemporaryDirectory() as directory:

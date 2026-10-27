@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
+import re
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from app.automation.pytest_generator import build_pytest_artifact
@@ -18,6 +19,8 @@ from app.execution.junit_parser import parse_junit_xml
 from app.repository import Repository, get_repository
 from app.schemas.execution import (
     AutomationArtifact,
+    AutomationArtifactCaseList,
+    AutomationCaseSummary,
     AutomationArtifactSummary,
     AutomationCreateRequest,
     JobEvent,
@@ -26,6 +29,7 @@ from app.schemas.execution import (
 )
 
 logger = get_logger(__name__)
+_PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)}}")
 
 
 class ExecutionService:
@@ -152,6 +156,50 @@ class ExecutionService:
 
     def get_artifact(self, artifact_id: str) -> AutomationArtifact:
         return self.repository.automation_artifacts.get(artifact_id)
+
+    def artifact_cases(self, artifact_id: str) -> AutomationArtifactCaseList:
+        artifact = self.get_artifact(artifact_id)
+        rows = self.repository.api_cases.list_recent(limit=20_000)
+        by_id = {item.case_id: item for item in rows}
+        cases: list[AutomationCaseSummary] = []
+        missing: list[str] = []
+        for case_id in artifact.case_ids:
+            case = by_id.get(case_id)
+            if case is None:
+                missing.append(case_id)
+                continue
+            execution_blob = dump_json(case.execution.model_dump(mode="json"), indent=None)
+            required_variables = sorted(set(_PLACEHOLDER_RE.findall(execution_blob)))
+            method = case.method.upper()
+            if method == "DELETE" or "batch-delete" in case.path:
+                risk = "destructive"
+            elif method in {"POST", "PUT", "PATCH"}:
+                risk = "write"
+            else:
+                risk = "read"
+            cases.append(
+                AutomationCaseSummary(
+                    case_id=case.case_id,
+                    title=case.title,
+                    method=method,
+                    path=case.path,
+                    operation_id=case.operation_id,
+                    category=case.category,
+                    priority=case.priority,
+                    risk=risk,
+                    required_variables=required_variables,
+                    assertion_count=len(case.assertions),
+                    manual_assertion_count=sum(
+                        1 for item in case.assertions if item.status == "manual"
+                    ),
+                    warnings=case.warnings,
+                )
+            )
+        return AutomationArtifactCaseList(
+            artifact_id=artifact_id,
+            cases=cases,
+            missing_case_ids=missing,
+        )
 
     def artifact_download(self, artifact_id: str) -> tuple[bytes, str]:
         artifact = self.get_artifact(artifact_id)

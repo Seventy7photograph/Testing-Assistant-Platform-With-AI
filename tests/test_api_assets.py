@@ -199,9 +199,48 @@ class TestApiCaseGeneration:
         spec = parse_openapi(json.dumps(payload).encode(), filename="nullable.json", spec_id="API-null")
         positive = next(case for case in generate_api_cases(spec).cases if case.category == "positive")
         name_assertions = [item for item in positive.assertions if item.path == "$.name"]
-        assert any(item.operator == "type" and item.expected == "string" for item in name_assertions)
+        assert any(
+            item.operator == "type"
+            and item.expected == "string"
+            and item.allow_null
+            for item in name_assertions
+        )
         assert any(item.operator == "nullable" for item in name_assertions)
         assert not any(item.status == "manual" for item in name_assertions)
+
+    def test_optional_response_property_assertion_allows_absence(self) -> None:
+        payload = {
+            "openapi": "3.0.3",
+            "info": {"title": "Optional API", "version": "1.0"},
+            "paths": {
+                "/items": {
+                    "get": {
+                        "responses": {
+                            "200": {
+                                "description": "ok",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "optional_name": {"type": "string"},
+                                            },
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+        }
+        spec = parse_openapi(json.dumps(payload).encode(), filename="optional.json", spec_id="API-opt")
+        positive = next(case for case in generate_api_cases(spec).cases if case.category == "positive")
+        optional_assertions = [
+            item for item in positive.assertions if item.path == "$.optional_name"
+        ]
+        assert optional_assertions
+        assert all(item.allow_absent for item in optional_assertions)
 
     def test_secret_schema_fields_use_environment_placeholders(self) -> None:
         payload = {

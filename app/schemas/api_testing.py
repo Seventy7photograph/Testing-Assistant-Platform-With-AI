@@ -208,6 +208,8 @@ class ApiAssertion(BaseModel):
     path: str = ""
     operator: str = ""
     expected: Any = None
+    allow_absent: bool = False
+    allow_null: bool = False
     description: str = ""
     source_ref: str = ""
     status: Literal["defined", "manual"] = "defined"

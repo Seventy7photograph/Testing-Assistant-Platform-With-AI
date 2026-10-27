@@ -446,8 +446,12 @@ def _assert_json(assertion: ApiAssertion, values: list[Any]) -> list[str]:
             return [f"{assertion.path} 不允许为 null"]
         return []
     if assertion.operator == "exists":
-        return [] if values and all(item is not None for item in values) else ["字段不存在"]
+        if values and all(item is not None for item in values):
+            return []
+        return [] if assertion.allow_absent else ["字段不存在"]
     if not values:
+        if assertion.allow_absent:
+            return []
         return [f"路径不存在：{assertion.path}"]
     expected = assertion.expected
     if assertion.operator == "equals":
@@ -465,7 +469,12 @@ def _assert_json(assertion: ApiAssertion, values: list[Any]) -> list[str]:
     try:
         if assertion.operator == "type":
             check = checks.get(str(expected))
-            return [] if check and all(check(item) for item in values) else ["类型不匹配"]
+            if not check:
+                return ["类型不匹配"]
+            if any(item is None for item in values) and not assertion.allow_null:
+                return ["类型不匹配"]
+            non_null = [item for item in values if item is not None]
+            return [] if all(check(item) for item in non_null) else ["类型不匹配"]
         if assertion.operator == "in":
             return [] if all(item in (expected or []) for item in values) else ["枚举不匹配"]
         if assertion.operator == "minLength":

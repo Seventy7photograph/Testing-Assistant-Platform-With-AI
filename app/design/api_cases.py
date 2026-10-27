@@ -391,6 +391,7 @@ def _schema_assertions(
     source_prefix: str,
     json_path: str = "$",
     depth: int = 0,
+    allow_absent: bool = False,
 ) -> list[ApiAssertion]:
     if depth > 12 or not isinstance(schema, dict):
         return [
@@ -398,6 +399,7 @@ def _schema_assertions(
                 kind="json",
                 path=json_path,
                 operator="manual",
+                allow_absent=allow_absent,
                 description="schema 层级过深或缺失，需人工补充断言",
                 source_ref=source_prefix,
                 status="manual",
@@ -411,6 +413,7 @@ def _schema_assertions(
                 kind="json",
                 path=json_path,
                 operator="manual",
+                allow_absent=allow_absent,
                 description=f"循环引用 {flat['x-circular-ref']}，需人工补充有限深度断言",
                 source_ref=source_prefix,
                 status="manual",
@@ -423,6 +426,7 @@ def _schema_assertions(
                 kind="json",
                 path=json_path,
                 operator="manual",
+                allow_absent=allow_absent,
                 description=branch_note,
                 source_ref=source_prefix,
                 status="manual",
@@ -437,6 +441,8 @@ def _schema_assertions(
                 path=json_path,
                 operator="type",
                 expected=schema_type,
+                allow_absent=allow_absent,
+                allow_null=bool(flat.get("nullable")),
                 description=f"{json_path} 类型为 {schema_type}",
                 source_ref=source_prefix,
             )
@@ -451,6 +457,7 @@ def _schema_assertions(
                     path=_json_path(json_path, name),
                     operator="exists",
                     expected=True,
+                    allow_absent=allow_absent,
                     description=f"必需字段 {name} 存在",
                     source_ref=f"{source_prefix}#/required/{name}",
                 )
@@ -466,6 +473,7 @@ def _schema_assertions(
                     source_prefix=f"{source_prefix}#/properties/{name}",
                     json_path=child_path,
                     depth=depth + 1,
+                    allow_absent=allow_absent or name not in required,
                 )
             )
     elif schema_type == "array" and isinstance(flat.get("items"), dict):
@@ -476,6 +484,7 @@ def _schema_assertions(
                 source_prefix=f"{source_prefix}#/items",
                 json_path=f"{json_path}[*]",
                 depth=depth + 1,
+                allow_absent=allow_absent,
             )
         )
     if flat.get("nullable"):
@@ -485,6 +494,7 @@ def _schema_assertions(
                 path=json_path,
                 operator="nullable",
                 expected=True,
+                allow_absent=allow_absent,
                 description=f"{json_path} 允许为 null",
                 source_ref=f"{source_prefix}#/nullable",
             )
@@ -496,6 +506,7 @@ def _schema_assertions(
                 path=json_path,
                 operator="in",
                 expected=copy.deepcopy(flat["enum"]),
+                allow_absent=allow_absent,
                 description=f"{json_path} 取值来自枚举",
                 source_ref=f"{source_prefix}#/enum",
             )
@@ -507,6 +518,7 @@ def _schema_assertions(
                 path=json_path,
                 operator="matches",
                 expected=str(flat["pattern"]),
+                allow_absent=allow_absent,
                 description=f"{json_path} 匹配规范正则",
                 source_ref=f"{source_prefix}#/pattern",
             )
@@ -518,6 +530,7 @@ def _schema_assertions(
                 path=json_path,
                 operator="gte",
                 expected=flat["minimum"],
+                allow_absent=allow_absent,
                 description=f"{json_path} 不小于 {flat['minimum']}",
                 source_ref=f"{source_prefix}#/minimum",
             )
@@ -529,6 +542,7 @@ def _schema_assertions(
                 path=json_path,
                 operator="lte",
                 expected=flat["maximum"],
+                allow_absent=allow_absent,
                 description=f"{json_path} 不大于 {flat['maximum']}",
                 source_ref=f"{source_prefix}#/maximum",
             )

@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { storeToRefs } from "pinia";
 
 import { api } from "@/api";
 import type {
   AgentRun,
-  IntegrationHealth,
   Job,
   KnowledgeIndexStats,
-  KnowledgeSearchResult,
   ModelRouteInfo,
   ProjectContextInfo,
   Schedule,
@@ -16,6 +15,7 @@ import type {
 import AppIcon from "@/components/AppIcon.vue";
 import { useProjectStore } from "@/stores/project";
 import { useNoticeStore } from "@/stores/notice";
+import { usePlatformDraftStore } from "@/stores/platformDraft";
 
 type Tab = "overview" | "projects" | "integrations" | "execution" | "knowledge";
 
@@ -30,6 +30,25 @@ const tabs: { id: Tab; label: string }[] = [
 
 const projectStore = useProjectStore();
 const notice = useNoticeStore();
+const draft = usePlatformDraftStore();
+const {
+  newProject,
+  integration,
+  integrationHealth,
+  integrationFixture,
+  integrationProject,
+  suiteId,
+  externalIds,
+  artifactId,
+  caseIds,
+  environment,
+  executionPhase,
+  executionStartedAt,
+  executionError,
+  executionResult,
+  knowledgeQuery,
+  knowledgeResult,
+} = storeToRefs(draft);
 const activeTab = ref<Tab>(props.section ?? "overview");
 const scoped = computed(() => Boolean(props.section));
 const loading = ref(false);
@@ -43,22 +62,18 @@ const toolCalls = ref<ToolCall[]>([]);
 const knowledge = ref<KnowledgeIndexStats | null>(null);
 const routes = ref<ModelRouteInfo[]>([]);
 
-const newProject = ref({ key: "", name: "", description: "" });
-const integration = ref<"jira" | "zentao">("jira");
-const integrationHealth = ref<IntegrationHealth | null>(null);
-const integrationFixture = ref("");
-const integrationProject = ref("");
-const suiteId = ref("");
-const externalIds = ref("");
-const artifactId = ref("");
-const caseIds = ref("");
-const environment = ref('{\n  "baseUrl": "http://127.0.0.1:8000"\n}');
-const executionResult = ref("");
-const knowledgeQuery = ref("");
-const knowledgeResult = ref<KnowledgeSearchResult | null>(null);
-
 const activeProject = computed(() => context.value?.project ?? projectStore.activeProject);
 const openJobs = computed(() => jobs.value.filter((item) => ["queued", "running"].includes(item.status)));
+const executionRunning = computed(() => executionPhase.value === "running");
+const executionResultJson = computed(() =>
+  executionResult.value ? JSON.stringify(executionResult.value, null, 2) : "",
+);
+const executionStatusLabel = computed(() => {
+  if (executionPhase.value === "running") return "执行中";
+  if (executionPhase.value === "succeeded") return "执行成功";
+  if (executionPhase.value === "failed") return "执行失败";
+  return "待执行";
+});
 
 function setFeedback(text: string, failure = false) {
   if (failure) {
@@ -155,21 +170,50 @@ async function pushSuite() {
 }
 
 async function execute() {
+  if (executionRunning.value) return;
+  const selectedArtifact = artifactId.value.trim();
+  if (!selectedArtifact) {
+    setFeedback("请先填写自动化资产 ID。", true);
+    return;
+  }
+  let env: Record<string, string>;
   try {
-    const env = environment.value.trim() ? JSON.parse(environment.value) : {};
+    const parsed = environment.value.trim() ? JSON.parse(environment.value) : {};
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      throw new Error("环境变量必须是 JSON 对象。");
+    }
+    env = Object.fromEntries(
+      Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+    );
+  } catch (err) {
+    setFeedback(`环境变量 JSON 不合法：${(err as Error).message}`, true);
+    return;
+  }
+
+  const revision = draft.beginExecution();
+  const requestKey =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  setFeedback("执行已提交，正在运行受控 HTTP 用例…");
+  try {
     const result = await api.executeHttp({
-      artifact_id: artifactId.value,
+      artifact_id: selectedArtifact,
       case_ids: caseIds.value.split(",").map((item) => item.trim()).filter(Boolean),
       environment: env,
-      idempotency_key: `ui-${artifactId.value}-${Date.now()}`,
+      idempotency_key: `ui-${selectedArtifact}-${requestKey}`,
     });
-    executionResult.value = JSON.stringify(result, null, 2);
+    draft.finishExecution(revision, result);
+    const failed = result.job.status !== "succeeded";
     setFeedback(
-      `执行完成：通过 ${result.run.passed}，失败 ${result.run.failed}，错误 ${result.run.errors}。`,
+      `${failed ? "执行结束，存在失败" : "执行完成"}：通过 ${result.run.passed}，失败 ${result.run.failed}，错误 ${result.run.errors}。`,
+      failed,
     );
     await loadAll();
   } catch (err) {
-    setFeedback((err as Error).message, true);
+    const errorMessage = (err as Error).message;
+    draft.finishExecution(revision, null, errorMessage);
+    setFeedback(`执行失败：${errorMessage}`, true);
   }
 }
 
@@ -210,6 +254,7 @@ function formatTime(value: string | null): string {
 
 onMounted(async () => {
   await projectStore.load();
+  draft.ensureProject(projectStore.activeId || "PRJ-default");
   await loadAll();
 });
 </script>
@@ -356,18 +401,69 @@ onMounted(async () => {
       <div class="split">
         <form class="form" @submit.prevent="execute">
           <h3>受控 HTTP 执行</h3>
-          <label>自动化资产 ID<input v-model="artifactId" placeholder="AUTO-..." required /></label>
-          <label>用例 ID<input v-model="caseIds" placeholder="留空执行资产内全部用例" /></label>
-          <label>环境变量 JSON<textarea v-model="environment" class="code-area" rows="7" /></label>
-          <button type="submit" class="btn btn--primary" :disabled="!artifactId">
-            <AppIcon name="play" :size="15" />
-            <span>执行</span>
+          <label>
+            自动化资产 ID
+            <input
+              v-model="artifactId"
+              placeholder="AUTO-..."
+              required
+              :disabled="executionRunning"
+            />
+          </label>
+          <label>
+            用例 ID
+            <input
+              v-model="caseIds"
+              placeholder="留空执行资产内全部用例；多个用逗号分隔"
+              :disabled="executionRunning"
+            />
+          </label>
+          <label>
+            环境变量 JSON
+            <textarea
+              v-model="environment"
+              class="code-area"
+              rows="7"
+              :disabled="executionRunning"
+            />
+          </label>
+          <button
+            type="submit"
+            class="btn btn--primary"
+            :disabled="executionRunning || !artifactId.trim()"
+            :aria-busy="executionRunning"
+          >
+            <span v-if="executionRunning" class="execution-spinner" aria-hidden="true" />
+            <AppIcon v-else name="play" :size="15" />
+            <span>{{ executionRunning ? "执行中，请勿重复提交" : "执行" }}</span>
           </button>
         </form>
         <section>
           <h3>执行结果</h3>
-          <pre v-if="executionResult" class="code-output">{{ executionResult }}</pre>
-          <p v-else class="empty">尚未执行。</p>
+          <div class="execution-state" :data-state="executionPhase">
+            <div class="execution-state__head">
+              <span class="state" :data-state="executionPhase">{{ executionStatusLabel }}</span>
+              <time v-if="executionStartedAt">{{ formatTime(executionStartedAt) }}</time>
+            </div>
+            <p v-if="executionRunning" class="execution-state__note">
+              正在发送请求并执行断言。按钮与表单已锁定，完成前不会再次提交。
+            </p>
+            <p v-else-if="executionError" class="execution-state__error">{{ executionError }}</p>
+            <div v-if="executionResult" class="execution-meta">
+              <span>Job <code>{{ executionResult.job.job_id }}</code></span>
+              <span>Run <code>{{ executionResult.run.run_id }}</code></span>
+              <span>通过 {{ executionResult.run.passed }}</span>
+              <span>失败 {{ executionResult.run.failed }}</span>
+              <span>错误 {{ executionResult.run.errors }}</span>
+            </div>
+            <p
+              v-if="executionPhase === 'idle'"
+              class="execution-state__note"
+            >
+              尚未执行。
+            </p>
+          </div>
+          <pre v-if="executionResultJson" class="code-output">{{ executionResultJson }}</pre>
         </section>
       </div>
       <section class="stack">
@@ -653,6 +749,88 @@ h3 {
 .state[data-state="error"] {
   border-color: var(--danger-line, #b65a63);
   color: var(--danger, #a43c47);
+}
+
+.execution-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: var(--ice-1);
+}
+
+.execution-state[data-state="running"] {
+  border-color: var(--glacier-tint);
+  background: var(--glacier-wash);
+}
+
+.execution-state[data-state="succeeded"] {
+  border-color: var(--pass-line, #9ac3b5);
+  background: var(--pass-wash);
+}
+
+.execution-state[data-state="failed"] {
+  border-color: var(--fail-line, #d6a1a5);
+  background: var(--fail-wash);
+}
+
+.execution-state__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.execution-state__head time {
+  color: var(--ink-3);
+  font-size: 10px;
+}
+
+.execution-state__note,
+.execution-state__error {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.execution-state__error {
+  color: var(--fail);
+}
+
+.execution-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+
+.execution-meta code {
+  font-family: var(--font-mono);
+}
+
+.execution-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: execution-spin 0.8s linear infinite;
+}
+
+@keyframes execution-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .execution-spinner {
+    animation: none;
+  }
 }
 
 .project-row {

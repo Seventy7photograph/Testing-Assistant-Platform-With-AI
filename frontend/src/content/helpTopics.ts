@@ -132,8 +132,8 @@ export const helpTopics: Record<string, HelpTopic> = {
     title: "自动化资产",
     intro: "把已验证的接口用例生成版本化 pytest 项目，并控制下载和派生。",
     points: [
-      { label: "功能", text: "按规范和 case_ids 生成 pytest + httpx 资产，查看安全校验、文件清单和版本。" },
-      { label: "操作", text: "先生成资产，通过静态门禁后下载；受控执行可在“运行任务”或“执行记录”继续。" },
+      { label: "功能", text: "按规范和 case_ids 生成 pytest + httpx 资产，查看安全校验、用例 ID、文件清单和版本。" },
+      { label: "操作", text: "生成资产后可复制单个或全部用例 ID，直接带入运行任务，或下载后外部执行。" },
       { label: "原理", text: "固定模板 + JSON case 数据，模型不直接拼接 Python 源码；下载前执行语法、危险调用和密钥扫描。" },
       { label: "口径", text: "每次生成产生新 revision；未通过校验的资产不可下载；AI 建议必须人工采纳后派生新版本。" },
     ],
@@ -188,8 +188,8 @@ export const helpTopics: Record<string, HelpTopic> = {
     title: "运行任务",
     intro: "对已验证的接口资产执行受控 HTTP 用例，并查看任务历史和调度定义。",
     points: [
-      { label: "功能", text: "按资产和 case_ids 执行 HTTP 用例，查看执行结果、任务状态和 Schedule 列表。" },
-      { label: "操作", text: "填写 AUTO 资产 ID；用例留空表示全部；环境 JSON 用于替换 {{变量}} 占位符。" },
+      { label: "功能", text: "按资产和 case_ids 执行 HTTP 用例，实时显示运行状态、结果、任务和 Schedule 列表。" },
+      { label: "操作", text: "填写 AUTO 资产 ID；用例留空表示全部；表单在页面切换时保留，执行期间禁止重复提交。" },
       { label: "原理", text: "平台创建 Job、发送受控 HTTP 请求、执行断言并生成 TestRun；不执行 Python、shell 或 pytest。" },
       { label: "口径", text: "目标主机须在 OpenAPI servers 或本次 base_url 白名单内；默认 200 条、4 并发、20 秒、1 MB。" },
       { label: "边界", text: "调度定义当前只登记，不会自动运行；环境变量不写入任务或日志。" },

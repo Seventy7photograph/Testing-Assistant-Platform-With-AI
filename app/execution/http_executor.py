@@ -12,7 +12,8 @@ from urllib.parse import urlparse
 import httpx
 
 from app.core.config import Settings, get_settings
-from app.core.exceptions import BadRequestError
+from app.core.context import get_current_project_id
+from app.core.exceptions import BadRequestError, ConflictError
 from app.core.logging import sanitize_log_text
 from app.core.utils import new_id, now_iso
 from app.repository import Repository, get_repository
@@ -26,6 +27,8 @@ from app.services.job_service import JobService
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)}}")
 _SAFE_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 _SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key", "proxy-authorization"}
+_ACTIVE_EXECUTIONS: set[tuple[str, str]] = set()
+_ACTIVE_EXECUTIONS_LOCK = asyncio.Lock()
 
 
 def _milliseconds(seconds: float) -> int:
@@ -51,6 +54,25 @@ class ControlledHttpExecutor:
         self.transport = transport
 
     async def execute(self, request: HttpExecutionRequest) -> HttpExecutionResponse:
+        project_id = get_current_project_id() or "PRJ-default"
+        execution_key = (project_id, request.artifact_id)
+        async with _ACTIVE_EXECUTIONS_LOCK:
+            if execution_key in _ACTIVE_EXECUTIONS:
+                raise ConflictError(
+                    "该自动化资产已有执行任务正在进行，请等待完成后再试。",
+                    detail={
+                        "artifact_id": request.artifact_id,
+                        "project_id": project_id,
+                    },
+                )
+            _ACTIVE_EXECUTIONS.add(execution_key)
+        try:
+            return await self._execute(request)
+        finally:
+            async with _ACTIVE_EXECUTIONS_LOCK:
+                _ACTIVE_EXECUTIONS.discard(execution_key)
+
+    async def _execute(self, request: HttpExecutionRequest) -> HttpExecutionResponse:
         artifact = self.repository.automation_artifacts.get(request.artifact_id)
         if artifact.status != "validated":
             raise BadRequestError(

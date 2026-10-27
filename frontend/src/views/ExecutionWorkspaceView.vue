@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { api, saveBlob } from "@/api";
+import { api, getActiveProjectId, saveBlob } from "@/api";
 import type {
   ApiSpecSummary,
   AutomationAIKind,
@@ -20,6 +20,7 @@ import EmptyState from "@/components/EmptyState.vue";
 import ErrorNote from "@/components/ErrorNote.vue";
 import MarkdownBody from "@/components/MarkdownBody.vue";
 import { useNoticeStore } from "@/stores/notice";
+import { usePlatformDraftStore } from "@/stores/platformDraft";
 import { useReportSession } from "@/stores/reportSession";
 import { useWorkItemsStore } from "@/stores/workItems";
 import { formatRelative } from "@/utils/labels";
@@ -30,6 +31,7 @@ const props = defineProps<{ section?: TabKey }>();
 const route = useRoute();
 const router = useRouter();
 const notice = useNoticeStore();
+const platformDraft = usePlatformDraftStore();
 const reportSession = useReportSession();
 const workStore = useWorkItemsStore();
 
@@ -50,6 +52,7 @@ const artifacts = ref<AutomationArtifactSummary[]>([]);
 const selectedSpecId = ref("");
 const selectedArtifactId = ref("");
 const selectedArtifact = ref<AutomationArtifact | null>(null);
+const caseIdFilter = ref("");
 
 const runs = ref<TestRunSummary[]>([]);
 const selectedRunId = ref("");
@@ -100,6 +103,12 @@ const failedResults = computed(() =>
       )
     : [],
 );
+
+const filteredCaseIds = computed(() => {
+  const rows = selectedArtifact.value?.case_ids ?? [];
+  const query = caseIdFilter.value.trim().toLowerCase();
+  return query ? rows.filter((item) => item.toLowerCase().includes(query)) : rows;
+});
 
 const itemResultLabel = computed(() => {
   if (saveState.value === "saving") return "保存中";
@@ -169,7 +178,11 @@ async function loadAll() {
     artifacts.value = artifactRows;
     runs.value = runRows;
     if (!selectedSpecId.value && specRows[0]) selectedSpecId.value = specRows[0].spec_id;
-    if (!selectedArtifactId.value && artifactRows[0]) {
+    const preferredArtifact = platformDraft.artifactId || selectedArtifactId.value;
+    const preferredExists = artifactRows.some((item) => item.artifact_id === preferredArtifact);
+    if (preferredExists) {
+      await openArtifact(preferredArtifact);
+    } else if (!selectedArtifactId.value && artifactRows[0]) {
       await openArtifact(artifactRows[0].artifact_id);
     }
     if (!selectedRunId.value && runRows[0]) {
@@ -217,6 +230,41 @@ async function createArtifact() {
 async function openArtifact(artifactId: string) {
   selectedArtifactId.value = artifactId;
   selectedArtifact.value = await api.automationArtifact(artifactId);
+  caseIdFilter.value = "";
+}
+
+async function copyText(value: string, label: string) {
+  if (!value) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    notice.info("已复制", label);
+  } catch {
+    notice.error("复制失败", "请手动选择文本复制。");
+  }
+}
+
+function copyAllCaseIds() {
+  if (!selectedArtifact.value) return;
+  void copyText(selectedArtifact.value.case_ids.join(", "), "全部用例 ID");
+}
+
+function bringArtifactToExecution() {
+  if (!selectedArtifact.value) return;
+  platformDraft.ensureProject(getActiveProjectId() || "PRJ-default");
+  platformDraft.setExecutionArtifact(selectedArtifact.value.artifact_id);
+  void router.push("/jobs");
 }
 
 async function downloadArtifact(artifact: AutomationArtifactSummary | AutomationArtifact) {
@@ -710,8 +758,19 @@ function viewLabel(view: string): string {
             <div class="row row--wrap">
               <div>
                 <h4>{{ selectedArtifact.spec_title }}</h4>
-                <p class="muted mono">
-                  {{ selectedArtifact.artifact_id }} · v{{ selectedArtifact.revision }}
+                <p class="artifact-id-line">
+                  <span class="muted mono">
+                    {{ selectedArtifact.artifact_id }} · v{{ selectedArtifact.revision }}
+                  </span>
+                  <button
+                    type="button"
+                    class="copy-mini"
+                    title="复制自动化资产 ID"
+                    @click="copyText(selectedArtifact.artifact_id, selectedArtifact.artifact_id)"
+                  >
+                    <AppIcon name="copy" :size="13" />
+                    复制 ID
+                  </button>
                 </p>
                 <p v-if="selectedArtifact.parent_artifact_id" class="muted mono">
                   派生自 {{ selectedArtifact.parent_artifact_id }}
@@ -725,6 +784,37 @@ function viewLabel(view: string): string {
                 {{ selectedArtifact.status === "validated" ? "安全校验通过" : "已阻止下载" }}
               </span>
             </div>
+            <section class="case-id-panel">
+              <div class="case-id-panel__head">
+                <div>
+                  <strong>自动化用例 ID</strong>
+                  <span class="muted mono">{{ selectedArtifact.case_ids.length }} 条</span>
+                </div>
+                <button type="button" class="copy-mini" @click="copyAllCaseIds">
+                  <AppIcon name="copy" :size="13" />
+                  复制全部
+                </button>
+              </div>
+              <input
+                v-model="caseIdFilter"
+                type="search"
+                placeholder="筛选用例 ID"
+                aria-label="筛选自动化用例 ID"
+              />
+              <div class="case-id-list">
+                <button
+                  v-for="caseId in filteredCaseIds"
+                  :key="caseId"
+                  type="button"
+                  class="case-id-row"
+                  @click="copyText(caseId, caseId)"
+                >
+                  <code>{{ caseId }}</code>
+                  <AppIcon name="copy" :size="12" />
+                </button>
+                <p v-if="!filteredCaseIds.length" class="muted">没有匹配的用例 ID。</p>
+              </div>
+            </section>
             <div class="file-list">
               <div v-for="file in selectedArtifact.files" :key="file.path" class="file-row">
                 <AppIcon name="file" :size="15" />
@@ -744,15 +834,25 @@ function viewLabel(view: string): string {
                 <span>{{ issue.path || "asset" }} · {{ issue.message }}</span>
               </li>
             </ul>
-            <el-button
-              :disabled="selectedArtifact.status !== 'validated'"
-              :loading="busy === `download:${selectedArtifact.artifact_id}`"
-              data-testid="download-artifact"
-              @click="downloadArtifact(selectedArtifact)"
-            >
-              <AppIcon name="download" :size="16" />
-              下载 zip
-            </el-button>
+            <div class="artifact-actions">
+              <el-button
+                :disabled="selectedArtifact.status !== 'validated'"
+                :loading="busy === `download:${selectedArtifact.artifact_id}`"
+                data-testid="download-artifact"
+                @click="downloadArtifact(selectedArtifact)"
+              >
+                <AppIcon name="download" :size="16" />
+                下载 zip
+              </el-button>
+              <el-button
+                :disabled="selectedArtifact.status !== 'validated'"
+                data-testid="use-artifact-execution"
+                @click="bringArtifactToExecution"
+              >
+                <AppIcon name="play" :size="16" />
+                带入运行任务
+              </el-button>
+            </div>
           </template>
         </div>
       </div>
@@ -1528,6 +1628,106 @@ function viewLabel(view: string): string {
   border: 1px solid var(--ice-3);
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+.artifact-id-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.copy-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius-sm);
+  background: var(--ice-0);
+  color: var(--glacier-deep);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.copy-mini:hover {
+  border-color: var(--glacier);
+  background: var(--glacier-wash);
+}
+
+.case-id-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius);
+  background: var(--ice-1);
+}
+
+.case-id-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.case-id-panel__head > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.case-id-panel input {
+  background: var(--ice-0);
+}
+
+.case-id-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--ice-3);
+  border-radius: var(--radius-sm);
+  background: var(--ice-0);
+}
+
+.case-id-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--ice-2);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.case-id-row:hover {
+  background: var(--glacier-wash);
+  color: var(--glacier-deep);
+}
+
+.case-id-row code {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
 }
 
 .file-row {

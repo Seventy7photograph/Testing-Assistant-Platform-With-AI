@@ -1,6 +1,7 @@
 """v3.0 合并版：项目、同步、路由、执行、任务、知识与只读助手。"""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ import pytest
 
 from app.core.config import Settings
 from app.core.context import current_project_id
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, ConflictError
 from app.execution.http_executor import ControlledHttpExecutor
 from app.integrations.jira import JiraAdapter
 from app.integrations.zentao import ZentaoAdapter
@@ -342,6 +343,35 @@ paths:
                 item.job_id == result.job.job_id
                 for item in repository.job_events.list_recent(20)
             )
+
+    def test_same_artifact_cannot_execute_concurrently(self) -> None:
+        with TemporaryDirectory() as directory:
+            settings = _settings(Path(directory))
+            repository = Repository(settings)
+            executor = ControlledHttpExecutor(settings, repository)
+            calls = 0
+
+            async def fake_execute(_request: HttpExecutionRequest) -> object:
+                nonlocal calls
+                calls += 1
+                await asyncio.sleep(0.05)
+                return object()
+
+            executor._execute = fake_execute  # type: ignore[method-assign]
+            request = HttpExecutionRequest(artifact_id="AUTO-concurrent")
+
+            async def run_both() -> list[object]:
+                return await asyncio.gather(
+                    executor.execute(request),
+                    executor.execute(request),
+                    return_exceptions=True,
+                )
+
+            results = asyncio.run(run_both())
+            assert calls == 1
+            assert len(results) == 2
+            assert sum(isinstance(item, ConflictError) for item in results) == 1
+            assert sum(not isinstance(item, Exception) for item in results) == 1
 
     def test_job_idempotency_and_schedule_definitions(self) -> None:
         with TemporaryDirectory() as directory:

@@ -1,69 +1,68 @@
-/* ============================================================
-   冰川刻度 —— 设计令牌
-   三层冷白冰层 · 唯一冰川蓝 · 刻度细线 · 一个被编排的瞬间（结冰）
-   详见项目根目录 DESIGN.md
-   ============================================================ */
+/* Paper & Ink: warm paper, cobalt structure, vermilion signal. */
 :root {
   color-scheme: light;
 
-  /* --- 冰层（面）------------------------------------------- */
-  --ice-0: #ffffff;      /* 冰面：卡片 */
-  --ice-1: #f4f9fc;      /* 底冰：页面底 */
-  --ice-2: #eaf3f9;      /* 冰层：导航轨、下沉面 */
-  --ice-3: #dceaf4;      /* 发丝边 */
-  --ice-4: #c3d9e8;      /* 常规刻度线 */
-  --ice-5: #9dbdd2;      /* 强刻度、非激活标记 */
+  --ice-0: #f7f2e6;
+  --ice-1: #efe8d6;
+  --ice-2: #e6dcc7;
+  --ice-3: #d7cab0;
+  --ice-4: #bfb091;
+  --ice-5: #9d8d70;
 
-  /* --- 墨：全部从冰蓝里调出来，没有纯灰 -------------------- */
-  --ink-1: #0d2536;
-  --ink-2: #2c4a5e;
-  --ink-3: #547591;      /* 白底 4.85:1 */
-  --ink-inv: #f2f8fc;
+  --ink-1: #10233d;
+  --ink-2: #33465e;
+  --ink-3: #596577;
+  --ink-inv: #efe8d6;
 
-  /* --- 冰川蓝刻度 ------------------------------------------ */
-  --glacier: #1f7ba8;        /* 主操作面（白字 4.71:1） */
-  --glacier-hover: #1a6b93;
-  --glacier-press: #16597b;
-  --glacier-deep: #155f85;   /* 浅底文字、链接（白底 6.98:1） */
-  --glacier-wash: #e2f1f9;
-  --glacier-tint: #cfe7f4;
-  --glacier-glow: #8fd0ec;
-  --fjord: #0c3b56;          /* 全站唯一深色质量块 */
-  --mass: var(--fjord);      /* 品牌质量块的底色 */
-  --on-mass: #f2f8fc;        /* 质量块上的文字 */
+  --glacier: #1c4a9c;
+  --glacier-hover: #173f86;
+  --glacier-press: #12336d;
+  --glacier-deep: #163e83;
+  --glacier-wash: #e2e6ef;
+  --glacier-tint: #c6d1e7;
+  --glacier-glow: #4c7dd7;
+  --fjord: #142e59;
+  --mass: #1c4a9c;
+  --on-mass: #efe8d6;
 
-  /* --- 语义（永远与文字/形状成对） ------------------------- */
-  --pass: #1c7a52;
-  --pass-wash: #dff0e6;
-  --warn: #8a5b12;
-  --warn-wash: #f6e8cf;
-  --fail: #a8322a;
-  --fail-wash: #f7e0dd;
-  --info: #155f85;
-  --info-wash: #e2f1f9;
+  --signal: #da2e2b;
+  --rail-ink: #143566;
+  --rail-line: #2a4a7e;
+  --rail-muted: #b8c2d2;
 
-  /* --- 字体 ------------------------------------------------ */
-  --font-ui: "Archivo", "PingFang SC", "Microsoft YaHei",
-    "Source Han Sans SC", "Noto Sans SC", system-ui, sans-serif;
-  --font-data: "Azeret Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --pass: #1c4a9c;
+  --pass-wash: #e2e7f2;
+  --warn: #b53a2f;
+  --warn-wash: #f3ddd6;
+  --fail: #b42320;
+  --fail-wash: #f5d9d6;
+  --danger: #b42320;
+  --danger-line: #ddaaa5;
+  --info: #1c4a9c;
+  --info-wash: #e2e6ef;
+  --ok: #1c4a9c;
+  --ok-line: #b9c9e5;
 
-  --fs-2xs: 0.6875rem; /* 11 */
-  --fs-xs: 0.75rem;    /* 12 */
-  --fs-sm: 0.8125rem;  /* 13 */
-  --fs-base: 0.875rem; /* 14 正文 */
-  --fs-md: 1rem;       /* 16 */
-  --fs-lg: 1.1875rem;  /* 19 */
-  --fs-xl: 1.4375rem;  /* 23 */
-  --fs-2xl: 1.75rem;   /* 28 */
+  --font-ui: "Archivo", "Segoe UI Variable", "PingFang SC", "Microsoft YaHei",
+    "Source Han Sans SC", "Noto Sans SC", sans-serif;
+  --font-data: "Azeret Mono", "Cascadia Mono", Consolas, monospace;
+  --font-mono: var(--font-data);
 
-  --lh-tight: 1.24;
-  --lh-snug: 1.42;
-  --lh-base: 1.62;
+  --fs-2xs: 0.625rem;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
 
-  --tracking-tight: -0.02em;
-  --tracking-label: 0.06em;
+  --lh-tight: 1.18;
+  --lh-snug: 1.38;
+  --lh-base: 1.55;
+  --tracking-tight: -0.015em;
+  --tracking-label: 0.055em;
 
-  /* --- 节奏 ------------------------------------------------ */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -72,135 +71,131 @@
   --s6: 32px;
   --s7: 48px;
 
-  --radius-lg: 14px;   /* 卡片 */
-  --radius: 9px;       /* 控件 */
-  --radius-sm: 5px;
+  --radius-lg: 6px;
+  --radius: 4px;
+  --radius-sm: 2px;
   --radius-pill: 999px;
 
-  /* --- 立面：只声明一次。卡片用发丝边，浮层才用阴影 -------- */
-  --shadow-overlay: 0 1px 2px rgba(13, 37, 54, 0.05),
-    0 12px 28px -8px rgba(13, 37, 54, 0.16);
-  --shadow-lift: 0 1px 2px rgba(13, 37, 54, 0.06),
-    0 6px 16px -6px rgba(13, 37, 54, 0.12);
+  --shadow-overlay: 0 12px 30px -14px rgb(16 35 61 / 28%);
+  --shadow-lift: 0 5px 14px -8px rgb(16 35 61 / 22%);
 
-  /* --- 语义边线 / 占位 / 遮罩：随主题翻转，组件里不再写死色值 --- */
-  --pass-line: #bfe0cd;
-  --fail-line: #eccfcb;
-  --ink-placeholder: #7d99ad;
-  --glacier-focus: rgba(143, 208, 236, 0.28);
-  --mask-page: rgba(244, 249, 252, 0.72);
-  --mask-overlay: rgba(244, 249, 252, 0.9);
-  --scrim: rgba(13, 37, 54, 0.28);
-  --bar-face: rgba(255, 255, 255, 0.82);
-  --note-icon-face: rgba(255, 255, 255, 0.7);
-  --seal-face-hi: #ffffff;
-  --seal-face-lo: rgba(207, 231, 244, 0.4);
-  --seal-ring: rgba(255, 255, 255, 0.72);
+  --pass-line: #bac9e5;
+  --fail-line: #ddaaa5;
+  --warn-line: #d8aaa2;
+  --ink-placeholder: #68604f;
+  --glacier-focus: rgb(28 74 156 / 26%);
+  --mask-page: rgb(239 232 214 / 80%);
+  --mask-overlay: rgb(239 232 214 / 92%);
+  --scrim: rgb(16 35 61 / 42%);
+  --bar-face: #f7f2e6;
+  --note-icon-face: #f7f2e6;
+  --seal-face-hi: #f7f2e6;
+  --seal-face-lo: #e6dcc7;
+  --seal-ring: #f7f2e6;
+  --lane-wash: #e6dcc7;
 
-  /* --- 密度：一个变量重塑全站节奏 -------------------------- */
-  --row-h: 40px;
-  --pad-card: var(--s5);
-  --pad-cell: 10px 14px;
-  --gap-stack: var(--s5);
-  --gap-grid: var(--s4);
+  --row-h: 38px;
+  --pad-card: 20px;
+  --pad-cell: 8px 12px;
+  --gap-stack: 20px;
+  --gap-grid: 12px;
   --fs-table: var(--fs-sm);
-  --rail-w: 248px;
-  --rail-w-mini: 72px;
-  --topbar-h: 60px;
-  --content-max: 1560px;
+  --rail-w: 212px;
+  --rail-w-mini: 60px;
+  --assistant-rail-w: 46px;
+  --topbar-h: 56px;
+  --content-max: 1600px;
 
-  /* --- 动效 ------------------------------------------------ */
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-fast: 140ms;
-  --dur: 220ms;
-  --dur-slow: 420ms;
+  --dur-fast: 160ms;
+  --dur: 240ms;
+  --dur-slow: 320ms;
 }
 
 html[data-density="compact"] {
-  --row-h: 34px;
-  --pad-card: var(--s4);
-  --pad-cell: 7px 12px;
-  --gap-stack: var(--s4);
-  --gap-grid: var(--s3);
+  --row-h: 32px;
+  --pad-card: 14px;
+  --pad-cell: 6px 10px;
+  --gap-stack: 12px;
+  --gap-grid: 8px;
   --fs-table: var(--fs-xs);
-  --rail-w: 224px;
-  --topbar-h: 54px;
+  --rail-w: 196px;
+  --topbar-h: 50px;
 }
 
 html[data-density="relaxed"] {
-  --row-h: 48px;
-  --pad-card: var(--s6);
-  --pad-cell: 15px 18px;
-  --gap-stack: var(--s6);
-  --gap-grid: var(--s5);
+  --row-h: 44px;
+  --pad-card: 28px;
+  --pad-cell: 12px 16px;
+  --gap-stack: 28px;
+  --gap-grid: 18px;
   --fs-table: var(--fs-base);
-  --rail-w: 264px;
-  --topbar-h: 64px;
+  --rail-w: 228px;
+  --topbar-h: 60px;
 }
 
-/* ============================================================
-   深色护眼模式 —— 极夜冰层
-   同一套冰层逻辑反向成立：夜是底色，冰是发光面；
-   冰川蓝仍然是全站唯一的重色，只是在夜里改用高亮的那一档。
-   ============================================================ */
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  /* --- 冰层：反相。数字越大 = 越亮 = 离眼睛越近 ------------- */
-  --ice-0: #0f1e28;      /* 冰面：卡片 */
-  --ice-1: #0a161e;      /* 底冰：页面底 */
-  --ice-2: #142934;      /* 冰层：导航轨、下沉面 */
-  --ice-3: #1e3a48;      /* 发丝边 */
-  --ice-4: #2b4d5e;      /* 常规刻度线 */
-  --ice-5: #3d6274;      /* 强刻度、非激活标记 */
+  --ice-0: #182337;
+  --ice-1: #0f1828;
+  --ice-2: #1e2b42;
+  --ice-3: #30415e;
+  --ice-4: #405573;
+  --ice-5: #5a7091;
 
-  /* --- 墨：夜里改为从冰蓝里调出来的浅色 --------------------- */
-  --ink-1: #e6f1f8;
-  --ink-2: #b7cbd9;
-  --ink-3: #8ba7b8;      /* 夜底 6.2:1 */
-  --ink-inv: #0a161e;
+  --ink-1: #f2ecde;
+  --ink-2: #ccd4e1;
+  --ink-3: #9eadc4;
+  --ink-inv: #0f1828;
 
-  /* --- 冰川蓝刻度 ------------------------------------------ */
-  --glacier: #4fb2dd;        /* 夜底 7.1:1，用作描边 / 主色 */
-  --glacier-hover: #67bfe4;
-  --glacier-press: #8fd0ec;
-  --glacier-deep: #8fd0ec;   /* 夜底文字、链接 10:1 */
-  --glacier-wash: rgba(79, 178, 221, 0.16);
-  --glacier-tint: rgba(79, 178, 221, 0.34);
-  --glacier-glow: #4fb2dd;
-  --fjord: #16303d;          /* 夜间浮层的深底 */
-  --mass: #4fb2dd;           /* 质量块改用会发光的冰川蓝 */
-  --on-mass: #06202c;
+  --glacier: #7fa7f2;
+  --glacier-hover: #94b6f7;
+  --glacier-press: #b1c9f9;
+  --glacier-deep: #b1c9f9;
+  --glacier-wash: rgb(127 167 242 / 12%);
+  --glacier-tint: rgb(127 167 242 / 24%);
+  --glacier-glow: #7fa7f2;
+  --fjord: #182337;
+  --mass: #7fa7f2;
+  --on-mass: #0f1828;
 
-  /* --- 语义 ------------------------------------------------- */
-  --pass: #56d29a;
-  --pass-wash: rgba(86, 210, 154, 0.16);
-  --warn: #e8b45f;
-  --warn-wash: rgba(232, 180, 95, 0.16);
-  --fail: #f08a80;
-  --fail-wash: rgba(240, 138, 128, 0.16);
-  --info: #8fd0ec;
-  --info-wash: rgba(79, 178, 221, 0.16);
+  --signal: #ff6b66;
+  --rail-ink: #0d2142;
+  --rail-line: #253e64;
+  --rail-muted: #9eadc4;
 
-  --pass-line: color-mix(in srgb, var(--pass) 42%, transparent);
-  --fail-line: color-mix(in srgb, var(--fail) 42%, transparent);
-  --ink-placeholder: #6f8c9d;
-  --glacier-focus: rgba(79, 178, 221, 0.3);
-  --mask-page: rgba(6, 14, 20, 0.72);
-  --mask-overlay: rgba(6, 14, 20, 0.82);
-  --scrim: rgba(0, 0, 0, 0.52);
-  --bar-face: rgba(10, 22, 30, 0.82);
-  --note-icon-face: color-mix(in srgb, var(--fail) 18%, transparent);
-  --seal-face-hi: #162a36;
-  --seal-face-lo: rgba(79, 178, 221, 0.16);
-  --seal-ring: rgba(255, 255, 255, 0.06);
+  --pass: #7fa7f2;
+  --pass-wash: rgb(127 167 242 / 12%);
+  --warn: #f08a84;
+  --warn-wash: rgb(240 138 132 / 12%);
+  --fail: #ff6b66;
+  --fail-wash: rgb(255 107 102 / 12%);
+  --danger: #ff6b66;
+  --danger-line: rgb(255 107 102 / 40%);
+  --info: #7fa7f2;
+  --info-wash: rgb(127 167 242 / 12%);
+  --ok: #7fa7f2;
+  --ok-line: rgb(127 167 242 / 40%);
 
-  /* --- 立面：夜里阴影更实，浮层靠亮度而不是靠黑影浮起来 ----- */
-  --shadow-overlay: 0 1px 2px rgba(0, 0, 0, 0.4),
-    0 14px 32px -10px rgba(0, 0, 0, 0.62);
-  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.36),
-    0 6px 18px -6px rgba(0, 0, 0, 0.5);
+  --pass-line: rgb(127 167 242 / 34%);
+  --fail-line: rgb(255 107 102 / 34%);
+  --warn-line: rgb(240 138 132 / 34%);
+  --ink-placeholder: #a8b3c3;
+  --glacier-focus: rgb(127 167 242 / 26%);
+  --mask-page: rgb(15 24 40 / 80%);
+  --mask-overlay: rgb(15 24 40 / 92%);
+  --scrim: rgb(0 0 0 / 58%);
+  --bar-face: #121d30;
+  --note-icon-face: #1e2b42;
+  --seal-face-hi: #1a2740;
+  --seal-face-lo: #182337;
+  --seal-ring: #30415e;
+  --lane-wash: #1e2b42;
+
+  --shadow-overlay: 0 16px 34px -16px rgb(0 0 0 / 70%);
+  --shadow-lift: 0 8px 18px -10px rgb(0 0 0 / 60%);
 }
 
 @media (prefers-reduced-motion: reduce) {

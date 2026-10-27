@@ -3,26 +3,19 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import AppIcon from "@/components/AppIcon.vue";
-import { useHealthStore } from "@/stores/health";
+import ProjectSwitcher from "@/components/ProjectSwitcher.vue";
 import { useUiStore, type Density } from "@/stores/ui";
 
-const emit = defineEmits<{ (e: "open-palette"): void }>();
+const emit = defineEmits<{
+  (e: "open-palette"): void;
+  (e: "open-assistant"): void;
+}>();
 
 const route = useRoute();
 const router = useRouter();
 const ui = useUiStore();
-const health = useHealthStore();
 
 const title = computed(() => String(route.meta.title ?? ""));
-const hint = computed(() => String(route.meta.hint ?? ""));
-const domainLabel = computed(() => {
-  const map: Record<string, string> = {
-    case: "用例生成",
-    report: "测试报告",
-    platform: "平台",
-  };
-  return map[String(route.meta.domain ?? "platform")] ?? "平台";
-});
 const parentPath = computed(() => String(route.meta.parentPath ?? ""));
 const parentTitle = computed(() => String(route.meta.parentTitle ?? ""));
 
@@ -60,20 +53,33 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
     </button>
 
     <div class="bar__id">
-      <nav class="bar__crumbs mono" aria-label="面包屑">
-        <button v-if="parentPath" type="button" class="bar__parent" @click="router.push(parentPath)">
+      <nav v-if="parentPath" class="bar__crumbs mono" aria-label="面包屑">
+        <button type="button" class="bar__parent" @click="router.push(parentPath)">
           {{ parentTitle }}
         </button>
-        <AppIcon v-if="parentPath" name="chevronRight" :size="10" class="bar__crumb-sep" />
-        <span class="bar__crumb-current">{{ parentPath ? title : domainLabel }}</span>
+        <AppIcon name="chevronRight" :size="10" class="bar__crumb-sep" />
+        <span class="bar__crumb-current">{{ title }}</span>
       </nav>
-      <h1 class="bar__title" :title="hint">
+      <h1 class="bar__title">
         {{ title }}
-        <span v-if="hint" class="bar__hint">{{ hint }}</span>
       </h1>
     </div>
 
     <div class="spacer" />
+
+    <div class="project-switcher-desktop">
+      <ProjectSwitcher />
+    </div>
+
+    <button
+      type="button"
+      class="icon-btn bar__assistant"
+      title="打开项目助手（移动端）"
+      @click="emit('open-assistant')"
+    >
+      <AppIcon name="sparkle" :size="17" />
+      <span class="sr-only">打开项目助手</span>
+    </button>
 
     <button
       type="button"
@@ -86,7 +92,7 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
       <kbd class="palette__kbd mono">Ctrl K</kbd>
     </button>
 
-    <div class="bar__group" data-density-root>
+    <div class="bar__group bar__density" data-density-root>
       <button
         type="button"
         class="icon-btn"
@@ -110,7 +116,6 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
           @click="ui.setDensity(option.value); closeDensity()"
         >
           <span class="menu__label">{{ option.label }}</span>
-          <span class="menu__hint">{{ option.hint }}</span>
           <AppIcon v-if="ui.density === option.value" name="check" :size="15" />
         </button>
       </div>
@@ -121,7 +126,7 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
       class="icon-btn"
       :title="
         ui.theme === 'dark'
-          ? '切换到冰川蓝白（浅色）'
+          ? '切换到浅色模式'
           : '切换到深色护眼模式'
       "
       :aria-pressed="ui.theme === 'dark'"
@@ -139,7 +144,7 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
 
     <button
       type="button"
-      class="icon-btn"
+      class="icon-btn help-btn"
       title="使用说明与口径"
       @click="ui.openHelp(String(route.meta.nav ?? ''))"
     >
@@ -147,19 +152,10 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
       <span class="sr-only">帮助</span>
     </button>
 
-    <RouterLink
-      to="/settings"
-      class="engine"
-      :class="{ 'engine--off': !health.llmReady }"
-      :title="
-        health.llmReady
-          ? `推理引擎已启用：${health.llmLabel}（来源：${health.llmSourceLabel}）`
-          : `未启用大模型：${health.degradedReason || '未配置 LLM_API_KEY'}`
-      "
-    >
-      <span class="engine__dot" aria-hidden="true" />
-      <span class="engine__text mono">{{ health.llmLabel }}</span>
-    </RouterLink>
+    <div class="mobile-project">
+      <ProjectSwitcher />
+    </div>
+
   </header>
 </template>
 
@@ -456,6 +452,130 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
 
   .bar__title {
     max-width: 38vw;
+  }
+}
+
+@media (max-width: 640px) {
+  .bar {
+    gap: var(--s1);
+    padding-inline: var(--s3);
+  }
+
+  .palette,
+  .engine,
+  .bar__density,
+  .help-btn {
+    display: none;
+  }
+
+  .bar__title {
+    max-width: 28vw;
+  }
+}
+
+/* Paper & Ink Workbench header */
+.bar {
+  height: var(--topbar-h);
+  padding-inline: var(--s4);
+  background: var(--bar-face);
+  border-bottom-color: var(--ice-3);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bar__crumbs {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.bar__title {
+  font-size: var(--fs-sm);
+  letter-spacing: 0;
+}
+
+.bar__hint {
+  display: none;
+}
+
+.palette,
+.engine {
+  height: 32px;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+.palette {
+  border-color: var(--ice-3);
+}
+
+.engine {
+  border-radius: var(--radius);
+}
+
+.bar__toggle,
+.icon-btn {
+  border-radius: var(--radius);
+}
+
+.bar__toggle:hover,
+.icon-btn:hover {
+  background: var(--ice-2);
+  border-color: var(--ice-3);
+  color: var(--glacier-deep);
+}
+
+.project-switcher-desktop {
+  display: flex;
+}
+
+.bar__assistant,
+.mobile-project {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .bar {
+    height: auto;
+    min-height: var(--topbar-h);
+    padding-block: 6px;
+    flex-wrap: wrap;
+  }
+
+  .project-switcher-desktop {
+    display: none;
+  }
+
+  .bar__assistant {
+    display: grid;
+  }
+
+  .bar__title {
+    max-width: 40vw;
+  }
+
+  .mobile-project {
+    display: flex;
+    flex: 1 0 100%;
+    order: 20;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .mobile-project :deep(.project) {
+    width: 100%;
+    max-width: none;
+    height: 30px;
+  }
+
+  .mobile-project :deep(.project__select) {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .mobile-project :deep(.project__role) {
+    display: inline-flex;
+    flex: none;
   }
 }
 </style>

@@ -156,7 +156,7 @@ async function removeSelected(): Promise<void> {
       v-if="error"
       title="用例集列表没有取到"
       :message="error"
-      recovery="确认后端已启动（python run.py），然后重试。"
+      recovery="确认服务已启动后重试。"
       @retry="load"
     />
 
@@ -280,8 +280,8 @@ async function removeSelected(): Promise<void> {
     <SectionCard v-else title="还没有用例集" icon="cases">
       <EmptyState
         icon="cases"
-        title="生成第一份用例集后，这里会记录每一次产出"
-        reason="每一份用例集都保留生成时间、设计方法、去重条数与引擎策略，可随时回看、导出或删除。"
+        title="暂无用例集"
+        reason="生成后显示。"
         action-label="去生成用例"
         @action="router.push('/generate')"
       />

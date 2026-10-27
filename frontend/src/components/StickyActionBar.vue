@@ -54,16 +54,22 @@ onDeactivated(() => {
 <style scoped>
 .sticky-actions {
   position: fixed;
-  right: 0;
+  right: var(--assistant-rail-w);
   bottom: 0;
   left: var(--rail-w);
   z-index: 50;
   padding: 10px var(--s5) calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--ice-3);
-  background: color-mix(in srgb, var(--ice-0) 94%, transparent);
-  backdrop-filter: saturate(150%) blur(14px);
-  -webkit-backdrop-filter: saturate(150%) blur(14px);
+  background: var(--ice-0);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition: left var(--dur) var(--ease);
+}
+
+@media (max-width: 760px) {
+  .sticky-actions {
+    right: 0;
+  }
 }
 
 .sticky-actions[data-collapsed="1"] {

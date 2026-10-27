@@ -19,6 +19,47 @@ export const http = axios.create({
   timeout: 300_000,
 });
 
+const PROJECT_KEY = "tap.project-id";
+const API_KEY = "tap.api-key";
+
+http.interceptors.request.use((config) => {
+  try {
+    const projectId = localStorage.getItem(PROJECT_KEY);
+    const apiKey = localStorage.getItem(API_KEY);
+    if (projectId) config.headers.set("X-Project-ID", projectId);
+    if (apiKey) config.headers.set("X-API-Key", apiKey);
+  } catch {
+    /* localStorage 在隐私模式下可能不可用，请求继续走默认项目。 */
+  }
+  return config;
+});
+
+export function setActiveProjectId(projectId: string): void {
+  try {
+    if (projectId) localStorage.setItem(PROJECT_KEY, projectId);
+    else localStorage.removeItem(PROJECT_KEY);
+  } catch {
+    /* 忽略 */
+  }
+}
+
+export function getActiveProjectId(): string {
+  try {
+    return localStorage.getItem(PROJECT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setApiKey(apiKey: string): void {
+  try {
+    if (apiKey) localStorage.setItem(API_KEY, apiKey);
+    else localStorage.removeItem(API_KEY);
+  } catch {
+    /* 忽略 */
+  }
+}
+
 interface ErrorBody {
   message?: string;
   code?: string;

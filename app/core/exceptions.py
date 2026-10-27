@@ -43,6 +43,18 @@ class ConflictError(AppError):
     default_message = "资源正在处理中"
 
 
+class RateLimitError(AppError):
+    code = "RATE_LIMITED"
+    http_status = 429
+    default_message = "请求频率超过限制，请稍后再试"
+
+
+class ExternalServiceError(AppError):
+    code = "EXTERNAL_SERVICE_ERROR"
+    http_status = 502
+    default_message = "外部服务调用失败"
+
+
 class NotFoundError(AppError):
     code = "NOT_FOUND"
     http_status = 404

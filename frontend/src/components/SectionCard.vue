@@ -22,7 +22,6 @@ withDefaults(
         <span v-if="icon" class="card__icon"><AppIcon :name="icon" :size="16" /></span>
         <div>
           <p v-if="title" class="card__title">{{ title }}</p>
-          <p v-if="sub" class="card__sub">{{ sub }}</p>
         </div>
         <slot name="head" />
       </div>

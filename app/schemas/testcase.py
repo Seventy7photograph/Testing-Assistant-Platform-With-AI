@@ -132,6 +132,10 @@ class TestCaseSuite(BaseModel):
         default_factory=ParseMeta,
         description="需求解析阶段的口径快照，供导出/展示区分「解析用 LLM」与「生成用 LLM」",
     )
+    external_links: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="外部需求/测试平台回写记录（v3.0）",
+    )
     created_at: str = Field(default_factory=now_iso)
 
     def recount(self) -> SuiteStats:

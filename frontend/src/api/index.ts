@@ -49,6 +49,25 @@ import type {
   WorkItemCreate,
   WorkItemSummary,
   WorkItemUpdate,
+  Project,
+  ProjectContextInfo,
+  AuditEvent,
+  IntegrationHealth,
+  IntegrationPullResult,
+  IntegrationPushResult,
+  Job,
+  Schedule,
+  AgentRun,
+  ToolCall,
+  KnowledgeIndexStats,
+  KnowledgeSearchResult,
+  AssistantAnswer,
+  AssistantConversation,
+  AssistantConversationSummary,
+  AssistantStatus,
+  ToolCatalogItem,
+  RoutingPolicyInfo,
+  ExternalStatus,
 } from "./types";
 
 export interface GeneratePayload {
@@ -94,6 +113,102 @@ export const api = {
       ...(baseUrl ? { base_url: baseUrl } : {}),
     }),
   prompts: () => get<PromptInfo[]>("/llm/prompts"),
+  routing: (strategy?: string) =>
+    get<RoutingPolicyInfo>("/llm/routing", strategy ? { strategy } : {}),
+
+  /* ---------- v3.0 项目治理 ---------- */
+  projects: () => get<Project[]>("/projects"),
+  createProject: (payload: {
+    key: string;
+    name: string;
+    description?: string;
+  }) => post<Project>("/projects", payload),
+  currentProject: () => get<ProjectContextInfo>("/projects/current"),
+  updateProject: (
+    projectId: string,
+    payload: Record<string, unknown>,
+  ) => put<Project>(`/projects/${encodeURIComponent(projectId)}`, payload),
+  projectAudit: (projectId: string, limit = 100) =>
+    get<AuditEvent[]>(`/projects/${encodeURIComponent(projectId)}/audit`, { limit }),
+
+  /* ---------- v3.0 外部同步 ---------- */
+  integrationHealth: (
+    name: "jira" | "zentao",
+    payload: Record<string, unknown> = {},
+  ) => post<IntegrationHealth>(`/integrations/${name}/health`, payload),
+  pullIntegrationRequirements: (
+    name: "jira" | "zentao",
+    payload: Record<string, unknown> = {},
+  ) => post<IntegrationPullResult>(`/integrations/${name}/requirements/pull`, payload),
+  importIntegrationRequirements: (
+    name: "jira" | "zentao",
+    payload: Record<string, unknown>,
+  ) => post<IntegrationPullResult>(`/integrations/${name}/requirements/import`, payload),
+  pushSuiteToIntegration: (
+    name: "jira" | "zentao",
+    suiteId: string,
+    payload: Record<string, unknown> = {},
+  ) =>
+    post<IntegrationPushResult>(
+      `/integrations/${name}/suites/${encodeURIComponent(suiteId)}/push`,
+      payload,
+    ),
+  externalStatus: (name: "jira" | "zentao", externalId: string) =>
+    get<ExternalStatus>(
+      `/integrations/${name}/requirements/${encodeURIComponent(externalId)}/status`,
+    ),
+
+  /* ---------- v3.0 运行治理与受控执行 ---------- */
+  jobs: (query: { status?: string; kind?: string; limit?: number } = {}) =>
+    get<Job[]>("/jobs", query),
+  job: (jobId: string) => get<Job>(`/jobs/${encodeURIComponent(jobId)}`),
+  jobTimeline: (jobId: string, limit = 200) =>
+    get<JobEvent[]>(`/jobs/${encodeURIComponent(jobId)}/events`, { limit }),
+  cancelJob: (jobId: string) =>
+    post<Job>(`/jobs/${encodeURIComponent(jobId)}/cancel`),
+  schedules: (limit = 100) => get<Schedule[]>("/schedules", { limit }),
+  createSchedule: (payload: Record<string, unknown>) =>
+    post<Schedule>("/schedules", payload),
+  agentRuns: (limit = 50) => get<AgentRun[]>("/agent-runs", { limit }),
+  toolCalls: (runId = "", limit = 100) =>
+    get<ToolCall[]>("/tool-calls", { ...(runId ? { run_id: runId } : {}), limit }),
+  executeHttp: (payload: {
+    artifact_id: string;
+    case_ids?: string[];
+    environment?: Record<string, string>;
+    base_url?: string;
+    idempotency_key?: string;
+  }) => post<{ job: Job; run: TestRun }>("/execution/http", payload),
+
+  /* ---------- v3.0 知识与只读助手 ---------- */
+  knowledgeStats: () => get<KnowledgeIndexStats>("/knowledge/stats"),
+  syncKnowledge: () => post<KnowledgeIndexStats>("/knowledge/sync"),
+  searchKnowledge: (payload: {
+    query: string;
+    source_types?: string[];
+    limit?: number;
+    include_expired?: boolean;
+  }) => post<KnowledgeSearchResult>("/knowledge/search", payload),
+  assistantTools: () => get<ToolCatalogItem[]>("/assistant/tools"),
+  assistantStatus: () => get<AssistantStatus>("/assistant/status"),
+  assistantConversations: (limit = 20) =>
+    get<AssistantConversationSummary[]>("/assistant/conversations", { limit }),
+  assistantConversation: (conversationId: string) =>
+    get<AssistantConversation>(
+      `/assistant/conversations/${encodeURIComponent(conversationId)}`,
+    ),
+  askAssistant: (payload: {
+    message: string;
+    current_path?: string;
+    conversation_id?: string;
+    allow_web_search?: boolean;
+  }) =>
+    post<AssistantAnswer>("/assistant/ask", {
+      current_path: "",
+      conversation_id: "",
+      allow_web_search: true,
+      ...payload,
+    }),
 
   /* ---------- 图片识别（V2.0 多模态 OCR） ---------- */
   visionConfig: () => get<VisionConfigInfo>("/vision/config"),
@@ -334,7 +449,12 @@ export const api = {
 };
 
 export { ApiError, saveBlob } from "./client";
-export { http } from "./client";
+export {
+  getActiveProjectId,
+  http,
+  setActiveProjectId,
+  setApiKey,
+} from "./client";
 export type * from "./types";
 
 /* ============================================================

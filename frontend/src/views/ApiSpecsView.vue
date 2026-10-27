@@ -239,8 +239,8 @@ async function remove(spec: ApiSpecSummary): Promise<void> {
     <SectionCard v-else title="还没有接口规范" icon="route">
       <EmptyState
         icon="route"
-        title="导入 OpenAPI 3 后，这里会保留 operation 与契约用例"
-        reason="支持 JSON / YAML 与本地 $ref。路径、参数和 schema 断言只来自规范化规范，缺失约束会明确标成待补充。"
+        title="暂无接口规范"
+        reason="支持 JSON / YAML；缺失约束会标为待补充。"
         action-label="导入 OpenAPI"
         @action="chooseFile"
       />

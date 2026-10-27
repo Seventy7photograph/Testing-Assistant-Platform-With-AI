@@ -16,13 +16,13 @@ declare module "vue-router" {
 
 export const router = createRouter({
   history: createWebHistory("/"),
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0, left: 0 },
   routes: [
     {
       path: "/",
       name: "dashboard",
       component: () => import("@/views/DashboardView.vue"),
-      meta: { nav: "dashboard", title: "总览", domain: "platform", hint: "AI 工作流状态与最近动态" },
+      meta: { nav: "dashboard", title: "总览", domain: "platform" },
     },
     {
       path: "/generate",
@@ -122,20 +122,70 @@ export const router = createRouter({
     },
     {
       path: "/workspace",
-      name: "workspace",
+      redirect: "/automation",
+    },
+    {
+      path: "/automation",
+      name: "automation",
       component: () => import("@/views/ExecutionWorkspaceView.vue"),
       meta: {
-        nav: "workspace",
-        title: "交付工作台",
+        nav: "automation",
+        title: "自动化资产",
         domain: "case",
-        hint: "自动化资产 · 执行记录 · 工作事项",
       },
+      props: { section: "automation" },
+    },
+    {
+      path: "/executions",
+      name: "executions",
+      component: () => import("@/views/ExecutionWorkspaceView.vue"),
+      meta: { nav: "executions", title: "执行记录", domain: "case" },
+      props: { section: "runs" },
+    },
+    {
+      path: "/work-items",
+      name: "work-items",
+      component: () => import("@/views/ExecutionWorkspaceView.vue"),
+      meta: { nav: "work-items", title: "工作事项", domain: "platform" },
+      props: { section: "items" },
+    },
+    {
+      path: "/platform",
+      redirect: "/projects",
+    },
+    {
+      path: "/projects",
+      name: "projects",
+      component: () => import("@/views/PlatformView.vue"),
+      meta: { nav: "projects", title: "项目", domain: "platform" },
+      props: { section: "projects" },
+    },
+    {
+      path: "/integrations",
+      name: "integrations",
+      component: () => import("@/views/PlatformView.vue"),
+      meta: { nav: "integrations", title: "外部连接", domain: "platform" },
+      props: { section: "integrations" },
+    },
+    {
+      path: "/jobs",
+      name: "jobs",
+      component: () => import("@/views/PlatformView.vue"),
+      meta: { nav: "jobs", title: "运行任务", domain: "platform" },
+      props: { section: "execution" },
+    },
+    {
+      path: "/knowledge",
+      name: "knowledge",
+      component: () => import("@/views/PlatformView.vue"),
+      meta: { nav: "knowledge", title: "知识索引", domain: "platform" },
+      props: { section: "knowledge" },
     },
     {
       path: "/settings",
       name: "settings",
       component: () => import("@/views/SettingsView.vue"),
-      meta: { nav: "settings", title: "大模型与阈值", domain: "platform", hint: "所有模型任务共用" },
+      meta: { nav: "settings", title: "模型设置", domain: "platform" },
     },
     {
       path: "/:pathMatch(.*)*",

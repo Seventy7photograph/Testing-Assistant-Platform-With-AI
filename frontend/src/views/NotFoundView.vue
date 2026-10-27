@@ -3,7 +3,6 @@ import { useRouter } from "vue-router";
 
 import AppIcon from "@/components/AppIcon.vue";
 import SectionCard from "@/components/SectionCard.vue";
-import Tip from "@/components/Tip.vue";
 
 const router = useRouter();
 </script>
@@ -13,12 +12,8 @@ const router = useRouter();
     <SectionCard>
       <div class="nf__inner">
         <span class="nf__glyph" aria-hidden="true">404</span>
-        <h2 class="nf__title">这个地址没有对应的页面</h2>
-        <p class="nf__text">
-          链接可能拼错了，或它指向的功能还没上线。你可以回到总览重新开始，或用
-          <Tip text="在任意页面按 Ctrl / ⌘ + K，或直接按 / 键唤出快速跳转。">快速跳转</Tip>
-          定位到目标页。
-        </p>
+        <h2 class="nf__title">页面不存在</h2>
+        <p class="nf__text">返回总览或使用快速跳转。</p>
         <div class="nf__actions">
           <el-button type="primary" @click="router.push('/')">
             <AppIcon name="gauge" :size="15" /> 回到总览

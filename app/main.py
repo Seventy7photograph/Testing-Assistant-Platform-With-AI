@@ -23,14 +23,20 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.api.routes import (
     api_specs,
+    assistant,
     automation,
     automation_ai,
     documents,
+    execution,
     export,
     health,
+    integrations,
+    jobs,
+    knowledge,
     llm,
     overview,
     pipeline,
+    projects,
     report as report_routes,
     requirements,
     testcases,
@@ -38,6 +44,7 @@ from app.api.routes import (
     work_items,
 )
 from app.api.openapi import install_openapi
+from app.api.middleware import ProjectContextMiddleware
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AppError
 from app.core.logging import get_logger, setup_logging
@@ -153,8 +160,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["Content-Disposition", "X-Export-Filename"],
+        expose_headers=["Content-Disposition", "X-Export-Filename", "X-Project-ID"],
     )
+    app.add_middleware(ProjectContextMiddleware, settings=settings)
 
     for module in (
         health,
@@ -171,6 +179,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         automation,
         automation_ai,
         work_items,
+        projects,
+        integrations,
+        execution,
+        jobs,
+        knowledge,
+        assistant,
     ):
         app.include_router(module.router, prefix=settings.api_prefix)
 

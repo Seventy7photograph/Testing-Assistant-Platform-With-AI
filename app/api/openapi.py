@@ -281,10 +281,24 @@ def install_openapi(app: FastAPI, settings: Settings) -> None:
             str(info.get("description") or "").rstrip()
             + "\n\n接口统一响应结构为 `{success, code, message, detail, data}`；"
             "文件下载、动态导出与 SSE 流式接口按各自 Content-Type 返回。"
-            "\n\n当前版本默认不启用平台自身 API 的鉴权；"
-            "若监听 `0.0.0.0` 或暴露到内网，应在反向代理或平台外层增加访问控制。"
+            "\n\n项目身份通过 `X-Project-ID` 传递。平台鉴权可通过 `AUTH_ENABLED` 配置；"
+            "启用后使用 `X-API-Key`，令牌与项目、角色在服务端绑定。"
         ).strip()
-        info["x-authentication-required"] = False
+        info["x-authentication-required"] = settings.auth_enabled
+        components = schema.setdefault("components", {})
+        security_schemes = components.setdefault("securitySchemes", {})
+        security_schemes["ApiKeyAuth"] = {
+            "type": "apiKey",
+            "in": "header",
+            "name": settings.auth_header,
+        }
+        security_schemes["ProjectHeader"] = {
+            "type": "apiKey",
+            "in": "header",
+            "name": settings.project_header,
+        }
+        if settings.auth_enabled:
+            schema["security"] = [{"ApiKeyAuth": []}, {"ProjectHeader": []}]
 
         _ensure_common_schemas(schema)
         for path, path_item in (schema.get("paths") or {}).items():

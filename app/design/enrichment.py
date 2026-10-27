@@ -311,6 +311,7 @@ async def review_item(
                 "prompt_version": response.prompt_version or PROMPT_GENERATION_REVIEW.version,
                 "model": response.model or context.llm.model,
                 "temperature": response.temperature,
+                "route": response.route.as_dict() if response.route else {},
                 "requirement_id": item.id,
                 "attempt": attempt + 1,
                 "validation_failures": issues,

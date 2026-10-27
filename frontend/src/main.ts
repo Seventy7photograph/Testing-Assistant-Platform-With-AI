@@ -3,7 +3,7 @@ import { createApp } from "vue";
 import ElementPlus from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 
-/* 冰川刻度：拉丁 UI = Archivo，数据 = Azeret Mono，自托管，无网络依赖 */
+/* Paper & Ink Workbench: self-hosted Archivo + Azeret Mono. */
 import "@fontsource/archivo/400.css";
 import "@fontsource/archivo/500.css";
 import "@fontsource/archivo/600.css";

@@ -274,7 +274,7 @@ async function remove(row: ReportSummary): Promise<void> {
         v-else
         icon="chart"
         title="至少需要两轮报告才能画出趋势"
-        reason="趋势曲线比较的是同一平台上多轮执行之间的通过率变化；先在报告工作台生成并归档两份报告。"
+        reason="归档两轮报告后显示趋势。"
         action-label="去生成报告"
         @action="router.push('/report')"
       />
@@ -417,8 +417,8 @@ async function remove(row: ReportSummary): Promise<void> {
     <SectionCard v-else title="还没有归档的报告" icon="archive">
       <EmptyState
         icon="archive"
-        title="生成并归档第一份报告后，这里会记录每一轮"
-        reason="每份报告都保留正文、指标快照与原始输入；勾选两轮即可对比通过率、缺陷与判定差异。"
+        title="暂无报告"
+        reason="生成并归档后显示。"
         action-label="去报告工作台"
         @action="router.push('/report')"
       />
@@ -438,7 +438,7 @@ async function remove(row: ReportSummary): Promise<void> {
         title="这两轮里有一轮没有可对比的指标"
         :reason="
           `「${compareBlockedNames.join('」「')}」没有解析出用例统计字段，指标为空，因此无法参与对比。` +
-          '请改选两轮数据完整的报告，或先在工作台用可识别的结构化数据（含 total_cases / passed / failed 等字段）重新生成后再对比。'
+          '改选含用例统计的报告。'
         "
       />
       <div v-else-if="compareLeft && compareRight" class="cmp">

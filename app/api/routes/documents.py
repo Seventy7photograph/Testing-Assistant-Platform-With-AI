@@ -63,7 +63,7 @@ async def get_document(doc_id: str, service: DocumentServiceDep, repository: Rep
 
 @router.get("/documents/{doc_id}/download", summary="下载文档原文")
 async def download_document(
-    doc_id: str, service: DocumentServiceDep, settings: SettingsDep
+    doc_id: str, service: DocumentServiceDep
 ) -> Response:
     """原样返回上传时的文件，文件名恢复成用户上传时用的名字。
 
@@ -79,7 +79,7 @@ async def download_document(
     if not path.is_file():
         raise NotFoundError(f"「{record.filename}」的原文已不在存储中，无法下载。可重新上传该文件。")
     # 只允许下载 uploads/ 目录内的文件：路径来自我们自己的记录，仍然兜一层，杜绝路径穿越。
-    if settings.upload_dir.resolve() not in path.resolve().parents:
+    if service.settings.upload_dir.resolve() not in path.resolve().parents:
         raise NotFoundError("原文路径不在上传目录内，已拒绝下载。")
     media_type = mimetypes.guess_type(record.filename)[0] or "application/octet-stream"
     return build_download_response(path.read_bytes(), record.filename, media_type)
@@ -87,13 +87,13 @@ async def download_document(
 
 @router.get("/documents/{doc_id}/images/{filename}", summary="查看文档中的图片")
 async def get_document_image(
-    doc_id: str, filename: str, service: DocumentServiceDep, settings: SettingsDep
+    doc_id: str, filename: str, service: DocumentServiceDep
 ) -> Response:
     """回显文档里的某张图片（界面据此展示缩略图，便于人工核对识别结果）。"""
     record = service.get(doc_id)
     if not any(asset.filename == filename for asset in record.assets):
         raise NotFoundError(f"文档里没有这张图片：{filename}", detail={"doc_id": doc_id})
-    directory = (settings.asset_dir / doc_id).resolve()
+    directory = (service.settings.asset_dir / doc_id).resolve()
     path = (directory / filename).resolve()
     # 文件名来自我们自己的记录，仍然兜一层：不给路径穿越留任何余地。
     if directory not in path.parents or not path.is_file():
@@ -138,13 +138,21 @@ def _purge_document(record: DocumentRecord, repository: RepositoryDep) -> None:
     if record.assets:
         # 图片目录按 doc_id 命名，整个删掉即可（失败不影响主流程）。
         try:
-            from app.core.config import get_settings
-
-            shutil.rmtree(get_settings().asset_dir / record.doc_id, ignore_errors=True)
+            shutil.rmtree(repository.settings.asset_dir / record.doc_id, ignore_errors=True)
         except OSError:
             pass
     repository.requirements.delete(record.doc_id)
     repository.documents.delete(record.doc_id)
+    try:
+        from app.knowledge.indexer import KnowledgeService
+        KnowledgeService(repository.settings, repository).delete_resource(
+            source_type="document",
+            resource_id=record.doc_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - 知识生命周期清理失败不阻断文档删除
+        from app.core.logging import get_logger
+
+        get_logger(__name__).warning("文档知识生命周期清理失败：%s", exc)
 
 
 @router.delete("/documents/{doc_id}", response_model=ApiResponse[dict], summary="删除文档及其解析结果与原文")

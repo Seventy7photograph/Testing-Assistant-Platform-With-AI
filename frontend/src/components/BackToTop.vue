@@ -41,7 +41,7 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
 <style scoped>
 .backtop {
   position: fixed;
-  right: var(--s5);
+  right: calc(var(--assistant-rail-w) + var(--s4));
   bottom: calc(var(--s5) + 72px + env(safe-area-inset-bottom));
   z-index: 55;
   display: grid;
@@ -49,12 +49,12 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   width: 38px;
   height: 38px;
   border: 1px solid var(--ice-3);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ice-0) 92%, transparent);
+  border-radius: var(--radius);
+  background: var(--ice-0);
   box-shadow: var(--shadow-overlay);
   color: var(--ink-2);
   cursor: pointer;
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
 }
 
 .backtop svg {
@@ -83,6 +83,13 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   .backtop {
     right: var(--s3);
     bottom: calc(var(--s3) + 72px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 760px) {
+  .backtop {
+    right: var(--s4);
+    bottom: calc(84px + env(safe-area-inset-bottom));
   }
 }
 

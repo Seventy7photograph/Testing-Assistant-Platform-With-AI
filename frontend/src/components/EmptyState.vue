@@ -9,7 +9,7 @@ withDefaults(
   defineProps<{
     icon?: string;
     title: string;
-    reason: string;
+    reason?: string;
     actionLabel?: string;
     secondaryLabel?: string;
   }>(),
@@ -23,7 +23,7 @@ defineEmits<{ (e: "action"): void; (e: "secondary"): void }>();
   <div class="empty">
     <span class="empty__mark"><AppIcon :name="icon" :size="22" /></span>
     <p class="empty__title">{{ title }}</p>
-    <p class="empty__reason">{{ reason }}</p>
+    <p v-if="reason" class="empty__reason" :title="reason">{{ reason }}</p>
     <div v-if="actionLabel || secondaryLabel" class="empty__actions">
       <el-button v-if="actionLabel" type="primary" @click="$emit('action')">
         {{ actionLabel }}
@@ -41,20 +41,20 @@ defineEmits<{ (e: "action"): void; (e: "secondary"): void }>();
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s2);
-  padding: var(--s7) var(--s5);
+  gap: 6px;
+  padding: var(--s6) var(--s5);
   text-align: center;
 }
 
 .empty__mark {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 38px;
+  height: 38px;
   margin-bottom: var(--s2);
-  border-radius: 14px;
-  border: 1px dashed var(--ice-4);
-  background: var(--ice-1);
+  border-radius: var(--radius);
+  border: 1px solid var(--ice-3);
+  background: var(--ice-2);
   color: var(--ink-3);
 }
 
@@ -65,10 +65,14 @@ defineEmits<{ (e: "action"): void; (e: "secondary"): void }>();
 }
 
 .empty__reason {
-  max-width: 46ch;
-  font-size: var(--fs-sm);
-  line-height: 1.7;
+  display: -webkit-box;
+  max-width: 42ch;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
   color: var(--ink-3);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .empty__actions {

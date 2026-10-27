@@ -62,6 +62,7 @@ class OpenAICompatibleProvider(LLMProvider):
         self,
         messages: list[LLMMessage],
         *,
+        model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         json_mode: bool = False,
@@ -70,8 +71,9 @@ class OpenAICompatibleProvider(LLMProvider):
         if not self.available:
             raise LLMError("LLM Provider 不可用：" + (self.degraded_reason or "未配置"))
 
+        resolved_model = (model or self.model).strip()
         payload: dict[str, Any] = {
-            "model": self.model,
+            "model": resolved_model,
             "messages": [message.to_dict() for message in messages],
             "temperature": self.settings.llm_temperature if temperature is None else temperature,
             "max_tokens": max_tokens or self.settings.llm_max_tokens,
@@ -115,9 +117,19 @@ class OpenAICompatibleProvider(LLMProvider):
                 detail={"body": truncate(response.text, 500)},
             ) from exc
 
-        return self._parse_completion(data, elapsed_ms=timer.elapsed_ms)
+        return self._parse_completion(
+            data,
+            elapsed_ms=timer.elapsed_ms,
+            fallback_model=resolved_model,
+        )
 
-    def _parse_completion(self, data: dict[str, Any], *, elapsed_ms: int) -> LLMResponse:
+    def _parse_completion(
+        self,
+        data: dict[str, Any],
+        *,
+        elapsed_ms: int,
+        fallback_model: str = "",
+    ) -> LLMResponse:
         choices = data.get("choices") or []
         if not choices:
             raise LLMResponseFormatError(
@@ -155,7 +167,7 @@ class OpenAICompatibleProvider(LLMProvider):
             )
         return LLMResponse(
             content=content,
-            model=data.get("model", self.model),
+            model=data.get("model") or fallback_model or self.model,
             usage=data.get("usage") or {},
             elapsed_ms=elapsed_ms,
             raw=data,

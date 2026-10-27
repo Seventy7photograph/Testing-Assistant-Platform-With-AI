@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Testing Assistant Platform</title>
+  <desc id="desc">Paper white, cobalt blue, and vermilion documentation cover.</desc>
+  <rect width="1200" height="420" fill="#EFE8D6"/>
+  <rect width="500" height="420" fill="#1C4A9C"/>
+  <rect x="468" y="0" width="16" height="420" fill="#DA2E2B"/>
+  <text x="72" y="86" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="16" letter-spacing="5">TESTING ASSISTANT</text>
+  <text x="72" y="164" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="58" font-weight="700">PLATFORM</text>
+  <line x1="72" y1="202" x2="410" y2="202" stroke="#EFE8D6" stroke-width="2"/>
+  <text x="72" y="244" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="20">Requirements · Test Design · API</text>
+  <text x="72" y="276" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="20">Automation · Delivery · Reports</text>
+  <rect x="72" y="326" width="118" height="7" fill="#DA2E2B"/>
+  <text x="72" y="370" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="14" letter-spacing="2">LOCAL / INTRANET WORKBENCH</text>
+  <text x="556" y="78" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="15" letter-spacing="4">CURRENT CAPABILITY MAP</text>
+  <g fill="none" stroke="#1C4A9C" stroke-width="2">
+    <rect x="556" y="110" width="244" height="92" rx="6"/>
+    <rect x="844" y="110" width="244" height="92" rx="6"/>
+    <rect x="556" y="246" width="244" height="92" rx="6"/>
+    <rect x="844" y="246" width="244" height="92" rx="6"/>
+    <path d="M800 156H844M932 202V246M800 292H844"/>
+  </g>
+  <g fill="#1C4A9C" font-family="Arial, sans-serif" font-size="19" font-weight="700">
+    <text x="580" y="151">REQUIREMENTS</text>
+    <text x="580" y="179">Documents to cases</text>
+    <text x="868" y="151">API ASSETS</text>
+    <text x="868" y="179">OpenAPI to contracts</text>
+    <text x="580" y="287">AUTOMATION</text>
+    <text x="580" y="315">JUnit to follow-up</text>
+    <text x="868" y="287">REPORTS</text>
+    <text x="868" y="315">Metrics to release</text>
+  </g>
+  <g fill="none" stroke="#DA2E2B" stroke-width="3">
+    <circle cx="556" cy="110" r="7"/>
+    <path d="M1122 202h24M1134 190v24"/>
+  </g>
+  <text x="1110" y="378" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="13" text-anchor="end">PAPER &amp; INK WORKBENCH</text>
+</svg>

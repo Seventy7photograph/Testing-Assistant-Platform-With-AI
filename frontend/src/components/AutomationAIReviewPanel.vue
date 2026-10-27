@@ -128,11 +128,11 @@ async function requestReview(kind: AutomationAIKind) {
             : "没有发现需要补充的项",
       );
     } else {
-      notice.warning("AI 建议未完成", review.meta.warnings[0] || "确定性资产保持不变。");
+      notice.warning("建议未完成", review.meta.warnings[0] || "资产保持不变。");
     }
     emit("changed");
   } catch (err) {
-    notice.error("AI 受控增强失败", (err as Error).message);
+    notice.error("建议生成失败", (err as Error).message);
   } finally {
     busy.value = "";
   }
@@ -188,7 +188,7 @@ async function applyReview(review: AutomationAIReview) {
     emit("applied", artifact);
     await load();
   } catch (err) {
-    notice.error("应用 AI 建议失败", (err as Error).message);
+    notice.error("应用建议失败", (err as Error).message);
   } finally {
     busy.value = "";
   }
@@ -248,7 +248,7 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
 </script>
 
 <template>
-  <section class="ai-review" aria-label="AI 受控增强">
+  <section class="ai-review" aria-label="自动化建议">
     <div class="ai-review__tasks">
       <button
         v-for="kind in kinds"
@@ -479,7 +479,7 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
               {{
                 selectedReview.applied_artifact_id
                   ? selectedReview.applied_artifact_id
-                  : "原版本不变；应用后重新执行 AST、语法与密钥门禁"
+                  : "原版本不变"
               }}
             </span>
           </div>
@@ -505,7 +505,7 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
     </div>
 
     <p v-else-if="!loading" class="review-empty">
-      尚未生成受控建议。确定性资产不会等待模型，也不会因模型失败而改变。
+      暂无建议。
     </p>
   </section>
 </template>
@@ -662,13 +662,13 @@ function dispositionLabel(value: AutomationAIFinding["disposition"]): string {
 .finding {
   padding: var(--s3);
   border: 1px solid var(--ice-3);
-  border-left: 3px solid var(--glacier);
   border-radius: var(--radius-sm);
   background: var(--ice-0);
 }
 
 .finding[data-severity="warning"] {
-  border-left-color: var(--warn);
+  border-color: var(--warn-line);
+  background: var(--warn-wash);
 }
 
 .finding h5,

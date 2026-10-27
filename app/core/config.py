@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     #: 切换是一次显式动作，且需先用 scripts/migrate_json_to_sqlite.py 迁移既有数据。
     storage_backend: str = "json"
 
+    # ---------- 项目隔离与鉴权（v3.0） ----------
+    #: 为 true 时所有受保护请求必须携带项目身份；false 时仍兼容
+    #: 既有单工作区调用，但显式传入 X-Project-ID 也会启用分区。
+    project_isolation_enabled: bool = False
+    #: 为 true 时要求 X-API-Key。令牌到项目/角色的映射只放在环境变量，
+    #: 格式为 JSON：{"token": {"project_id": "PRJ-x", "role": "member"}}。
+    auth_enabled: bool = False
+    auth_tokens: str = "{}"
+    auth_header: str = "X-API-Key"
+    project_header: str = "X-Project-ID"
+    project_quota_documents: int = 10_000
+    project_quota_suites: int = 5_000
+    project_quota_jobs: int = 50_000
+
     # ---------- LLM ----------
     llm_provider: LLMProviderName = "deepseek"
     llm_api_key: str = ""
@@ -59,6 +73,46 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 8192
     #: 报告归纳温度独立于用例解析 / 复核。后两者由 PromptSpec 固定为低温度。
     report_temperature: float = 0.3
+    #: 模型路由策略：quality / balanced / cost。
+    llm_routing_strategy: str = "balanced"
+
+    # ---------- 外部集成（v3.0） ----------
+    jira_base_url: str = ""
+    jira_email: str = ""
+    jira_token: str = ""
+    jira_project_key: str = ""
+    zentao_base_url: str = ""
+    zentao_token: str = ""
+    zentao_project_key: str = ""
+
+    # ---------- 受控 HTTP 执行（v3.0） ----------
+    execution_timeout_seconds: float = 20.0
+    execution_max_concurrency: int = 4
+    execution_max_response_bytes: int = 1_000_000
+    execution_max_cases: int = 200
+
+    # ---------- 知识库与只读助手（v3.0 合并原 V3.1） ----------
+    knowledge_chunk_size: int = 800
+    knowledge_chunk_overlap: int = 100
+    knowledge_search_limit: int = 8
+    assistant_max_knowledge_results: int = 5
+    #: 对话上下文窗口：只把最近 N 轮和受控字符数送入模型，完整会话仍可审计。
+    assistant_context_turns: int = 12
+    assistant_context_chars: int = 24_000
+    #: 单个会话最多 N 个用户回合，达到上限后必须新建会话。
+    assistant_max_turns: int = 30
+    #: 为代码生成与长回答保留足够预算；模型实际输出仍受服务端上限约束。
+    assistant_max_output_tokens: int = 8192
+    assistant_rate_limit_per_minute: int = 8
+    assistant_web_search_enabled: bool = True
+    assistant_web_search_base_url: str = ""
+    assistant_web_search_api_key: str = ""
+    assistant_web_search_timeout: float = 20.0
+    assistant_web_search_max_results: int = 6
+    assistant_web_fetch_limit: int = 2
+    assistant_web_fetch_chars: int = 12_000
+    assistant_web_searches_per_conversation: int = 8
+    assistant_web_min_interval_seconds: float = 2.0
 
     # ---------- 设计引擎 ----------
     #: 生成阶段大模型的参与方式（基线；界面可按次覆盖）。
@@ -160,6 +214,26 @@ class Settings(BaseSettings):
         return self.upload_dir / "assets"
 
     @property
+    def projects_dir(self) -> Path:
+        return self.storage_dir / "projects"
+
+    @property
+    def project_registry_path(self) -> Path:
+        return self.projects_dir / "index.json"
+
+    @property
+    def audit_path(self) -> Path:
+        return self.storage_dir / "audit" / "events.jsonl"
+
+    @property
+    def knowledge_db_path(self) -> Path:
+        return self.data_dir / "knowledge.db"
+
+    def project_storage_dir(self, project_id: str) -> Path:
+        """项目分区根目录；ID 已经过 ProjectService 的字符与路径校验。"""
+        return self.projects_dir / project_id
+
+    @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
 
@@ -171,6 +245,8 @@ class Settings(BaseSettings):
             self.export_dir,
             self.data_dir,
             self.asset_dir,
+            self.projects_dir,
+            self.audit_path.parent,
         ):
             path.mkdir(parents=True, exist_ok=True)
 

@@ -14,19 +14,21 @@ import json
 import os
 import re
 from collections.abc import Callable, Iterator
-from functools import lru_cache
 from pathlib import Path
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings, get_settings
+from app.core.context import get_current_project_id
 from app.core.exceptions import AppError, NotFoundError
 from app.core.logging import get_logger
 from app.schemas.document import DocumentRecord
 from app.schemas.api_testing import ApiCaseSpec, ApiSpec
 from app.schemas.automation_ai import AutomationAIReview
+from app.schemas.assistant import AssistantConversation
 from app.schemas.execution import AutomationArtifact, JobEvent, TestRun
+from app.schemas.jobs import AgentRun, Job, Schedule, ToolCall
 from app.schemas.requirement import RequirementDoc
 from app.schemas.testcase import TestCaseSuite
 from app.schemas.work_item import WorkItem
@@ -214,6 +216,24 @@ class Repository:
             id_attr="review_id",
             label="自动化 AI 建议",
         )
+        self.assistant_conversations: JsonObjectStore[AssistantConversation] = JsonObjectStore(
+            base / "assistant_conversations",
+            AssistantConversation,
+            id_attr="conversation_id",
+            label="助手会话",
+        )
+        self.jobs: JsonObjectStore[Job] = JsonObjectStore(
+            base / "jobs", Job, id_attr="job_id", label="任务"
+        )
+        self.schedules: JsonObjectStore[Schedule] = JsonObjectStore(
+            base / "schedules", Schedule, id_attr="schedule_id", label="调度计划"
+        )
+        self.agent_runs: JsonObjectStore[AgentRun] = JsonObjectStore(
+            base / "agent_runs", AgentRun, id_attr="run_id", label="Agent 运行"
+        )
+        self.tool_calls: JsonObjectStore[ToolCall] = JsonObjectStore(
+            base / "tool_calls", ToolCall, id_attr="tool_call_id", label="工具调用"
+        )
 
     def _build_sql_collections(self) -> None:
         # 延迟导入：只用 JSON 后端时不必依赖 SQLAlchemy。
@@ -258,6 +278,25 @@ class Repository:
             id_attr="review_id",
             label="自动化 AI 建议",
         )
+        self.assistant_conversations = SqlObjectStore(
+            self.engine,
+            AssistantConversation,
+            kind="assistant_conversations",
+            id_attr="conversation_id",
+            label="助手会话",
+        )
+        self.jobs = SqlObjectStore(
+            self.engine, Job, kind="jobs", id_attr="job_id", label="任务"
+        )
+        self.schedules = SqlObjectStore(
+            self.engine, Schedule, kind="schedules", id_attr="schedule_id", label="调度计划"
+        )
+        self.agent_runs = SqlObjectStore(
+            self.engine, AgentRun, kind="agent_runs", id_attr="run_id", label="Agent 运行"
+        )
+        self.tool_calls = SqlObjectStore(
+            self.engine, ToolCall, kind="tool_calls", id_attr="tool_call_id", label="工具调用"
+        )
         self._warn_if_json_left_behind()
 
     def _warn_if_json_left_behind(self) -> None:
@@ -277,6 +316,11 @@ class Repository:
                 or self.job_events.count()
                 or self.work_items.count()
                 or self.automation_ai_reviews.count()
+                or self.assistant_conversations.count()
+                or self.jobs.count()
+                or self.schedules.count()
+                or self.agent_runs.count()
+                or self.tool_calls.count()
             ):
                 return
         except Exception:  # noqa: BLE001 - 统计失败不影响主流程
@@ -295,6 +339,11 @@ class Repository:
                 "job_events",
                 "work_items",
                 "automation_ai_reviews",
+                "assistant_conversations",
+                "jobs",
+                "schedules",
+                "agent_runs",
+                "tool_calls",
             )
             if any((legacy / folder).glob("*.json"))
         ]
@@ -384,9 +433,33 @@ class Repository:
 
     def save_suite(self, suite: TestCaseSuite) -> TestCaseSuite:
         """保存用例集并补齐版本号（未显式指定时自动递增）。"""
+        project_id = get_current_project_id()
+        if project_id:
+            try:
+                from app.services.project_service import ProjectService
+
+                project_service = ProjectService(self.settings)
+                project_service.check_quota(
+                    project_service.get(project_id),
+                    resource="suites",
+                    current=self.suites.count(),
+                )
+            except Exception as exc:  # noqa: BLE001 - 配额异常必须阻止写入
+                from app.core.exceptions import ConflictError
+
+                if isinstance(exc, ConflictError):
+                    raise
+                logger.warning("项目配额检查失败：%s", exc)
         if not suite.revision:
             suite.revision = self.next_suite_revision(suite.doc_id)
-        return self.suites.save(suite)
+        saved = self.suites.save(suite)
+        try:
+            from app.knowledge.indexer import KnowledgeService
+
+            KnowledgeService(self.settings, self).index_suite(saved)
+        except Exception as exc:  # noqa: BLE001 - 索引失败不能阻断用例保存
+            logger.warning("用例集知识索引更新失败（不影响保存）：%s", exc)
+        return saved
 
     def suite_history(self, doc_id: str, *, limit: int = 10) -> list[TestCaseSuite]:
         """同一需求的历史用例集（按版本号倒序）。"""
@@ -423,10 +496,35 @@ def build_repository(settings: Settings | None = None) -> Repository:
     return Repository(settings)
 
 
-@lru_cache(maxsize=1)
 def get_repository() -> Repository:
-    return build_repository(get_settings())
+    """返回当前请求项目对应的仓储。
+
+    没有项目上下文时继续使用 v2.x 的原有目录，保证升级后既有数据仍可见。
+    一旦请求经过项目中间件，则每个 PRJ-* 使用独立的 JSON 目录或 SQLite 文件，
+    业务服务无需感知分区逻辑。
+    """
+    base = get_settings()
+    project_id = get_current_project_id()
+    if not project_id or (project_id == "PRJ-default" and not base.project_isolation_enabled):
+        return _repository_for("", base)
+    project_settings = base.model_copy(
+        update={"storage_dir": base.project_storage_dir(project_id)}
+    )
+    project_settings.ensure_dirs()
+    return _repository_for(project_id, project_settings)
+
+
+_REPOSITORY_CACHE: dict[str, Repository] = {}
+
+
+def _repository_for(key: str, settings: Settings) -> Repository:
+    cache_key = f"{key}|{settings.storage_backend}|{settings.storage_dir}"
+    repository = _REPOSITORY_CACHE.get(cache_key)
+    if repository is None:
+        repository = build_repository(settings)
+        _REPOSITORY_CACHE[cache_key] = repository
+    return repository
 
 
 def reset_repository_cache() -> None:
-    get_repository.cache_clear()
+    _REPOSITORY_CACHE.clear()

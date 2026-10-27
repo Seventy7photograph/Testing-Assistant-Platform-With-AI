@@ -19,6 +19,7 @@ from app.llm.prompts import (
     TASK_AUTOMATION_FIXTURE_RECIPE,
     TASK_AUTOMATION_OPERATION_GAP,
     TASK_AUTOMATION_SCRIPT_REVIEW,
+    TASK_ASSISTANT_ANSWER,
     TASK_GENERATION_REVIEW,
     TASK_REQUIREMENT_EXTRACTION,
     TASK_SCENARIO_ENRICHMENT,
@@ -279,6 +280,26 @@ _FAKE_AUTOMATION_SCRIPT_REVIEW: dict[str, Any] = {
     ],
 }
 
+_FAKE_ASSISTANT_ANSWER: dict[str, Any] = {
+    "answer": (
+        "可以先确认测试目标、输入边界和预期失败行为。\n\n"
+        "```python\n"
+        "import pytest\n\n"
+        "@pytest.mark.parametrize(\"value, expected\", [(1, True), (0, False)])\n"
+        "def test_feature(value, expected):\n"
+        "    assert bool(value) is expected\n"
+        "```\n\n"
+        "以上代码是离线演示，接入真实业务时需要替换断言与测试数据。"
+    ),
+    "model_inferences": [
+        {
+            "text": "建议先补一个最小失败用例，再扩展边界组合。",
+            "evidence": "基于通用测试策略，不是当前项目运行结果。",
+        }
+    ],
+    "warnings": ["FakeProvider 离线回答不代表实时网页信息。"],
+}
+
 
 def _first_quoted_value(blob: str, key: str) -> str:
     match = re.search(rf'"{re.escape(key)}"\s*:\s*"([^"]+)"', blob)
@@ -396,6 +417,8 @@ class FakeProvider(LLMProvider):
 
     def _resolve(self, messages: list[LLMMessage]) -> Any:
         blob = "\n".join(message.content for message in messages)
+        if TASK_ASSISTANT_ANSWER in blob:
+            return _FAKE_ASSISTANT_ANSWER
         for marker, payload in self.scripted.items():
             if marker in blob:
                 if self._use_dynamic_automation:
@@ -409,6 +432,7 @@ class FakeProvider(LLMProvider):
         self,
         messages: list[LLMMessage],
         *,
+        model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         json_mode: bool = False,
@@ -420,7 +444,7 @@ class FakeProvider(LLMProvider):
             payload = self._resolve(messages)
         return LLMResponse(
             content=json.dumps(payload, ensure_ascii=False),
-            model="fake-model",
+            model=model or "fake-model",
             usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             elapsed_ms=timer.elapsed_ms,
             raw={"fake": True},

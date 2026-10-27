@@ -26,13 +26,15 @@ import { formatRelative } from "@/utils/labels";
 
 type TabKey = "automation" | "runs" | "items";
 
+const props = defineProps<{ section?: TabKey }>();
 const route = useRoute();
 const router = useRouter();
 const notice = useNoticeStore();
 const reportSession = useReportSession();
 const workStore = useWorkItemsStore();
 
-const activeTab = ref<TabKey>("automation");
+const activeTab = ref<TabKey>(props.section ?? "automation");
+const scoped = computed(() => Boolean(props.section));
 const aiDrawerOpen = ref(false);
 const aiDrawerKinds = ref<AutomationAIKind[]>([
   "operation_gap",
@@ -106,6 +108,12 @@ const itemResultLabel = computed(() => {
   return "未修改";
 });
 
+const pageTitle = computed(() => {
+  if (activeTab.value === "runs") return "执行记录";
+  if (activeTab.value === "items") return "工作事项";
+  return "自动化资产";
+});
+
 const aiDrawerSpecId = computed(() => {
   if (activeTab.value === "runs" && selectedRun.value) {
     return selectedRun.value.spec_id || selectedSpecId.value;
@@ -134,13 +142,16 @@ const activeFilterLabel = computed(() => {
 
 onMounted(async () => {
   const queryTab = String(route.query.tab ?? "");
-  if (queryTab === "runs" || queryTab === "items" || queryTab === "automation") {
+  if (
+    !props.section
+    && (queryTab === "runs" || queryTab === "items" || queryTab === "automation")
+  ) {
     activeTab.value = queryTab;
   }
   await loadAll();
   const runId = String(route.query.run ?? "");
   if (runId) {
-    activeTab.value = "runs";
+    if (!props.section) activeTab.value = "runs";
     await openRun(runId);
   }
 });
@@ -458,6 +469,15 @@ async function requestNotifications() {
 }
 
 function switchTab(tab: TabKey) {
+  if (props.section) {
+    const paths: Record<TabKey, string> = {
+      automation: "/automation",
+      runs: "/executions",
+      items: "/work-items",
+    };
+    void router.push(paths[tab]);
+    return;
+  }
   activeTab.value = tab;
   const url = new URL(window.location.href);
   url.searchParams.set("tab", tab);
@@ -473,7 +493,11 @@ function handleAIApplied(artifact: AutomationArtifact) {
   selectedArtifactId.value = artifact.artifact_id;
   selectedArtifact.value = artifact;
   aiDrawerOpen.value = false;
-  switchTab("automation");
+  if (props.section) {
+    activeTab.value = "automation";
+  } else {
+    switchTab("automation");
+  }
   void refreshArtifacts();
 }
 
@@ -544,46 +568,53 @@ function viewLabel(view: string): string {
   <div class="workspace stack">
     <ErrorNote
       v-if="error"
-      title="交付工作台没有完整加载"
+      :title="`${pageTitle}没有完整加载`"
       :message="error"
-      recovery="确认后端已启动后重试。已有本地数据不会被本次加载影响。"
+      recovery="确认服务已启动后重试。"
       @retry="loadAll"
     />
 
     <section class="command-band">
-      <div class="command-band__intro">
-        <p class="calib">DELIVERY LOOP · V2.3.2</p>
-        <h2>从接口用例到下一步行动</h2>
-        <p>
-          生成受控脚本、回收 JUnit、把失败变成带上下文的事项。所有数据留在本地，
-          工作事项不会进入 AI 或知识库。
-        </p>
-      </div>
       <div class="command-band__metrics">
-        <div>
+        <div v-if="!scoped || activeTab === 'automation'">
           <span class="label">接口规范</span>
           <strong class="mono">{{ specCount }}</strong>
         </div>
-        <div>
+        <div v-if="!scoped || activeTab === 'automation'">
           <span class="label">自动化资产</span>
           <strong class="mono">{{ artifactCount }}</strong>
         </div>
-        <div>
+        <div v-if="!scoped || activeTab === 'runs'">
           <span class="label">执行记录</span>
           <strong class="mono">{{ runCount }}</strong>
         </div>
-        <div :data-alert="itemAttention > 0 ? '1' : '0'">
-          <span class="label">逾期事项</span>
-          <strong class="mono">{{ itemAttention }}</strong>
-        </div>
+        <template v-if="!scoped || activeTab === 'items'">
+          <div>
+            <span class="label">今日</span>
+            <strong class="mono">{{ workStore.summary?.today ?? 0 }}</strong>
+          </div>
+          <div>
+            <span class="label">收件箱</span>
+            <strong class="mono">{{ workStore.summary?.inbox ?? 0 }}</strong>
+          </div>
+          <div :data-alert="itemAttention > 0 ? '1' : '0'">
+            <span class="label">逾期</span>
+            <strong class="mono">{{ itemAttention }}</strong>
+          </div>
+        </template>
       </div>
-      <button type="button" class="ghost-btn" @click="requestNotifications">
+      <button
+        v-if="activeTab === 'items'"
+        type="button"
+        class="ghost-btn"
+        @click="requestNotifications"
+      >
         <AppIcon name="alert" :size="16" />
         通知权限
       </button>
     </section>
 
-    <nav class="tabs" aria-label="交付工作台视图">
+    <nav v-if="!scoped" class="tabs" aria-label="交付工作台视图">
       <button
         type="button"
         data-testid="tab-automation"
@@ -621,8 +652,7 @@ function viewLabel(view: string): string {
       <div class="panel">
         <header class="panel__head">
           <div>
-            <h3>生成可靠性脚本</h3>
-            <p>固定模板输出 pytest + httpx；平台不会执行下载项目。</p>
+            <h3>生成 pytest 资产</h3>
           </div>
           <div class="row row--wrap">
             <span class="chip chip--glacier">受控生成</span>
@@ -634,7 +664,7 @@ function viewLabel(view: string): string {
               @click="openAIDrawer(['operation_gap', 'fixture_recipe', 'script_review'])"
             >
               <AppIcon name="sparkle" :size="14" />
-              AI 增强
+              生成建议
             </button>
           </div>
         </header>
@@ -655,10 +685,7 @@ function viewLabel(view: string): string {
               />
             </el-select>
           </label>
-          <div v-if="selectedSpecId" class="spec-brief">
-            <span class="mono">{{ selectedSpecId }}</span>
-            <span>模板会把请求数据写进 JSON，不把模型输出拼成 Python 源码。</span>
-          </div>
+          <p v-if="selectedSpecId" class="spec-brief mono">{{ selectedSpecId }}</p>
           <el-button
             type="primary"
             :loading="busy === 'artifact'"
@@ -673,7 +700,7 @@ function viewLabel(view: string): string {
             v-if="!specs.length && !loading"
             icon="route"
             title="还没有接口规范"
-            reason="先导入 OpenAPI 3 JSON / YAML，平台会把 operation 转成契约用例。"
+            reason="导入 OpenAPI 3 规范后生成。"
             action-label="去接口资产"
             @action="router.push('/apis')"
           />
@@ -734,7 +761,6 @@ function viewLabel(view: string): string {
         <header class="panel__head">
           <div>
             <h3>资产版本</h3>
-            <p>同一规范重新生成会产生新版本，旧版保持可追溯。</p>
           </div>
           <button type="button" class="icon-btn" title="刷新资产" @click="refreshArtifacts">
             <AppIcon name="refresh" :size="16" />
@@ -754,7 +780,7 @@ function viewLabel(view: string): string {
               <strong>{{ artifact.spec_title || artifact.spec_id }}</strong>
               <span>
                 {{ artifact.case_count }} 条用例 · {{ artifact.operation_count }} 个 operation ·
-                {{ artifact.file_count }} 个文件{{ artifact.parent_artifact_id ? " · AI 派生" : "" }}
+                {{ artifact.file_count }} 个文件{{ artifact.parent_artifact_id ? " · 模型派生" : "" }}
               </span>
             </span>
             <span
@@ -770,7 +796,7 @@ function viewLabel(view: string): string {
           v-else
           icon="layers"
           title="还没有自动化资产"
-          reason="选择左侧接口规范并生成，第一版受控 pytest 项目会出现在这里。"
+          reason="选择接口规范后生成。"
         />
       </div>
     </section>
@@ -781,7 +807,6 @@ function viewLabel(view: string): string {
         <header class="panel__head">
           <div>
             <h3>回收 JUnit</h3>
-            <p>首版以 pytest XML 为准，未知 case_id 会保留为未匹配。</p>
           </div>
         </header>
         <div class="panel__body stack--tight">
@@ -820,14 +845,13 @@ function viewLabel(view: string): string {
             导入执行结果
           </el-button>
           <p class="footnote">
-            生成、导入和提醒确认都会写入本地结构化事件；不会记录凭据或完整请求体。
+            不记录凭据或完整请求体。
           </p>
         </div>
 
         <header class="panel__head panel__head--sub">
           <div>
             <h3>运行记录</h3>
-            <p>按导入时间倒序。</p>
           </div>
           <button type="button" class="icon-btn" title="刷新运行记录" @click="refreshRuns">
             <AppIcon name="refresh" :size="16" />
@@ -859,7 +883,7 @@ function viewLabel(view: string): string {
           v-else
           icon="play"
           title="还没有执行记录"
-          reason="运行下载的 pytest 项目并指定 --junitxml，再把 XML 导入这里。"
+          reason="导入 JUnit XML 后查看结果。"
         />
       </div>
 
@@ -919,7 +943,7 @@ function viewLabel(view: string): string {
             </el-button>
             <el-button data-testid="run-ai-drawer" @click="openAIDrawer(['failure_assertion'])">
               <AppIcon name="sparkle" :size="16" />
-              AI 断言建议
+              失败分析
             </el-button>
           </div>
           <ul v-if="selectedRun.warnings.length" class="notice-list">
@@ -966,7 +990,7 @@ function viewLabel(view: string): string {
           v-else
           icon="play"
           title="选择一条运行记录"
-          reason="运行详情会显示失败、未匹配、耗时和结构化事件。"
+          reason="选择一条运行记录。"
         />
       </div>
     </section>
@@ -977,7 +1001,6 @@ function viewLabel(view: string): string {
         <header class="panel__head">
           <div>
             <h3>记一条</h3>
-            <p>标题按 Enter 立即创建；有日期时自动成为任务。</p>
           </div>
           <AppIcon name="cases" :size="20" />
         </header>
@@ -1030,7 +1053,7 @@ function viewLabel(view: string): string {
             <AppIcon name="check" :size="16" />
             记下来
           </el-button>
-          <p class="footnote">提醒依赖页面打开时轮询；关闭页面后不承诺后台通知。</p>
+          <p class="footnote">提醒仅在页面打开时生效。</p>
         </div>
       </div>
 
@@ -1120,8 +1143,7 @@ function viewLabel(view: string): string {
           <EmptyState
             v-else
             icon="cases"
-            title="这一栏是空的"
-            reason="快速记一条，或切换视图查看其他事项。"
+            title="暂无事项"
           />
         </div>
 
@@ -1238,8 +1260,7 @@ function viewLabel(view: string): string {
           <EmptyState
             v-else
             icon="doc"
-            title="选择一个事项"
-            reason="标题、正文、日期、标签与关联资源都可以在这里检查后再保存。"
+            title="选择事项"
           />
         </aside>
       </div>
@@ -1254,7 +1275,7 @@ function viewLabel(view: string): string {
       :context-label="
         activeTab === 'runs'
           ? '基于当前失败运行生成断言建议，人工采纳后可派生新资产版本'
-          : '建议、配方与脚本审查均在独立抽屉中处理，原资产版本保持不变'
+          : '人工确认后应用，原版本保留'
       "
       @applied="handleAIApplied"
     />
@@ -1297,14 +1318,13 @@ function viewLabel(view: string): string {
 
 .command-band {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--s5);
-  padding: var(--s5);
+  gap: var(--s4);
+  padding: 0;
   border: 1px solid var(--ice-3);
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(112deg, var(--ice-0) 0%, var(--ice-0) 52%, var(--glacier-wash) 100%);
+  border-radius: var(--radius);
+  background: var(--ice-0);
 }
 
 .command-band__intro h2 {
@@ -1322,6 +1342,7 @@ function viewLabel(view: string): string {
   display: grid;
   grid-template-columns: repeat(4, minmax(74px, auto));
   gap: var(--s3);
+  padding: 14px 16px;
 }
 
 .command-band__metrics > div {
@@ -1333,7 +1354,7 @@ function viewLabel(view: string): string {
 }
 
 .command-band__metrics strong {
-  font-size: var(--fs-xl);
+  font-size: var(--fs-lg);
 }
 
 .command-band__metrics > div[data-alert="1"] strong {
@@ -1369,10 +1390,11 @@ function viewLabel(view: string): string {
   display: inline-flex;
   align-self: flex-start;
   gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--ice-3);
-  border-radius: var(--radius);
-  background: var(--ice-2);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--ice-3);
+  border-radius: 0;
+  background: transparent;
 }
 
 .tabs button {
@@ -1383,7 +1405,7 @@ function viewLabel(view: string): string {
   min-height: 34px;
   padding: 0 13px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: transparent;
   color: var(--ink-3);
   font: inherit;
@@ -1393,9 +1415,9 @@ function viewLabel(view: string): string {
 
 .tabs button:hover,
 .tabs .tabs__item--on {
-  background: var(--ice-0);
+  background: transparent;
   color: var(--ink-1);
-  box-shadow: inset 0 0 0 1px var(--ice-3);
+  box-shadow: inset 0 -2px var(--signal);
 }
 
 .tabs__badge {
@@ -1421,7 +1443,7 @@ function viewLabel(view: string): string {
 .panel {
   min-width: 0;
   border: 1px solid var(--ice-3);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   background: var(--ice-0);
   overflow: hidden;
 }
@@ -1432,7 +1454,7 @@ function viewLabel(view: string): string {
   justify-content: space-between;
   gap: var(--s3);
   flex-wrap: wrap;
-  padding: var(--s4) var(--s4) var(--s3);
+  padding: 12px 14px;
   border-bottom: 1px solid var(--ice-3);
 }
 
@@ -1445,9 +1467,7 @@ function viewLabel(view: string): string {
 }
 
 .panel__head p {
-  margin-top: 2px;
-  color: var(--ink-3);
-  font-size: var(--fs-xs);
+  display: none;
 }
 
 .panel__body {

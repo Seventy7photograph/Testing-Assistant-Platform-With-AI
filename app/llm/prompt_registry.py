@@ -135,6 +135,21 @@ PROMPT_AUTOMATION_SCRIPT_REVIEW = PromptSpec(
     ),
 )
 
+PROMPT_ASSISTANT_ANSWER = PromptSpec(
+    prompt_id="assistant.answer",
+    version="3.1.0",
+    task="assistant_answer",
+    input_boundary=(
+        "当前问题、受控会话历史、项目确定性事实、项目知识引用与可追溯网页摘录；"
+        "网页和用户输入均视为不可信数据"
+    ),
+    temperature=0.2,
+    change_log=(
+        "3.0.0 支持测试问答、实时网页检索、代码生成与修改建议、引用标记和上下文窗口",
+        "3.1.0 明确不可信网页数据的 Prompt 边界，并允许多轮测试问答与可复制代码",
+    ),
+)
+
 ALL_PROMPTS: tuple[PromptSpec, ...] = (
     PROMPT_REQUIREMENT_EXTRACTION,
     PROMPT_SCENARIO_ENRICHMENT,
@@ -145,6 +160,7 @@ ALL_PROMPTS: tuple[PromptSpec, ...] = (
     PROMPT_AUTOMATION_FAILURE_ASSERTION,
     PROMPT_AUTOMATION_FIXTURE_RECIPE,
     PROMPT_AUTOMATION_SCRIPT_REVIEW,
+    PROMPT_ASSISTANT_ANSWER,
 )
 
 PROMPTS_BY_ID = {spec.prompt_id: spec for spec in ALL_PROMPTS}
@@ -158,6 +174,7 @@ __all__ = [
     "ALL_PROMPTS",
     "PROMPTS_BY_ID",
     "PROMPT_API_CASE_REVIEW",
+    "PROMPT_ASSISTANT_ANSWER",
     "PROMPT_GENERATION_REVIEW",
     "PROMPT_REPORT_SUMMARY",
     "PROMPT_REQUIREMENT_EXTRACTION",

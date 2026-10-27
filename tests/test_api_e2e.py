@@ -75,10 +75,10 @@ def test_health_reports_capabilities(client) -> None:
     assert "docx" in data["supported_extensions"]
 
 
-def test_integrations_are_planned_not_implemented(client) -> None:
+def test_integrations_are_implemented_in_v3(client) -> None:
     body = client.get(f"{API}/integrations").json()
     mapping = {item["name"]: item["implemented"] for item in body["data"]}
-    assert mapping == {"zentao": False, "jira": False}
+    assert mapping == {"zentao": True, "jira": True}
 
 
 def test_full_pipeline_via_upload(client) -> None:

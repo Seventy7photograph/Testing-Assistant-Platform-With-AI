@@ -103,9 +103,9 @@ const overridden = computed(() => config.value?.overridden_fields ?? []);
 const thinkingNote = computed(() => {
   const name = (model.value || "").toLowerCase();
   if (name.startsWith("deepseek-flash") || name.startsWith("deepseek-v4-pro")) {
-    return `温度建议 0.1–0.3，但当前模型默认开启思考模式，官方文档明确该模式下 temperature 不生效——这里填的值会被忽略，只影响非思考模式。最大输出要留够思考消耗：模型会先把上千 token 花在思维链上，预算太小会导致结构化 JSON 被截断。`;
+    return "当前模型下 temperature 不生效；最大输出需预留思考 token。";
   }
-  return "温度越低越稳定：报告归纳建议用 0.1–0.3；用例设计若开启大模型增强，可适当调高。";
+  return "温度越低越稳定。";
 });
 
 const apiKeyConfigured = computed(() => config.value?.api_key_configured ?? false);

@@ -1105,6 +1105,320 @@ export interface ReportLLMTestResult {
   message: string;
 }
 
+/* ================= v3.0 平台治理 ================= */
+
+export interface ProjectQuota {
+  max_documents: number;
+  max_suites: number;
+  max_jobs: number;
+}
+
+export interface Project {
+  project_id: string;
+  key: string;
+  name: string;
+  description: string;
+  status: "active" | "archived";
+  quota: ProjectQuota;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectContextInfo {
+  project: Project;
+  actor: string;
+  role: "owner" | "admin" | "member" | "viewer";
+  auth_enabled: boolean;
+  isolation_enabled: boolean;
+  storage_backend: string;
+}
+
+export interface AuditEvent {
+  audit_id: string;
+  project_id: string;
+  actor: string;
+  role: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  outcome: string;
+  trace_id: string;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ExternalRequirement {
+  external_id: string;
+  title: string;
+  body: string;
+  status: string;
+  url: string;
+  version: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface IntegrationHealth {
+  name: string;
+  label: string;
+  implemented: boolean;
+  configured: boolean;
+  available: boolean;
+  message: string;
+  degraded_reason: string;
+}
+
+export interface IntegrationPullResult {
+  integration: string;
+  fetched: number;
+  created: number;
+  updated: number;
+  requirements: ExternalRequirement[];
+  documents: DocumentSummary[];
+  warnings: string[];
+  created_at: string;
+}
+
+export interface IntegrationPushResult {
+  integration: string;
+  suite_id: string;
+  external_ids: string[];
+  message: string;
+  warnings: string[];
+  created_at: string;
+}
+
+export interface ExternalStatus {
+  external_id: string;
+  status: string;
+  title: string;
+  updated_at: string;
+  url: string;
+}
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface Job {
+  job_id: string;
+  project_id: string;
+  kind: string;
+  status: JobStatus;
+  trace_id: string;
+  idempotency_key: string;
+  attempt: number;
+  max_attempts: number;
+  timeout_seconds: number;
+  payload_summary: Record<string, unknown>;
+  result_summary: Record<string, unknown>;
+  error: string;
+  created_by: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface Schedule {
+  schedule_id: string;
+  project_id: string;
+  name: string;
+  job_kind: string;
+  interval_seconds: number;
+  timezone: string;
+  enabled: boolean;
+  next_run_at: string | null;
+  max_runs: number | null;
+  run_count: number;
+  last_job_id: string;
+  payload_summary: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentRun {
+  run_id: string;
+  project_id: string;
+  agent_kind: string;
+  status: string;
+  request: string;
+  response: string;
+  citation_ids: string[];
+  tool_call_ids: string[];
+  trace_id: string;
+  created_by: string;
+  started_at: string;
+  finished_at: string | null;
+  error: string;
+}
+
+export interface ToolCall {
+  tool_call_id: string;
+  project_id: string;
+  run_id: string;
+  job_id: string;
+  tool_name: string;
+  status: string;
+  arguments_summary: Record<string, unknown>;
+  result_summary: Record<string, unknown>;
+  error: string;
+  trace_id: string;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface KnowledgeIndexStats {
+  project_id: string;
+  sources: number;
+  active_sources: number;
+  chunks: number;
+  indexed: number;
+  removed: number;
+  degraded_reason: string;
+  updated_at: string;
+}
+
+export interface KnowledgeCitation {
+  citation_id: string;
+  source_id: string;
+  title: string;
+  source_type: string;
+  version: string;
+  locator: string;
+  url: string;
+  excerpt: string;
+  score: number;
+}
+
+export interface KnowledgeSearchResult {
+  query: string;
+  citations: KnowledgeCitation[];
+  total: number;
+  degraded_reason: string;
+}
+
+export interface AssistantClaim {
+  text: string;
+  evidence: string;
+}
+
+export interface AssistantFactGroup {
+  label: string;
+  claims: AssistantClaim[];
+}
+
+export interface AssistantLink {
+  label: string;
+  href: string;
+  resource_type: string;
+  resource_id: string;
+}
+
+export interface AssistantWebCitation {
+  citation_id: string;
+  title: string;
+  url: string;
+  site_name: string;
+  snippet: string;
+  summary: string;
+  content_excerpt: string;
+  published_at: string;
+  authority: number;
+  rerank_score: number;
+  fetched: boolean;
+}
+
+export interface AssistantAnswer {
+  run_id: string;
+  conversation_id: string;
+  turn_index: number;
+  turn_limit: number;
+  context_messages: number;
+  status: "answered" | "refused" | "degraded";
+  answer: string;
+  mode: "deterministic" | "llm_assisted" | "web_assisted";
+  current_facts: AssistantFactGroup[];
+  knowledge_references: KnowledgeCitation[];
+  web_citations: AssistantWebCitation[];
+  web_search_used: boolean;
+  web_search_status: string;
+  model_inferences: AssistantClaim[];
+  links: AssistantLink[];
+  tool_calls: Record<string, unknown>[];
+  warnings: string[];
+  degraded_reason: string;
+}
+
+export interface AssistantTurn {
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  status: "answered" | "refused" | "degraded" | "";
+  mode: "deterministic" | "llm_assisted" | "web_assisted" | "";
+  knowledge_references: KnowledgeCitation[];
+  web_citations: AssistantWebCitation[];
+  warnings: string[];
+  degraded_reason: string;
+}
+
+export interface AssistantConversation {
+  conversation_id: string;
+  project_id: string;
+  title: string;
+  turn_count: number;
+  web_search_count: number;
+  last_web_search_at: string;
+  messages: AssistantTurn[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssistantConversationSummary {
+  conversation_id: string;
+  title: string;
+  turn_count: number;
+  web_search_count: number;
+  updated_at: string;
+}
+
+export interface AssistantStatus {
+  model_available: boolean;
+  model_provider: string;
+  model_name: string;
+  model_reason: string;
+  web_search_available: boolean;
+  web_search_provider: string;
+  web_search_reason: string;
+  max_turns: number;
+  context_turns: number;
+  context_chars: number;
+  rate_limit_per_minute: number;
+  web_searches_per_conversation: number;
+  web_fetch_limit: number;
+  web_fetch_chars: number;
+  max_output_tokens: number;
+}
+
+export interface ToolCatalogItem {
+  name: string;
+  description: string;
+  readonly: boolean;
+}
+
+export interface ModelRouteInfo {
+  provider: string;
+  model: string;
+  task: string;
+  strategy: string;
+  quality_tier: string;
+  cost_tier: string;
+  rationale: string;
+}
+
+export interface RoutingPolicyInfo {
+  configured_strategy: string;
+  strategy: string;
+  routes: ModelRouteInfo[];
+}
+
 /* ================= 平台总览 ================= */
 
 export interface PlatformOverview {

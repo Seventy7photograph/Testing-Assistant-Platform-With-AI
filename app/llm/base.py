@@ -16,6 +16,7 @@ from app.core.exceptions import LLMError, LLMResponseFormatError
 from app.core.logging import get_logger
 from app.core.utils import dump_json, extract_json, truncate
 from app.llm.prompt_registry import PromptSpec
+from app.llm.router import ModelRouteDecision, route_model
 
 logger = get_logger(__name__)
 
@@ -88,6 +89,7 @@ class LLMResponse:
     prompt_id: str = ""
     prompt_version: str = ""
     temperature: float | None = None
+    route: ModelRouteDecision | None = None
 
 
 class LLMProvider(abc.ABC):
@@ -113,6 +115,7 @@ class LLMProvider(abc.ABC):
         self,
         messages: list[LLMMessage],
         *,
+        model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         json_mode: bool = False,
@@ -170,10 +173,15 @@ class LLMProvider(abc.ABC):
         effective_temperature = (
             prompt.temperature if temperature is None and prompt is not None else temperature
         )
+        selected_route = route_model(
+            self.settings,
+            prompt.task if prompt is not None else "general",
+        )
 
         for attempt in range(1, max_retries + 2):
             response = await self.complete(
                 working,
+                model=selected_route.model or None,
                 temperature=effective_temperature,
                 max_tokens=budget,
                 json_mode=True,
@@ -182,14 +190,17 @@ class LLMProvider(abc.ABC):
             response.prompt_id = prompt.prompt_id if prompt else ""
             response.prompt_version = prompt.version if prompt else ""
             response.temperature = effective_temperature
+            response.route = selected_route
             last_content = response.content
             if prompt is not None:
                 logger.info(
-                    "Prompt use: id=%s version=%s task=%s model=%s temperature=%s attempt=%s",
+                    "Prompt use: id=%s version=%s task=%s model=%s route_strategy=%s "
+                    "temperature=%s attempt=%s",
                     prompt.prompt_id,
                     prompt.version,
                     prompt.task,
                     response.model or self.model,
+                    selected_route.strategy,
                     effective_temperature,
                     attempt,
                 )

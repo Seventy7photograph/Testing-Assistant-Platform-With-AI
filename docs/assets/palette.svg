@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="190" viewBox="0 0 960 190" role="img" aria-labelledby="title desc">
+  <title id="title">Three-color system</title>
+  <desc id="desc">Paper white, cobalt blue, and vermilion swatches.</desc>
+  <rect width="960" height="190" fill="#EFE8D6"/>
+  <g>
+    <rect x="24" y="24" width="288" height="142" fill="#EFE8D6" stroke="#1C4A9C" stroke-width="2"/>
+    <text x="48" y="70" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="18" font-weight="700">PAPER WHITE</text>
+    <text x="48" y="108" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="28">#EFE8D6</text>
+    <text x="48" y="140" fill="#1C4A9C" font-family="Arial, sans-serif" font-size="13">Pages · cards · inputs</text>
+  </g>
+  <g>
+    <rect x="336" y="24" width="288" height="142" fill="#1C4A9C"/>
+    <text x="360" y="70" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="18" font-weight="700">COBALT BLUE</text>
+    <text x="360" y="108" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="28">#1C4A9C</text>
+    <text x="360" y="140" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="13">Navigation · actions · links</text>
+  </g>
+  <g>
+    <rect x="648" y="24" width="288" height="142" fill="#DA2E2B"/>
+    <text x="672" y="70" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="18" font-weight="700">VERMILION</text>
+    <text x="672" y="108" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="28">#DA2E2B</text>
+    <text x="672" y="140" fill="#EFE8D6" font-family="Arial, sans-serif" font-size="13">Focus · progress · risk</text>
+  </g>
+</svg>

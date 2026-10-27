@@ -463,6 +463,7 @@ class RequirementService:
                     "prompt_version": response.prompt_version or PROMPT_REQUIREMENT_EXTRACTION.version,
                     "model": response.model or self.llm.model,
                     "temperature": response.temperature,
+                    "route": response.route.as_dict() if response.route else {},
                     "attempt": attempt + 1,
                     "validation_failures": gate.all_errors,
                 }

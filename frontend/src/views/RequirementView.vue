@@ -226,7 +226,7 @@ async function generate(): Promise<void> {
         <p v-if="requirement.summary" class="summary">{{ requirement.summary }}</p>
       </SectionCard>
 
-      <SectionCard title="生成设置" sub="选择设计方法，再生成这条需求对应的用例集" icon="sliders">
+      <SectionCard title="生成设置" icon="sliders">
         <div class="methods">
           <template v-for="item in methodList" :key="item.name">
             <button
@@ -266,7 +266,7 @@ async function generate(): Promise<void> {
 
       <SectionCard
         title="已生成的用例集"
-        :sub="suites.length ? `这条需求累计生成 ${suites.length} 份用例集` : '这条需求的每一次生成都会记在这里'"
+        :sub="suites.length ? `${suites.length} 份用例集` : ''"
         icon="cases"
         flush
       >
@@ -321,7 +321,7 @@ async function generate(): Promise<void> {
           v-else
           icon="cases"
           title="这条需求还没有生成过用例集"
-          reason="在上方「生成设置」里选好设计方法，点「生成用例集」即可。生成记录会出现在这里，随时可以回看、导出或对比。"
+          reason="选择方法后生成。"
         />
       </SectionCard>
 
@@ -436,7 +436,7 @@ async function generate(): Promise<void> {
       <EmptyState
         icon="doc"
         title="这份文档还没有解析结果"
-        reason="结构化需求由「文档与需求」页发起解析后生成；没有解析结果就没有可生成用例的输入。"
+        reason="先解析需求文档。"
         action-label="前往文档与需求"
         @action="router.push('/documents')"
       />

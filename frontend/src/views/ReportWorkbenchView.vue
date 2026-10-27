@@ -121,7 +121,7 @@ const generateLabel = computed(() =>
 const llmNote = computed(() =>
   health.llmReady
     ? `生成阶段调用 ${health.llmLabel}；指标永远由服务端确定性计算，模型只做归纳与建议。`
-    : "报告链路需要大模型才能生成正文。请在「大模型与阈值」中配置 API Key 后再试。",
+    : "报告正文需要模型。请在「模型设置」中配置 API Key。",
 );
 
 const verdictReasons = computed(() => liveMetrics.value?.verdict_reasons ?? []);
@@ -225,7 +225,7 @@ function primaryAction(): void {
 async function generate(): Promise<void> {
   if (!canGenerate.value || generating.value) return;
   if (!health.llmReady) {
-    notice.error("报告链路需要大模型", "当前未配置 API Key，请先前往「大模型与阈值」配置。", {
+    notice.error("报告正文需要模型", "当前未配置 API Key，请先前往「模型设置」配置。", {
       label: "去配置",
       run: () => void router.push("/settings"),
     });
@@ -341,7 +341,7 @@ const verdictPartial = computed(() => liveMetrics.value);
   <div class="bench">
     <!-- 送检 -->
     <div class="bench__intake">
-      <SectionCard title="送检" sub="测试执行数据 → 确定性指标 → AI 报告" icon="chart">
+      <SectionCard title="送检" icon="chart">
         <div class="form">
           <div class="field">
             <span class="field__label">示例数据</span>
@@ -400,7 +400,7 @@ const verdictPartial = computed(() => liveMetrics.value);
           <label class="field">
             <span class="field__label">
               模型覆盖（可选）
-              <Tip text="留空使用「大模型与阈值」中的默认模型；仅在需要对比不同模型时填写。" />
+              <Tip text="留空使用「模型设置」中的默认模型。" />
             </span>
             <el-input v-model="model" placeholder="留空 = 使用默认模型" />
           </label>
@@ -459,7 +459,7 @@ const verdictPartial = computed(() => liveMetrics.value);
       />
 
       <div class="grid grid--2">
-        <SectionCard title="读数" :sub="liveVersion ? `版本 ${liveVersion}` : '实时计算，随输入更新'" icon="gauge">
+        <SectionCard title="读数" :sub="liveVersion ? `版本 ${liveVersion}` : ''" icon="gauge">
           <div class="readouts">
             <StatReadout label="用例总数" :value="liveMetrics?.total ?? null" :pending="metricsLoading" hint="识别到的用例条目数" />
             <StatReadout
@@ -586,7 +586,7 @@ const verdictPartial = computed(() => liveMetrics.value);
         </template>
         <div v-if="generating" class="report-pipeline" role="status" aria-live="polite">
           <span class="report-pipeline__rail"><i /></span>
-          <span>{{ useStream ? "模型正在流式输出，切到其他菜单不会中断" : "模型正在生成完整报告" }}</span>
+          <span>{{ useStream ? "流式生成中" : "生成中" }}</span>
           <b class="mono">{{ formatDuration(elapsedLive) }}</b>
         </div>
         <MarkdownBody :source="report" :streaming="generating" />
@@ -596,7 +596,7 @@ const verdictPartial = computed(() => liveMetrics.value);
         <EmptyState
           icon="chart"
           title="载入示例数据，或粘贴执行结果"
-          reason="平台先确定性算出通过率、执行率、缺陷分布与发版判定，再让模型归纳风险与建议；模型不会重算任何数字。"
+          reason="载入示例或粘贴 JSON 执行结果。"
           action-label="载入示例数据"
           @action="samples.length ? applySample(samples[0].id) : undefined"
         />
@@ -665,8 +665,8 @@ const verdictPartial = computed(() => liveMetrics.value);
   inset-block: 0;
   width: 34%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--glacier), transparent);
-  animation: report-scan 1.5s linear infinite;
+  background: var(--signal);
+  animation: report-scan 1.4s var(--ease-inout) infinite;
 }
 
 .report-pipeline b {

@@ -1,6 +1,4 @@
-/* ============================================================
-   Element Plus 覆盖：让组件库说冰川刻度的语言
-   ============================================================ */
+/* Element Plus: compact workbench controls. */
 :root {
   --el-color-primary: var(--glacier);
   /* light-N 一律由主色与冰面混合得出：换主题时自动跟着翻转 */
@@ -99,6 +97,7 @@ html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is
 .el-button {
   --el-button-font-weight: 500;
   border-radius: var(--radius);
+  min-height: 32px;
   transition: background-color var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
@@ -109,12 +108,14 @@ html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is
 }
 
 .el-button--primary {
-  --el-button-bg-color: var(--glacier);
-  --el-button-border-color: var(--glacier);
-  --el-button-hover-bg-color: var(--glacier-hover);
-  --el-button-hover-border-color: var(--glacier-hover);
-  --el-button-active-bg-color: var(--glacier-press);
-  --el-button-active-border-color: var(--glacier-press);
+  --el-button-bg-color: var(--mass);
+  --el-button-border-color: var(--mass);
+  --el-button-text-color: var(--on-mass);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--mass) 86%, var(--signal));
+  --el-button-hover-border-color: color-mix(in srgb, var(--mass) 86%, var(--signal));
+  --el-button-hover-text-color: var(--on-mass);
+  --el-button-active-bg-color: color-mix(in srgb, var(--mass) 76%, var(--signal));
+  --el-button-active-border-color: color-mix(in srgb, var(--mass) 76%, var(--signal));
 }
 
 .el-button--default {
@@ -289,7 +290,7 @@ html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is
 }
 
 .el-tag {
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-weight: 500;
   border-color: transparent;
 }
@@ -308,8 +309,8 @@ html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is
 }
 
 .el-pager li.is-active {
-  background: var(--glacier-wash);
-  color: var(--glacier-deep);
+  background: var(--mass);
+  color: var(--on-mass);
   font-weight: 600;
 }
 
@@ -324,7 +325,7 @@ html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is
 }
 
 .el-tabs__active-bar {
-  background: var(--glacier);
+  background: var(--signal);
   height: 2px;
   border-radius: 2px;
 }
@@ -332,6 +333,12 @@ html[data-theme="dark"] .el-button--warning:not(.is-plain):not(.is-text):not(.is
 .el-tabs__nav-wrap::after {
   background: var(--ice-3);
   height: 1px;
+}
+
+@media (max-width: 760px) {
+  .el-button {
+    min-height: 40px;
+  }
 }
 
 .el-checkbox,

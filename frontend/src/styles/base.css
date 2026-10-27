@@ -13,6 +13,10 @@ body,
   height: 100%;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: var(--ice-1);
@@ -20,6 +24,7 @@ body {
   font-family: var(--font-ui);
   font-size: var(--fs-base);
   line-height: var(--lh-base);
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -34,23 +39,23 @@ figure {
 }
 
 h1 {
-  font-size: var(--fs-2xl);
-  line-height: var(--lh-tight);
-  letter-spacing: var(--tracking-tight);
-  font-weight: 600;
-}
-
-h2 {
   font-size: var(--fs-xl);
   line-height: var(--lh-tight);
   letter-spacing: var(--tracking-tight);
   font-weight: 600;
 }
 
-h3 {
+h2 {
   font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  font-weight: 600;
+}
+
+h3 {
+  font-size: var(--fs-md);
   line-height: var(--lh-snug);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
   font-weight: 600;
 }
 
@@ -62,8 +67,8 @@ h4 {
 
 /* --- 浏览器自带表面也属于这套设计 -------------------------- */
 ::selection {
-  background: var(--glacier-tint);
-  color: var(--ink-1);
+  background: var(--signal);
+  color: var(--ice-0);
 }
 
 * {
@@ -137,6 +142,7 @@ a {
   background: var(--ice-0);
   border: 1px solid var(--ice-3);
   border-radius: var(--radius-lg);
+  box-shadow: none;
 }
 
 .card--sunk {
@@ -151,7 +157,7 @@ a {
   /* 操作区在窄屏放不下时换行，而不是把卡片（以及整页）撑宽。 */
   flex-wrap: wrap;
   gap: var(--s3);
-  padding: var(--s3) var(--s4) var(--s3) var(--s5);
+  padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--ice-3);
 }
 
@@ -163,9 +169,7 @@ a {
 }
 
 .card__sub {
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  margin-top: 2px;
+  display: none;
 }
 
 .card__body {
@@ -177,13 +181,7 @@ a {
   border: 0;
   height: 1px;
   margin: 0;
-  background: linear-gradient(
-    to right,
-    transparent,
-    var(--ice-4) 12%,
-    var(--ice-4) 88%,
-    transparent
-  );
+  background: var(--ice-4);
 }
 
 .rule--solid {
@@ -198,7 +196,7 @@ a {
   color: var(--ink-3);
   font-family: var(--font-data);
   font-size: var(--fs-2xs);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -211,13 +209,9 @@ a {
   place-items: center;
   width: 92px;
   height: 92px;
-  border-radius: 50%;
+  border-radius: var(--radius);
   color: var(--seal-ink);
-  background: radial-gradient(
-    circle at 32% 28%,
-    var(--seal-face-hi),
-    var(--seal-face-lo)
-  );
+  background: var(--ice-2);
   border: 1px solid currentColor;
   box-shadow: inset 0 0 0 4px var(--seal-ring);
 }
@@ -226,7 +220,7 @@ a {
   content: "";
   position: absolute;
   inset: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   border: 1px dashed currentColor;
   opacity: 0.5;
 }
@@ -240,7 +234,7 @@ a {
   font-weight: 500;
   line-height: 1.35;
   padding: 2px 9px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--ice-4);
   background: var(--ice-2);
   color: var(--ink-2);
@@ -251,6 +245,14 @@ a {
   background: var(--glacier-wash);
   border-color: var(--glacier-tint);
   color: var(--glacier-deep);
+}
+
+.chip--glacier::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .chip--pass {
@@ -457,33 +459,14 @@ a {
   animation: freeze-sweep var(--dur-slow) var(--ease) both;
 }
 
-.route-fade-enter-active {
-  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
-}
-
-.route-fade-leave-active {
-  transition: opacity 90ms linear;
-  position: absolute;
-  inset: 0;
-}
-
-.route-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.route-fade-leave-to {
-  opacity: 0;
-}
-
 /* --- 主题切换：一次 260ms 的冰面重结晶，而不是生硬跳变 ------ *
  * 只在切换的那一瞬间给全局挂上过渡，平时不拖累交互性能。 */
 html[data-theme-switching] *,
 html[data-theme-switching] *::before,
 html[data-theme-switching] *::after {
-  transition: background-color 260ms var(--ease), border-color 260ms var(--ease),
-    color 260ms var(--ease), box-shadow 260ms var(--ease), fill 260ms var(--ease),
-    stroke 260ms var(--ease) !important;
+  transition: background-color 180ms var(--ease), border-color 180ms var(--ease),
+    color 180ms var(--ease), box-shadow 180ms var(--ease), fill 180ms var(--ease),
+    stroke 180ms var(--ease) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
